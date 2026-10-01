@@ -1,0 +1,273 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@theme {
+  --font-sans: "Noto Sans SC", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+
+  --color-bg: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-fg: #172b4d;
+  --color-muted: #5e6c84;
+  --color-faint: #8993a4;
+  --color-primary: #0052cc;
+  --color-primary-ink: #0747a6;
+  --color-primary-soft: #deebff;
+  --color-border: #dfe1e6;
+  --color-line: #ebecf0;
+  --color-nav: #0747a6;
+  --color-on-nav: #ffffff;
+  --color-scrim: #091e42;
+
+  --color-warning: #e97f33;
+  --color-warning-ink: #9a4d12;
+  --color-warning-soft: #fff3e0;
+  --color-warning-wash: #ffe0b2;
+  --color-success: #0b875b;
+  --color-success-ink: #08704c;
+  --color-success-soft: #e4fcef;
+  --color-success-wash: #c6f6d5;
+  --color-danger: #e13c3c;
+  --color-danger-soft: #ffebe6;
+
+  --color-epic: #904ee2;
+  --color-story: #65ba43;
+  --color-task: #4fade6;
+  --color-defect: #e44d42;
+
+  --radius-sm: 3px;
+
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.25;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+  --text-key: 0.75rem;
+  --text-key--line-height: 1rem;
+  --text-field: 1rem;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --tracking-title: -0.015em;
+  --tracking-overline: 0.04em;
+
+  --shadow-card: 0 1px 2px color-mix(in srgb, var(--color-scrim) 25%, transparent);
+  --shadow-pop: 0 8px 16px color-mix(in srgb, var(--color-scrim) 25%, transparent);
+}
+
+/* HeroUI reads these variables. Keep them aligned with the palette above. */
+:root {
+  --field-radius: var(--radius-sm);
+  --field-border-width: 1px;
+  --field-shadow: none;
+  --background: var(--color-bg);
+  --foreground: var(--color-fg);
+  --surface: var(--color-surface);
+  --surface-foreground: var(--color-fg);
+  --overlay: var(--color-surface);
+  --overlay-foreground: var(--color-fg);
+  --muted: var(--color-muted);
+  --accent: var(--color-primary);
+  --accent-foreground: var(--color-surface);
+  --focus: var(--color-primary);
+  --link: var(--color-primary);
+  --border: var(--color-border);
+  --separator: var(--color-line);
+  --default: var(--color-bg);
+  --default-foreground: var(--color-fg);
+  --field-background: var(--color-surface);
+  --field-foreground: var(--color-fg);
+  --field-placeholder: var(--color-faint);
+  --field-border: var(--color-border);
+  --danger: var(--color-danger);
+  --danger-foreground: var(--color-surface);
+  --success: var(--color-success);
+  --success-foreground: var(--color-surface);
+  --warning: var(--color-warning);
+  --warning-foreground: var(--color-surface);
+}
+
+@utility type-title {
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--tracking-title);
+}
+
+@utility type-section {
+  font-size: var(--text-body);
+  line-height: var(--text-caption--line-height);
+  font-weight: var(--font-weight-semibold);
+}
+
+@utility type-body {
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-regular);
+}
+
+@utility type-emphasis {
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-medium);
+}
+
+@utility type-meta {
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-muted);
+}
+
+@utility type-label {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-faint);
+}
+
+@utility type-caption {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-faint);
+}
+
+@utility type-link {
+  font-size: var(--text-body);
+  line-height: var(--text-caption--line-height);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+}
+
+@utility type-key {
+  font-size: var(--text-key);
+  line-height: var(--text-key--line-height);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-ink);
+}
+
+@utility type-overline {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-overline);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+@layer components {
+  .label {
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-faint);
+  }
+
+  .label--invalid,
+  [data-invalid="true"] .label,
+  [aria-invalid="true"] .label {
+    color: var(--color-danger);
+  }
+
+  .input,
+  .textarea {
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    color: var(--field-foreground);
+  }
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    text-rendering: optimizeLegibility;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-faint);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+}
+
+@media (max-width: 639px) {
+  .input,
+  .textarea {
+    font-size: var(--text-field);
+  }
+}
+
+.route-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  height: 2px;
+  width: 100%;
+  pointer-events: none;
+  transform-origin: left center;
+  background: var(--color-primary);
+}
+
+.route-progress[data-state="run"] {
+  animation: route-creep 8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.route-progress[data-state="done"] {
+  transform: scaleX(1);
+  opacity: 0;
+  transition:
+    transform 160ms ease-out,
+    opacity 180ms ease 120ms;
+}
+
+@keyframes route-creep {
+  0% {
+    transform: scaleX(0.08);
+  }
+  30% {
+    transform: scaleX(0.55);
+  }
+  100% {
+    transform: scaleX(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
