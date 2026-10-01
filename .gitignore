@@ -1,0 +1,12 @@
+node_modules
+dist
+.vercel
+.grok
+.tanstack
+screenshots
+artifacts
+attachments
+*.log
+.env
+.env.*
+.node_modules.lock
