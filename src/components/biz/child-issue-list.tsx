@@ -1,8 +1,10 @@
+import { useItemNavigationState } from "@/components/pm/use-go-item";
 import { Link } from "@tanstack/react-router";
 import type { WorkItem } from "@/lib/pm/domain";
 import { StatusChip } from "@/components/biz/status-chip";
 
 export function ChildIssueList({ projectKey, items }: { projectKey: string; items: WorkItem[] }) {
+  const itemNavigationState = useItemNavigationState();
   if (items.length === 0) return null;
   return (
     <div className="mt-5">
@@ -11,6 +13,7 @@ export function ChildIssueList({ projectKey, items }: { projectKey: string; item
         {items.map((child) => (
           <li key={child.id}>
             <Link
+              state={itemNavigationState}
               to="/p/$projectKey/items/$itemKey"
               params={{ projectKey, itemKey: child.key }}
               className="type-body flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-line"

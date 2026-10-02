@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
+import type { ProjectViewSearch } from "@/lib/pm/navigation";
+import { useMemo } from "react";
 import { EmptyHint, IssueRow, ListFilterBar, PageHeading } from "@/components/biz";
 import { columnOf } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
@@ -10,10 +12,20 @@ export function ListView({ projectKey }: { projectKey: string }) {
   const people = usePm((state) => state.people);
   const sprints = usePm((state) => state.sprints);
   const currentUserId = usePm((state) => state.currentUserId);
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState("all");
-  const [mine, setMine] = useState(false);
-  const [hideDone, setHideDone] = useState(true);
+  const search = useSearch({ from: "/p/$projectKey" });
+  const navigate = useNavigate();
+  const router = useRouter();
+  const query = search.query ?? "";
+  const kind = search.kind ?? "all";
+  const mine = search.mine ?? false;
+  const hideDone = search.hideDone ?? true;
+  const setFilter = (patch: ProjectViewSearch) => {
+    void navigate({
+      href:
+        router.state.location.pathname + router.options.stringifySearch!({ ...search, ...patch }),
+      replace: true,
+    });
+  };
   const goToItem = useGoToItem();
 
   const rows = useMemo(() => {
@@ -37,7 +49,16 @@ export function ListView({ projectKey }: { projectKey: string }) {
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <PageHeading title="事项" hint="需求、任务和缺陷在同一张清单里。点一行打开事项。" />
-        <ListFilterBar query={query} kind={kind} mine={mine} hideDone={hideDone} onQuery={setQuery} onKind={setKind} onMine={setMine} onHideDone={setHideDone} />
+        <ListFilterBar
+          query={query}
+          kind={kind}
+          mine={mine}
+          hideDone={hideDone}
+          onQuery={(query) => setFilter({ query })}
+          onKind={(kind) => setFilter({ kind: kind as ProjectViewSearch["kind"] })}
+          onMine={(mine) => setFilter({ mine })}
+          onHideDone={(hideDone) => setFilter({ hideDone })}
+        />
       </div>
       <div className="overflow-hidden rounded-sm border border-border bg-surface">
         <ul>
@@ -50,7 +71,11 @@ export function ListView({ projectKey }: { projectKey: string }) {
                 item={item}
                 assignee={people.find((person) => person.id === item.assigneeId)}
                 onOpen={goToItem}
-                extra={<span className="type-caption hidden w-24 truncate md:inline">{sprint?.name ?? "未排期"}</span>}
+                extra={
+                  <span className="type-caption hidden w-24 truncate md:inline">
+                    {sprint?.name ?? "未排期"}
+                  </span>
+                }
               />
             );
           })}

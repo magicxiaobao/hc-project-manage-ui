@@ -1,3 +1,4 @@
+import { useItemNavigationState } from "@/components/pm/use-go-item";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { useEffect, useState } from "react";
@@ -38,21 +39,31 @@ export function CreateIssueDialog() {
   const sprints = usePm((state) => state.sprints);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  const itemNavigationState = useItemNavigationState();
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    const matched = projects.find((project) => pathname === `/p/${project.key}` || pathname.startsWith(`/p/${project.key}/`));
+    const matched = projects.find(
+      (project) => pathname === `/p/${project.key}` || pathname.startsWith(`/p/${project.key}/`),
+    );
     setForm({ ...empty, projectId: matched?.id ?? projects[0]?.id ?? "pr-hc" });
     setError("");
   }, [open, pathname, projects]);
 
   if (!open) return null;
-  const projectSprints = sprints.filter((sprint) => sprint.projectId === form.projectId && sprint.state !== "closed");
+  const projectSprints = sprints.filter(
+    (sprint) => sprint.projectId === form.projectId && sprint.state !== "closed",
+  );
 
   return (
-    <AppModal open={open} title="创建事项" size="lg" onClose={() => usePm.getState().setCreateOpen(false)}>
+    <AppModal
+      open={open}
+      title="创建事项"
+      size="lg"
+      onClose={() => usePm.getState().setCreateOpen(false)}
+    >
       <form
         className="flex flex-col gap-3"
         onSubmit={(event) => {
@@ -77,43 +88,75 @@ export function CreateIssueDialog() {
           const created = usePm.getState().items.find((entry) => entry.id === id);
           const project = projects.find((entry) => entry.id === created?.projectId);
           if (created && project) {
-            void navigate({ to: "/p/$projectKey/items/$itemKey", params: { projectKey: project.key, itemKey: created.key } });
+            void navigate({
+              to: "/p/$projectKey/items/$itemKey",
+              params: { projectKey: project.key, itemKey: created.key },
+              state: itemNavigationState,
+            });
           }
         }}
       >
-        <p className="type-caption">需求从草稿开始，任务从待开始开始，缺陷从新建开始。按 C 也可以打开这个窗口。</p>
+        <p className="type-caption">
+          需求从草稿开始，任务从待开始开始，缺陷从新建开始。按 C 也可以打开这个窗口。
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <LabeledField label="项目">
-            <ProjectSelect projects={projects} value={form.projectId} onChange={(projectId) => setForm({ ...form, projectId, sprintId: "" })} />
+            <ProjectSelect
+              projects={projects}
+              value={form.projectId}
+              onChange={(projectId) => setForm({ ...form, projectId, sprintId: "" })}
+            />
           </LabeledField>
           <LabeledField label="类型">
-            <KindSelect value={form.kind} onChange={(kind) => setForm({ ...form, kind: kind as ItemKind })} />
+            <KindSelect
+              value={form.kind}
+              onChange={(kind) => setForm({ ...form, kind: kind as ItemKind })}
+            />
           </LabeledField>
           {form.kind === "requirement" ? (
             <LabeledField label="需求类型">
-              <RequirementTypeSelect value={form.requirementType} onChange={(requirementType) => setForm({ ...form, requirementType })} />
+              <RequirementTypeSelect
+                value={form.requirementType}
+                onChange={(requirementType) => setForm({ ...form, requirementType })}
+              />
             </LabeledField>
           ) : null}
           {form.kind === "task" ? (
             <LabeledField label="任务类型">
-              <TaskTypeSelect value={form.taskType} onChange={(taskType) => setForm({ ...form, taskType })} />
+              <TaskTypeSelect
+                value={form.taskType}
+                onChange={(taskType) => setForm({ ...form, taskType })}
+              />
             </LabeledField>
           ) : null}
           {form.kind === "defect" ? (
             <>
               <LabeledField label="缺陷类型">
-                <DefectTypeSelect value={form.defectType} onChange={(defectType) => setForm({ ...form, defectType })} />
+                <DefectTypeSelect
+                  value={form.defectType}
+                  onChange={(defectType) => setForm({ ...form, defectType })}
+                />
               </LabeledField>
               <LabeledField label="严重程度">
-                <SeveritySelect value={form.severity} onChange={(severity) => setForm({ ...form, severity })} />
+                <SeveritySelect
+                  value={form.severity}
+                  onChange={(severity) => setForm({ ...form, severity })}
+                />
               </LabeledField>
             </>
           ) : null}
           <LabeledField label="优先级">
-            <PrioritySelect value={form.priority} onChange={(priority) => setForm({ ...form, priority })} />
+            <PrioritySelect
+              value={form.priority}
+              onChange={(priority) => setForm({ ...form, priority })}
+            />
           </LabeledField>
           <LabeledField label="负责人">
-            <PersonSelect people={people} value={form.assigneeId} onChange={(assigneeId) => setForm({ ...form, assigneeId })} />
+            <PersonSelect
+              people={people}
+              value={form.assigneeId}
+              onChange={(assigneeId) => setForm({ ...form, assigneeId })}
+            />
           </LabeledField>
           <LabeledField label="迭代">
             <SprintSelect
@@ -129,13 +172,20 @@ export function CreateIssueDialog() {
           <Label>标题</Label>
           <Input placeholder="一句话说清要完成什么" />
         </TextField>
-        <TextField value={form.description} onChange={(description) => setForm({ ...form, description })}>
+        <TextField
+          value={form.description}
+          onChange={(description) => setForm({ ...form, description })}
+        >
           <Label>描述</Label>
           <TextArea rows={4} />
         </TextField>
         {error ? <p className="type-body text-danger">{error}</p> : null}
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onPress={() => usePm.getState().setCreateOpen(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            onPress={() => usePm.getState().setCreateOpen(false)}
+          >
             取消
           </Button>
           <Button type="submit" variant="primary">
