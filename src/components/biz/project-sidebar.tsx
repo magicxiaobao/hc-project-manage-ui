@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
+import { AppModal } from "@/components/biz/app-modal";
 import { Link } from "@tanstack/react-router";
-import { BarChart3, Bug, CalendarRange, ChartGantt, Clock3, FlaskConical, GitBranch, Kanban, Layers, LayoutDashboard, ListTree, Package, Settings, SquareCheckBig, Users, Waypoints, X } from "lucide-react";
+import { BarChart3, Bug, CalendarRange, ChartGantt, Clock3, FlaskConical, GitBranch, Kanban, Layers, LayoutDashboard, ListTree, Package, Settings, SquareCheckBig, Users, Waypoints } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Project } from "@/lib/pm/domain";
 import { cn } from "@/lib/utils";
@@ -15,18 +17,19 @@ export function ProjectSidebar({
   project?: Project;
   onClose: () => void;
 }) {
-  return (
+  const [compact, setCompact] = useState<boolean | null>(null);
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1023px)");
+    const update = () => {
+      setCompact(media.matches);
+      if (!media.matches) onClose();
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [onClose]);
+  const content = (
     <>
-      {open ? <button type="button" aria-label="关闭导航" className="fixed inset-0 z-20 bg-scrim/40 md:hidden" onClick={onClose} /> : null}
-      <aside
-        className={cn(
-          "fixed top-0 bottom-0 left-16 z-30 w-[230px] flex-col border-r border-border bg-surface px-4 pt-6 pb-4 md:static md:z-0 md:flex",
-          open ? "flex" : "hidden",
-        )}
-      >
-        <button type="button" className="mb-3 self-end rounded-sm p-1 text-muted hover:bg-line md:hidden" aria-label="关闭侧栏" onClick={onClose}>
-          <X className="size-4" />
-        </button>
         {project ? (
           <>
             <div className="flex items-center gap-3 px-1">
@@ -68,7 +71,18 @@ export function ProjectSidebar({
           </>
         )}
         <div className="type-caption mt-auto px-1 pt-4">{project ? project.summary : "把事项拖到允许的状态列。"}</div>
+    </>
+  );
+  return (
+    <>
+      <aside className="hidden w-[230px] shrink-0 flex-col border-r border-border bg-surface px-4 pt-6 pb-4 lg:flex">
+        {content}
       </aside>
+      {compact && open ? (
+        <AppModal open title="项目导航" label="项目导航" onClose={onClose} size="sm" dialogClassName="project-nav-dialog" bodyClassName="min-h-0 overflow-auto">
+          <div className="flex min-h-0 flex-col">{content}</div>
+        </AppModal>
+      ) : null}
     </>
   );
 }

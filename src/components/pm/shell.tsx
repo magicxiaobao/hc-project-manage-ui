@@ -134,10 +134,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </section>
         ) : null}
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:hidden">
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 lg:hidden">
           <button
             type="button"
-            className="rounded-sm p-2 hover:bg-line"
+            className="flex size-11 items-center justify-center rounded-sm hover:bg-line"
             aria-label="打开导航"
             onClick={() => setNavOpen(true)}
           >

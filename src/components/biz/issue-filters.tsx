@@ -69,8 +69,8 @@ export function BoardFilterBar({
     onAssignees(assigneeIds.includes(id) ? assigneeIds.filter((entry) => entry !== id) : [...assigneeIds, id]);
   };
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+    <div className="flex flex-wrap items-start gap-2">
+      <div className="flex min-w-0 basis-full flex-wrap items-center gap-2 lg:flex-1 lg:basis-auto">
         <div className="w-40 shrink-0">
           <QueryField label="搜索" value={query} onChange={onQuery} />
         </div>
@@ -80,7 +80,7 @@ export function BoardFilterBar({
           </div>
         )}
         {hideKind ? null : (
-          <div className="w-32 shrink-0">
+          <div className="w-40 shrink-0">
             <KindSelect allowAll value={kind} onChange={(next) => onKind(next as "all" | ItemKind)} />
           </div>
         )}
@@ -103,7 +103,7 @@ export function BoardFilterBar({
           筛选{extra > 0 ? ` ${extra}` : ""}
         </button>
         {open ? (
-          <div className="absolute right-0 z-30 mt-1 w-72 rounded-sm border border-border bg-surface p-3 shadow-pop">
+          <div className="absolute right-0 z-30 mt-1 w-72 max-w-[calc(100vw-6rem)] rounded-sm border border-border bg-surface p-3 shadow-pop">
             <div className="type-label">负责人</div>
             <div className="mt-2 flex flex-col gap-1">
               {people.length === 0 ? <p className="type-caption">没有成员</p> : null}
@@ -181,7 +181,7 @@ export function ListFilterBar({
       <div className="w-40">
         <QueryField label="搜索" value={query} onChange={onQuery} />
       </div>
-      <div className="w-32">
+      <div className="w-40">
         <KindSelect allowAll value={kind} onChange={onKind} />
       </div>
       <FilterCheckbox label="只看我的" checked={mine} onChange={onMine} />

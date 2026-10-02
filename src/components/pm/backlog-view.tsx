@@ -46,7 +46,7 @@ export function BacklogView({ projectKey }: { projectKey: string }) {
   };
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+    <div className="pm-backlog mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
       <PageHeading title="待办" hint="拖进迭代会改排期。拖到某一行上面会排到它前面。事项按父需求分组，旁边是点数合计。" />
       {ordered.map((sprint) => (
         <SprintBucket

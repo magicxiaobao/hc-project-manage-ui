@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 export function KanbanColumn({
   id,
+  sectionId,
   name,
   tone = "neutral",
   count,
@@ -18,6 +19,7 @@ export function KanbanColumn({
   children,
 }: {
   id: ColumnId;
+  sectionId?: string;
   name: string;
   tone?: StateTone;
   count: number;
@@ -33,6 +35,8 @@ export function KanbanColumn({
   const overLimit = limit != null && limit > 0 && count > limit;
   return (
     <section
+      id={sectionId}
+      data-board-column={id}
       className={cn(
         "flex h-full w-72 shrink-0 flex-col rounded-sm bg-line/70 px-2 pt-2 md:w-auto md:min-w-56 md:flex-1",
         over && "ring-2 ring-primary",
@@ -42,7 +46,7 @@ export function KanbanColumn({
       onDrop={onDrop}
     >
       <header className="flex items-center justify-between gap-2 px-1 py-1">
-        <h2 className="type-overline flex min-w-0 items-center gap-1.5">
+        <h2 tabIndex={-1} className="type-overline flex min-w-0 items-center gap-1.5">
           <span className={cn("size-2 rounded-full", toneDotClass[tone])} aria-hidden="true" />
           <span className="truncate">{name}</span>
         </h2>

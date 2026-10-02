@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ColumnId, Person, WorkItem } from "@/lib/pm/domain";
 import { byRank, COLUMNS, columnOf } from "@/lib/pm/domain";
@@ -33,10 +33,25 @@ export function KanbanBoard({
 }) {
   const [over, setOver] = useState<ColumnId | null>(null);
   const cancelledHeadingId = useId();
+  const columnPrefix = useId();
+  const scroller = useRef<HTMLDivElement>(null);
   const byId = new Map((catalog ?? items).map((item) => [item.id, item]));
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
-      <div data-pm-board-scroll className="min-h-0 flex-1 overflow-x-auto">
+      <nav aria-label="看板列" className="flex shrink-0 flex-wrap items-center gap-2 xl:hidden">
+        {COLUMNS.map((column) => {
+          const count = items.filter((item) => columnOf(item.kind, item.status) === column.id).length;
+          return <button key={column.id} type="button" aria-controls={`${columnPrefix}-${column.id}`} aria-label={`查看${column.name}列，${count}项`} className="type-body rounded-sm border border-border bg-surface px-3 py-2" onClick={() => {
+            const viewport = scroller.current;
+            const target = viewport?.querySelector<HTMLElement>(`[data-board-column="${column.id}"]`);
+            if (!viewport || !target) return;
+            viewport.scrollTo({ left: target.getBoundingClientRect().left - viewport.getBoundingClientRect().left + viewport.scrollLeft });
+            target.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+          }}>{column.name} · {count}</button>;
+        })}
+        <span className="type-meta basis-full">左右滚动或选择列查看全部事项</span>
+      </nav>
+      <div ref={scroller} data-pm-board-scroll className="min-h-0 flex-1 overflow-x-auto">
         <div className="flex h-full gap-3">
           {COLUMNS.map((column) => {
             const cards = items
@@ -54,6 +69,7 @@ export function KanbanBoard({
               <KanbanColumn
                 key={column.id}
                 id={column.id}
+                sectionId={`${columnPrefix}-${column.id}`}
                 name={column.name}
                 tone={columnTone(column.id)}
                 count={cards.length}

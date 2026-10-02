@@ -89,8 +89,16 @@ export function ListView({ projectKey }: { projectKey: string }) {
           onHideDone={(hideDone) => setFilter({ hideDone })}
         />
       </div>
+      <p className="type-meta">{rows.length} 项 · {hideDone ? "未完成范围" : "全部状态范围"}</p>
+      <div className="flex flex-wrap items-center gap-2 sm:hidden">
+        <label className="type-label" htmlFor="mobile-issue-sort">排序</label>
+        <select id="mobile-issue-sort" className="rounded-sm border border-border bg-surface px-2" value={sortKey} onChange={(event) => sort(event.target.value as SortKey)}>
+          {[ ["key", "编号"], ["title", "标题"], ["priority", "优先级"], ["status", "状态"], ["points", "点数"], ["updated", "更新"] ].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        <button type="button" className="type-link rounded-sm border border-border px-3" onClick={() => setFilter({ ascending: !ascending })}>{ascending ? "升序" : "降序"}</button>
+      </div>
       <div className="overflow-x-auto rounded-sm border border-border bg-surface">
-        <table className="w-full border-collapse text-left">
+        <table className="pm-issue-table w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-border">
               <Header label="编号" active={sortKey === "key"} onClick={() => sort("key")} />
@@ -127,7 +135,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                     <button
                       data-focus-key={`item-key:${item.id}`}
                       type="button"
-                      className="type-link"
+                      className="type-link whitespace-nowrap"
                       onClick={() => goToItem(item.id)}
                     >
                       {item.key}
@@ -138,6 +146,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                       data-focus-key={`item-title:${item.id}`}
                       type="button"
                       className="type-body block max-w-full truncate text-left"
+                      title={item.title}
                       onClick={() => goToItem(item.id)}
                     >
                       {item.title}
@@ -149,7 +158,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                   <td className="px-3 py-2">
                     <select
                       aria-label={`${item.key} 状态`}
-                      className="type-caption h-8 max-w-36 rounded-sm border border-border bg-surface px-1"
+                      className="type-body h-8 max-w-36 rounded-sm border border-border bg-surface px-1"
                       value={item.status}
                       onChange={(event) => {
                         const to = event.target.value;

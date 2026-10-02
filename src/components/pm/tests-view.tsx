@@ -284,11 +284,11 @@ export function TestsView({ projectKey }: { projectKey: string }) {
               const defect = items.find((item) => item.id === execution.defectId);
               const locked = activeRun.status !== "RUNNING";
               return (
-                <div key={execution.id} className="flex flex-col gap-2 border-b border-border px-3 py-3 last:border-b-0 md:flex-row md:items-center">
+                <div key={execution.id} className="flex flex-col gap-2 border-b border-border px-3 py-3 last:border-b-0 xl:flex-row xl:items-center">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="type-link">{testCase.key}</span>
-                      <span className="type-body truncate">{testCase.title}</span>
+                      <span className="type-key shrink-0 whitespace-nowrap">{testCase.key}</span>
+                      <span className="type-body min-w-0 break-words line-clamp-2">{testCase.title}</span>
                       <PriorityMark priority={testCase.priority} />
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -359,8 +359,8 @@ export function TestsView({ projectKey }: { projectKey: string }) {
                   return (
                     <div key={execution.id} className="flex flex-wrap items-center gap-2 border-t border-border py-2">
                       <StateChip tone={RESULT_TONE[execution.result]}>{TEST_RESULT_LABEL[execution.result]}</StateChip>
-                      <span className="type-link">{testCase.key}</span>
-                      <span className="type-body min-w-0 flex-1 truncate">{testCase.title}</span>
+                      <span className="type-key shrink-0 whitespace-nowrap">{testCase.key}</span>
+                      <span className="type-body min-w-0 flex-1 break-words line-clamp-2">{testCase.title}</span>
                       {defect ? (
                         <button type="button" className="type-link" onClick={() => goToItem(defect.id)}>
                           {defect.key}
@@ -413,8 +413,8 @@ export function TestsView({ projectKey }: { projectKey: string }) {
               return (
                 <div key={testCase.id} className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
                   <button type="button" className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-left" onClick={() => setDetailId(testCase.id)}>
-                    <span className="type-link">{testCase.key}</span>
-                    <span className="type-body min-w-0 flex-1 truncate">{testCase.title}</span>
+                    <span className="type-key shrink-0 whitespace-nowrap">{testCase.key}</span>
+                    <span className="type-body min-w-0 flex-1 break-words line-clamp-2">{testCase.title}</span>
                     <StateChip tone={testCase.status === "ACTIVE" ? "done" : testCase.status === "REVIEW" ? "review" : "neutral"}>{TEST_CASE_STATUS_LABEL[testCase.status]}</StateChip>
                     <span className="type-caption">{testCase.steps?.length ?? 0} 步</span>
                     {requirement ? <span className="type-caption">{requirement.key}</span> : null}
@@ -442,8 +442,8 @@ export function TestsView({ projectKey }: { projectKey: string }) {
           <div className="type-label border-b border-border px-3 py-2">未分套件</div>
           {projectCases.filter((entry) => !entry.suite && (showArchived || entry.status !== "ARCHIVED")).map((testCase) => (
             <button key={testCase.id} type="button" className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left last:border-b-0" onClick={() => setDetailId(testCase.id)}>
-              <span className="type-link">{testCase.key}</span>
-              <span className="type-body min-w-0 flex-1 truncate">{testCase.title}</span>
+              <span className="type-key shrink-0 whitespace-nowrap">{testCase.key}</span>
+              <span className="type-body min-w-0 flex-1 break-words line-clamp-2">{testCase.title}</span>
             </button>
           ))}
         </section>
@@ -457,7 +457,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-sm border border-border bg-surface px-4 py-3">
       <div className="type-caption">{label}</div>
-      <div className="type-section mt-1">{value}</div>
+      <div className="type-title mt-1">{value}</div>
     </div>
   );
 }
