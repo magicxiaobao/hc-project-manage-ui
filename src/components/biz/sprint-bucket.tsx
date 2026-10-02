@@ -13,6 +13,7 @@ export function SprintBucket({
   goal,
   schedule,
   count,
+  detail,
   over,
   actions,
   onDragOver,
@@ -25,6 +26,7 @@ export function SprintBucket({
   goal?: string;
   schedule?: ReactNode;
   count: number;
+  detail?: string;
   over: boolean;
   actions?: ReactNode;
   onDragOver: (event: React.DragEvent) => void;
@@ -38,7 +40,10 @@ export function SprintBucket({
           <div className="flex items-center gap-2">
             <h2 className="type-section">{title}</h2>
             {badge ? <StateChip tone={badgeTone}>{badge}</StateChip> : null}
-            <span className="type-caption ml-auto sm:ml-2">{count}</span>
+            <span className="type-caption ml-auto sm:ml-2">
+              {count}
+              {detail ? ` · ${detail}` : ""}
+            </span>
           </div>
           {goal ? <p className="type-caption mt-1">{goal}</p> : null}
           {schedule ? <div className="mt-2 max-w-sm">{schedule}</div> : null}

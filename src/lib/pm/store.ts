@@ -30,6 +30,7 @@ import {
   type WorkLogStatus,
   type TaskDependency,
   columnOf,
+  byRank,
   fsBlockers,
   formatDay,
   kindLabel,
@@ -87,7 +88,7 @@ interface PmActions {
   setCurrentUser: (id: string) => void;
   moveToColumn: (id: string, column: ColumnId, reason?: string, expectedStatus?: string) => PmMoveResult;
   transition: (id: string, to: string, reason?: string) => { ok: true } | { ok: false; message: string };
-  updateItem: (id: string, patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "planStart" | "planEnd">>) => PmActionResult;
+  updateItem: (id: string, patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "planStart" | "planEnd" | "dueDate" | "tags">>) => PmActionResult;
   addComment: (itemId: string, body: string) => void;
   createItem: (input: {
     projectId: string;
@@ -134,7 +135,7 @@ interface PmActions {
     memo: string;
   }) => { ok: true } | { ok: false; message: string };
   setDependencyStatus: (id: string, status: DependencyStatus) => { ok: true } | { ok: false; message: string };
-  updateProject: (id: string, patch: Partial<Pick<Project, "name" | "summary" | "memberIds" | "leadId">>) => { ok: true } | { ok: false; message: string };
+  updateProject: (id: string, patch: Partial<Pick<Project, "name" | "summary" | "memberIds" | "leadId" | "wip">>) => { ok: true } | { ok: false; message: string };
   createSprint: (input: { projectId: string; name: string; goal: string; start: string; end: string }) => { ok: true } | { ok: false; message: string };
   createBoard: (input: { projectId: string; name: string; sprintId: string | null }) => { ok: true } | { ok: false; message: string };
   createSuite: (input: { projectId: string; name: string }) => { ok: true } | { ok: false; message: string };
@@ -146,6 +147,8 @@ interface PmActions {
   updateWorkLog: (id: string, patch: { hours: number; workDate: string; note: string }) => { ok: true } | { ok: false; message: string };
   setItemPlans: (updates: { id: string; planStart: string; planEnd: string }[]) => void;
   saveBaseline: (projectId: string) => { ok: true; count: number } | { ok: false; message: string };
+  placeItem: (id: string, beforeId: string | null, laneIds: string[]) => void;
+  cloneItem: (id: string) => { ok: true; id: string; key: string } | { ok: false; message: string };
   createEnvironment: (input: { projectId: string; name: string; kind: string }) => { ok: true } | { ok: false; message: string };
   setItemVersion: (itemId: string, versionId: string | null) => { ok: true } | { ok: false; message: string };
   createRelease: (input: { projectId: string; versionId: string; environmentId: string | null; title: string; summary: string }) => { ok: true; id: string } | { ok: false; message: string };
@@ -160,6 +163,18 @@ export type PmState = PmData & PmUi & PmActions;
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function rankBefore(items: { id: string; rank?: number; key: string }[], movingId: string, beforeId: string | null) {
+  const others = items.filter((entry) => entry.id !== movingId).sort(byRank);
+  const index = beforeId ? others.findIndex((entry) => entry.id === beforeId) : others.length;
+  const at = index < 0 ? others.length : index;
+  const prev = others[at - 1];
+  const next = others[at];
+  if (prev?.rank != null && next?.rank != null) return (prev.rank + next.rank) / 2;
+  if (prev?.rank != null) return prev.rank + 1;
+  if (next?.rank != null) return next.rank - 1;
+  return 0;
 }
 
 function uid(prefix: string) {
@@ -405,6 +420,7 @@ export const usePm = create<PmState>((set, get) => ({
       progress: 0,
       estimatedHours: input.kind === "task" ? 4 : null,
       tags: [],
+      rank: rankBefore(data.items, id, [...data.items].sort(byRank)[0]?.id ?? null),
       createdAt: at,
       updatedAt: at,
     };
@@ -653,6 +669,7 @@ export const usePm = create<PmState>((set, get) => ({
       progress: 0,
       estimatedHours: null,
       tags: ["测试"],
+      rank: rankBefore(data.items, itemId, [...data.items].sort(byRank)[0]?.id ?? null),
       createdAt: at,
       updatedAt: at,
     };
@@ -680,6 +697,7 @@ export const usePm = create<PmState>((set, get) => ({
       hours: input.hours,
       workDate: input.workDate,
       note: input.note.trim(),
+      status: "PENDING",
     };
     set({ workLogs: [entry, ...get().workLogs] });
   },
@@ -744,7 +762,9 @@ export const usePm = create<PmState>((set, get) => ({
     const leadId = patch.leadId ?? project.leadId;
     if (!memberIds.includes(leadId)) return { ok: false, message: "负责人必须是项目成员。" };
     set({
-      projects: get().projects.map((entry) => (entry.id === id ? { ...entry, name, summary: patch.summary?.trim() ?? entry.summary, memberIds, leadId } : entry)),
+      projects: get().projects.map((entry) =>
+        entry.id === id ? { ...entry, name, summary: patch.summary?.trim() ?? entry.summary, memberIds, leadId, wip: patch.wip ?? entry.wip } : entry,
+      ),
     });
     return { ok: true };
   },
@@ -902,6 +922,44 @@ export const usePm = create<PmState>((set, get) => ({
     set({ items });
     return { ok: true, count };
   },
+  placeItem: (id, beforeId, laneIds) => {
+    const data = get();
+    if (!data.items.some((entry) => entry.id === id)) return;
+    const lane = data.items.filter((entry) => laneIds.includes(entry.id) || entry.id === id);
+    const rank = rankBefore(lane, id, beforeId);
+    set({ items: data.items.map((entry) => (entry.id === id ? { ...entry, rank } : entry)) });
+  },
+  cloneItem: (id) => {
+    const data = get();
+    const item = data.items.find((entry) => entry.id === id);
+    const project = data.projects.find((entry) => entry.id === item?.projectId);
+    if (!item || !project) return { ok: false, message: "事项不存在。" };
+    const numbers = data.items
+      .filter((entry) => entry.projectId === project.id)
+      .map((entry) => Number(entry.key.split("-")[1]))
+      .filter((value) => Number.isFinite(value));
+    const next = Math.max(0, ...numbers) + 1;
+    const at = nowIso();
+    const copyId = uid("it");
+    const status = item.kind === "requirement" ? "DRAFT" : item.kind === "task" ? "TODO" : "NEW";
+    const created: WorkItem = {
+      ...item,
+      id: copyId,
+      key: `${project.key}-${next}`,
+      title: `${item.title} 副本`,
+      status,
+      progress: 0,
+      reporterId: data.currentUserId,
+      rank: rankBefore(data.items, copyId, null),
+      createdAt: at,
+      updatedAt: at,
+    };
+    set({
+      items: [created, ...data.items],
+      feeds: [{ id: uid("f"), itemId: copyId, projectId: project.id, actorId: data.currentUserId, text: `从 ${item.key} 克隆了 ${created.key}。`, createdAt: at }, ...data.feeds],
+    });
+    return { ok: true, id: copyId, key: created.key };
+  },
   createEnvironment: (input) => {
     const name = input.name.trim();
     if (!name) return { ok: false, message: "环境名称不能为空。" };
@@ -1026,6 +1084,12 @@ const optionalText: FieldCheck = (value) => value === undefined || text(value);
 // 历史样板允许这些可空字段缺失；不改变既有兼容行为。
 const nullableText: FieldCheck = (value) => value == null || text(value);
 const finiteNumber: FieldCheck = (value) => typeof value === "number" && Number.isFinite(value);
+const optionalNumber: FieldCheck = (value) => value === undefined || finiteNumber(value);
+const optionalWip: FieldCheck = (value) => {
+  if (value === undefined) return true;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value).every(([key, entry]) => (key === "todo" || key === "doing" || key === "check" || key === "done") && finiteNumber(entry));
+};
 const nullableNumber: FieldCheck = (value) => value == null || finiteNumber(value);
 const stringList: FieldCheck = (value) => Array.isArray(value) && value.every(text);
 const optionalSteps: FieldCheck = (value) => value === undefined || (Array.isArray(value) && value.every((step) =>
@@ -1051,7 +1115,7 @@ const optionalSnapshot: FieldCheck = (value) => {
 };
 const recordChecks = {
   people: { id: text, name: text, role: text },
-  projects: { id: text, key: text, name: text, summary: text, leadId: text, memberIds: stringList },
+  projects: { id: text, key: text, name: text, summary: text, leadId: text, memberIds: stringList, wip: optionalWip },
   sprints: { id: text, projectId: text, name: text, goal: text, state: text, start: text, end: text },
   versions: { id: text, projectId: text, name: text, versionNumber: text, versionType: text, status: text, plannedReleaseDate: text, description: text },
   items: {
@@ -1059,6 +1123,7 @@ const recordChecks = {
     title: text, description: text, priority: text, status: text, assigneeId: nullableText, reporterId: text, sprintId: nullableText, versionId: nullableText,
     parentId: nullableText, storyPoints: nullableNumber, progress: finiteNumber, estimatedHours: nullableNumber, tags: stringList,
     createdAt: text, updatedAt: text, planStart: optionalText, planEnd: optionalText, baselineStart: optionalText, baselineEnd: optionalText,
+    rank: optionalNumber, dueDate: optionalText,
   },
   comments: { id: text, itemId: text, authorId: text, body: text, createdAt: text },
   feeds: { id: text, itemId: text, projectId: text, actorId: text, text, createdAt: text },

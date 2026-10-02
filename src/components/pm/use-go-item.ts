@@ -1,5 +1,21 @@
 import { useNavigate } from "@tanstack/react-router";
+import type { WorkItem } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
+
+let browseIds: string[] = [];
+
+export function rememberBrowse(ids: string[]) {
+  browseIds = ids;
+}
+
+export function browseAround(id: string, fallback: WorkItem[]) {
+  const source = browseIds.includes(id) ? browseIds : fallback.map((item) => item.id);
+  const index = source.indexOf(id);
+  return {
+    prev: fallback.find((item) => item.id === source[index - 1]),
+    next: fallback.find((item) => item.id === source[index + 1]),
+  };
+}
 
 export function useGoToItem() {
   const navigate = useNavigate();

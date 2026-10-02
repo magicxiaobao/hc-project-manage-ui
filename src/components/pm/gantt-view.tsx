@@ -40,33 +40,32 @@ function barTone(item: WorkItem) {
   return "bg-story";
 }
 
-type Row = { item: WorkItem; start: string; end: string };
+type Row = { item: WorkItem; start: string; end: string; depth: number; header: boolean };
 
 export function GanttView({ projectKey }: { projectKey: string }) {
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const allItems = usePm((state) => state.items);
   const sprints = usePm((state) => state.sprints);
   const dependencies = usePm((state) => state.dependencies);
+  const versions = usePm((state) => state.versions);
   const items = useMemo(() => allItems.filter((entry) => entry.projectId === project?.id), [allItems, project?.id]);
   const goToItem = useGoToItem();
   const [draft, setDraft] = useState<Record<string, PlanRange> | null>(null);
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
-  const rows = items
-    .map((item) => {
-      const sprint = sprints.find((entry) => entry.id === item.sprintId);
-      const planned = draft?.[item.id];
-      const start = planned?.start ?? item.planStart ?? sprint?.start;
-      const end = planned?.end ?? item.planEnd ?? sprint?.end;
-      if (!start || !end) return null;
-      return { item, start, end };
-    })
-    .filter((row): row is Row => row !== null)
-    .sort((a, b) => a.start.localeCompare(b.start) || a.item.key.localeCompare(b.item.key));
-  const unscheduled = items.filter((item) => !rows.some((row) => row.item.id === item.id) && item.kind !== "defect");
-
-  const origin = rows.length ? Math.min(...rows.flatMap((row) => rangeDays(row))) : 0;
-  const finish = rows.length ? Math.max(...rows.flatMap((row) => rangeDays(row))) : origin + 1;
+  const scheduled = items.flatMap((item) => {
+    const sprint = sprints.find((entry) => entry.id === item.sprintId);
+    const planned = draft?.[item.id];
+    const start = planned?.start ?? item.planStart ?? sprint?.start;
+    const end = planned?.end ?? item.planEnd ?? sprint?.end;
+    if (!start || !end) return [];
+    return [{ item, start, end }];
+  });
+  const rows = groupGantt(scheduled, items);
+  const unscheduled = items.filter((item) => !scheduled.some((row) => row.item.id === item.id) && item.kind !== "defect");
+  const dated = rows.filter((row) => !row.header);
+  const origin = dated.length ? Math.min(...dated.flatMap((row) => rangeDays(row))) : 0;
+  const finish = dated.length ? Math.max(...dated.flatMap((row) => rangeDays(row))) : origin + 1;
   const span = Math.max(finish - origin, 1);
   const step = span <= 16 ? 2 : span <= 45 ? 7 : 14;
   const ticks: number[] = [];
@@ -142,7 +141,7 @@ export function GanttView({ projectKey }: { projectKey: string }) {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <PageHeading title="甘特图" hint="拖动条形改计划，拖右缘只改结束。细条是基线，记下之后再拖计划不会改它。" />
+        <PageHeading title="甘特图" hint="拖动条形改计划，拖右缘只改结束。任务左端圆点拖到另一条上，会加上完成-开始依赖。细条是基线。" />
         <Button
           variant="outline"
           onPress={() => {
@@ -186,22 +185,29 @@ export function GanttView({ projectKey }: { projectKey: string }) {
           </div>
         ) : null}
         <div className="relative">
-          {rows.map(({ item, start, end }) => {
+          {rows.map(({ item, start, end, depth, header }) => {
             const left = ((dayNumber(start) - origin) / span) * 100;
             const width = Math.max(((dayNumber(end) - dayNumber(start) + 1) / span) * 100, 2);
             const progress = Math.min(Math.max(item.progress, 0), 100);
             return (
               <div key={item.id} className="grid h-16 grid-cols-[148px_minmax(0,1fr)] border-b border-border last:border-b-0 sm:grid-cols-[240px_minmax(0,1fr)]">
-                <button type="button" className="flex min-w-0 items-center gap-2 px-3 text-left hover:bg-line" onClick={() => goToItem(item.id)}>
+                <button type="button" className="flex min-w-0 items-center gap-2 pr-3 text-left hover:bg-line" style={{ paddingLeft: 12 + depth * 16 }} onClick={() => goToItem(item.id)}>
                   <IssueTypeIcon item={item} />
                   <span className="min-w-0">
-                    <span className="type-link block">{item.key}</span>
+                    <span className={header ? "type-emphasis block" : "type-link block"}>{item.key}</span>
                     <span className="type-caption block truncate">{item.title}</span>
                   </span>
                 </button>
-                <span className="relative mr-3">
+                <span className="relative mr-3" data-gantt-id={item.id}>
                   {showToday ? <span className="absolute inset-y-0 w-px bg-danger" style={{ left: `${((today - origin) / span) * 100}%` }} /> : null}
-                  {item.baselineStart && item.baselineEnd ? (
+                  {versions
+                    .filter((version) => version.projectId === project.id)
+                    .map((version) => {
+                      const day = dayNumber(version.plannedReleaseDate);
+                      if (day < origin || day > finish) return null;
+                      return <span key={version.id} className="absolute inset-y-0 w-px bg-warning" style={{ left: `${((day - origin) / span) * 100}%` }} title={version.versionNumber} />;
+                    })}
+                  {header ? null : item.baselineStart && item.baselineEnd ? (
                     <span
                       className="absolute top-2 h-1 rounded-sm bg-fg/50"
                       style={{
@@ -210,15 +216,23 @@ export function GanttView({ projectKey }: { projectKey: string }) {
                       }}
                     />
                   ) : null}
+                  {header ? null : (
                   <span
                     className="absolute top-1/2 h-6 -translate-y-1/2 cursor-grab"
                     style={{ left: `${left}%`, width: `${width}%` }}
-                    onPointerDown={(event) => drag({ item, start, end }, "move", event)}
+                    onPointerDown={(event) => drag({ item, start, end, depth, header }, "move", event)}
                   >
+                    {item.kind === "task" ? (
+                      <span
+                        className="absolute top-1/2 left-0 z-10 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-full bg-primary"
+                        onPointerDown={(event) => linkFrom(project.id, item.id, event)}
+                      />
+                    ) : null}
                     <span className={cn("absolute inset-0 rounded-sm opacity-30", barTone(item))} />
                     {progress > 0 ? <span className={cn("absolute inset-y-0 left-0 rounded-sm", barTone(item))} style={{ width: `${progress}%` }} /> : null}
-                    <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" onPointerDown={(event) => drag({ item, start, end }, "end", event)} />
+                    <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" onPointerDown={(event) => drag({ item, start, end, depth, header }, "end", event)} />
                   </span>
+                  )}
                 </span>
               </div>
             );
@@ -253,6 +267,61 @@ export function GanttView({ projectKey }: { projectKey: string }) {
       ) : null}
     </div>
   );
+}
+
+function groupGantt(scheduled: { item: WorkItem; start: string; end: string }[], items: WorkItem[]): Row[] {
+  const rowOf = new Map(scheduled.map((row) => [row.item.id, row]));
+  const kids = new Map<string, string[]>();
+  const loose: string[] = [];
+  for (const row of scheduled) {
+    const parent = items.find((item) => item.id === row.item.parentId && item.kind === "requirement");
+    if (!parent) loose.push(row.item.id);
+    else kids.set(parent.id, [...(kids.get(parent.id) ?? []), row.item.id]);
+  }
+  const rows: Row[] = [];
+  const emitted = new Set<string>();
+  const emit = (id: string, depth: number) => {
+    if (emitted.has(id)) return;
+    emitted.add(id);
+    const own = rowOf.get(id);
+    const children = [...(kids.get(id) ?? [])].sort((a, b) => (rowOf.get(a)?.start ?? "").localeCompare(rowOf.get(b)?.start ?? "") || a.localeCompare(b));
+    if (own) rows.push({ ...own, depth, header: false });
+    else if (children.length > 0) {
+      const parent = items.find((item) => item.id === id);
+      const first = rowOf.get(children[0]);
+      if (parent && first) rows.push({ item: parent, start: first.start, end: first.end, depth, header: true });
+    }
+    for (const child of children) emit(child, depth + 1);
+  };
+  const roots = [...kids.keys()].filter((id) => {
+    const parentId = items.find((item) => item.id === id)?.parentId;
+    return !parentId || !kids.has(parentId);
+  });
+  for (const id of roots) emit(id, 0);
+  for (const id of loose.sort((a, b) => (rowOf.get(a)?.start ?? "").localeCompare(rowOf.get(b)?.start ?? ""))) emit(id, 0);
+  return rows;
+}
+
+function linkFrom(projectId: string, fromId: string, event: PointerEvent<HTMLElement>) {
+  event.preventDefault();
+  event.stopPropagation();
+  const up = (ev: globalThis.PointerEvent) => {
+    window.removeEventListener("pointerup", up);
+    const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+    const target = hit instanceof Element ? hit.closest("[data-gantt-id]")?.getAttribute("data-gantt-id") : null;
+    if (!target || target === fromId) return;
+    const result = usePm.getState().addDependency({
+      projectId,
+      predecessorId: fromId,
+      successorId: target,
+      dependencyType: "FS",
+      lagDays: 0,
+      memo: "",
+    });
+    if (!result.ok) toast(result.message);
+    else toast("已添加完成-开始依赖");
+  };
+  window.addEventListener("pointerup", up);
 }
 
 function rangeDays(row: Row) {

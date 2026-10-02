@@ -1,4 +1,6 @@
 import { Label, NumberField } from "@heroui/react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { LabeledField } from "@/components/biz/labeled-field";
 import { PersonSelect, PrioritySelect, SprintSelect, VersionSelect } from "@/components/biz/field-selects";
 import { ProgressSlider } from "@/components/biz/progress-slider";
@@ -7,7 +9,7 @@ import { useGoToItem } from "@/components/pm/use-go-item";
 import { DEPENDENCY_TYPE_LABEL, fsBlockers, type Person, type ReleaseVersion, type Sprint, type WorkItem } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 
-type Patch = Partial<Pick<WorkItem, "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress">>;
+type Patch = Partial<Pick<WorkItem, "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "dueDate" | "tags">>;
 
 export function IssueProperties({
   item,
@@ -28,6 +30,10 @@ export function IssueProperties({
   const goToItem = useGoToItem();
   const related = dependencies.filter((entry) => entry.status === "ACTIVE" && (entry.predecessorId === item.id || entry.successorId === item.id));
   const blocked = new Set(fsBlockers(item, "IN_PROGRESS", items, dependencies).map((entry) => entry.id));
+  const [tag, setTag] = useState("");
+  const [hours, setHours] = useState("1");
+  const [workDate, setWorkDate] = useState(localDay());
+  const [note, setNote] = useState("");
   return (
     <aside className="flex h-fit flex-col gap-4">
       <LabeledField label="负责人">
@@ -66,6 +72,64 @@ export function IssueProperties({
           <ProgressSlider value={item.progress} onChange={(progress) => onPatch({ progress })} />
         </LabeledField>
       ) : null}
+      <LabeledField label="到期日">
+        <input
+          type="date"
+          aria-label="到期日"
+          value={item.dueDate ?? ""}
+          className="type-body h-10 w-full rounded-sm border border-border bg-surface px-2"
+          onChange={(event) => onPatch({ dueDate: event.target.value })}
+        />
+      </LabeledField>
+      <div>
+        <div className="type-label mb-1">标签</div>
+        <div className="flex flex-wrap gap-1">
+          {item.tags.map((entry) => (
+            <button key={entry} type="button" className="type-caption rounded-sm border border-border px-2 py-1" onClick={() => onPatch({ tags: item.tags.filter((tagName) => tagName !== entry) })}>
+              {entry} ×
+            </button>
+          ))}
+        </div>
+        <form
+          className="mt-2 flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const next = tag.trim();
+            if (!next || item.tags.includes(next)) return;
+            onPatch({ tags: [...item.tags, next] });
+            setTag("");
+          }}
+        >
+          <input aria-label="新标签" value={tag} onChange={(event) => setTag(event.target.value)} className="type-body h-9 min-w-0 flex-1 rounded-sm border border-border px-2" placeholder="添加标签" />
+          <button type="submit" className="type-link px-1">添加</button>
+        </form>
+      </div>
+      <form
+        className="flex flex-col gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const amount = Number(hours);
+          if (!Number.isFinite(amount) || amount <= 0 || amount > 24) {
+            toast.error("工时要在 0 到 24 小时之间");
+            return;
+          }
+          if (!workDate) {
+            toast.error("请填写日期");
+            return;
+          }
+          usePm.getState().addWorkLog({ projectId: item.projectId, itemId: item.id, hours: amount, workDate, note });
+          setNote("");
+          toast("已记下工时，待审批");
+        }}
+      >
+        <div className="type-label">记一笔工时</div>
+        <div className="flex gap-2">
+          <input aria-label="小时" value={hours} onChange={(event) => setHours(event.target.value)} className="type-body h-9 w-16 rounded-sm border border-border px-2" />
+          <input aria-label="工时日期" type="date" value={workDate} onChange={(event) => setWorkDate(event.target.value)} className="type-body h-9 min-w-0 flex-1 rounded-sm border border-border px-2" />
+        </div>
+        <input aria-label="工时说明" value={note} onChange={(event) => setNote(event.target.value)} placeholder="说明" className="type-body h-9 rounded-sm border border-border px-2" />
+        <button type="submit" className="type-link self-start">提交</button>
+      </form>
       {related.length > 0 ? (
         <div>
           <div className="type-label mb-1">依赖</div>
@@ -90,4 +154,9 @@ export function IssueProperties({
       <p className="type-caption">报告人 {reporter?.name ?? "未知"}</p>
     </aside>
   );
+}
+
+function localDay() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }

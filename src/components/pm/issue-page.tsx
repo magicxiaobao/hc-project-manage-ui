@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { EmptyHint, IssueDialog } from "@/components/biz";
+import { browseAround } from "@/components/pm/use-go-item";
 import { usePm } from "@/lib/pm/store";
 
 export function IssuePage({ projectKey, itemKey }: { projectKey: string; itemKey: string }) {
@@ -23,6 +24,10 @@ export function IssuePage({ projectKey, itemKey }: { projectKey: string; itemKey
 
   const parent = items.find((entry) => entry.id === item.parentId);
   const children = items.filter((entry) => entry.parentId === item.id);
+  const around = browseAround(
+    item.id,
+    items.filter((entry) => entry.projectId === project.id).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
+  );
 
   return (
     <IssueDialog
@@ -37,13 +42,20 @@ export function IssuePage({ projectKey, itemKey }: { projectKey: string; itemKey
       comments={comments}
       feeds={feeds}
       histories={histories}
+      previous={around.prev}
+      next={around.next}
       onClose={() => {
         void navigate({ to: "/p/$projectKey", params: { projectKey } });
       }}
-      onPatch={(patch) => {
-        const result = usePm.getState().updateItem(item.id, patch);
-        if (!result.ok) toast.error(result.message);
+      onClone={() => {
+        const result = usePm.getState().cloneItem(item.id);
+        if (!result.ok) {
+          toast.error(result.message);
+          return;
+        }
+        void navigate({ to: "/p/$projectKey/items/$itemKey", params: { projectKey, itemKey: result.key } });
       }}
+      onPatch={(patch) => usePm.getState().updateItem(item.id, patch)}
       onTransition={(to, reason) => usePm.getState().transition(item.id, to, reason)}
       onComment={(body) => usePm.getState().addComment(item.id, body)}
     />

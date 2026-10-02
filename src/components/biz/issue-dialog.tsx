@@ -28,6 +28,9 @@ export function IssueDialog({
   onPatch,
   onTransition,
   onComment,
+  onClone,
+  previous,
+  next,
 }: {
   projectKey: string;
   item: WorkItem;
@@ -40,9 +43,12 @@ export function IssueDialog({
   feeds: FeedEntry[];
   histories: LifecycleRecord[];
   onClose: () => void;
-  onPatch: (patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress">>) => void;
+  onPatch: (patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "dueDate" | "tags">>) => void;
   onTransition: (to: string, reason?: string) => { ok: true } | { ok: false; message: string };
   onComment: (body: string) => void;
+  onClone: () => void;
+  previous?: WorkItem;
+  next?: WorkItem;
 }) {
   const [pending, setPending] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -71,9 +77,24 @@ export function IssueDialog({
           <span className="type-overline">{kindLabel(item)}</span>
           <span className="type-link">{item.key}</span>
           <StatusChip kind={item.kind} status={item.status} />
-          <button type="button" className="ml-auto rounded-sm p-1.5 text-muted hover:bg-line" aria-label="关闭" onClick={onClose}>
-            <X className="size-4" />
-          </button>
+          <span className="ml-auto flex items-center gap-2">
+            {previous ? (
+              <Link to="/p/$projectKey/items/$itemKey" params={{ projectKey, itemKey: previous.key }} className="type-link">
+                上一张
+              </Link>
+            ) : null}
+            {next ? (
+              <Link to="/p/$projectKey/items/$itemKey" params={{ projectKey, itemKey: next.key }} className="type-link">
+                下一张
+              </Link>
+            ) : null}
+            <button type="button" className="type-link" onClick={onClone}>
+              克隆
+            </button>
+            <button type="button" className="rounded-sm p-1.5 text-muted hover:bg-line" aria-label="关闭" onClick={onClose}>
+              <X className="size-4" />
+            </button>
+          </span>
         </div>
         <div className="grid min-h-0 flex-1 gap-6 overflow-auto px-5 py-5 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div>

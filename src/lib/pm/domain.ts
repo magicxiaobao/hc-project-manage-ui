@@ -20,6 +20,7 @@ export interface Project {
   summary: string;
   leadId: string;
   memberIds: string[];
+  wip?: Partial<Record<ColumnId, number>>;
 }
 
 export interface Sprint {
@@ -71,6 +72,8 @@ export interface WorkItem {
   planEnd?: string;
   baselineStart?: string;
   baselineEnd?: string;
+  rank?: number;
+  dueDate?: string;
 }
 
 export interface Comment {
@@ -505,6 +508,10 @@ export function transitionName(kind: ItemKind, from: string, to: string) {
 
 export function needsReason(to: string) {
   return REASON_NEEDED.has(to);
+}
+
+export function byRank<T extends { rank?: number; key: string }>(a: T, b: T) {
+  return (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) || a.key.localeCompare(b.key);
 }
 
 export function columnOf(kind: ItemKind, status: string): ColumnId | "cancelled" {

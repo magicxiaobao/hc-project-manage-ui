@@ -10,12 +10,14 @@ export function IssueRow({
   assignee,
   extra,
   onOpen,
+  onDropBefore,
   draggable = false,
 }: {
   item: WorkItem;
   assignee?: Person | null;
   extra?: ReactNode;
   onOpen: (id: string) => void;
+  onDropBefore?: (id: string) => void;
   draggable?: boolean;
 }) {
   return (
@@ -26,6 +28,24 @@ export function IssueRow({
           ? (event) => {
               event.dataTransfer.setData("text/plain", item.id);
               event.dataTransfer.effectAllowed = "move";
+            }
+          : undefined
+      }
+      onDragOver={
+        onDropBefore
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          : undefined
+      }
+      onDrop={
+        onDropBefore
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const id = event.dataTransfer.getData("text/plain");
+              if (id && id !== item.id) onDropBefore(id);
             }
           : undefined
       }

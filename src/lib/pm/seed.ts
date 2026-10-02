@@ -908,6 +908,9 @@ for (const entry of items) {
     entry.baselineEnd = range[1];
   }
 }
+items.forEach((entry, index) => {
+  entry.rank = index;
+});
 
 export const testCases: TestCase[] = [
   {

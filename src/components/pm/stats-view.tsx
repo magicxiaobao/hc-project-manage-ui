@@ -228,6 +228,7 @@ export function StatsView({ projectKey }: { projectKey: string }) {
           ))}
         </div>
       </section>
+      <SprintCharts projectId={project.id} items={items} sprints={sprints} histories={histories} versions={versions} />
       <section className="rounded-sm border border-border bg-surface p-4">
         <h2 className="type-section">按负责人</h2>
         <p className="type-meta mt-1">条形是未完成事项。小时是已登记工时。</p>
@@ -315,6 +316,115 @@ export function StatsView({ projectKey }: { projectKey: string }) {
       </section>
     </div>
   );
+}
+
+function SprintCharts({
+  projectId,
+  items,
+  sprints,
+  histories,
+  versions,
+}: {
+  projectId: string;
+  items: WorkItem[];
+  sprints: Sprint[];
+  histories: LifecycleRecord[];
+  versions: ReleaseVersion[];
+}) {
+  const active = sprints.find((sprint) => sprint.projectId === projectId && sprint.state === "active");
+  const closed = sprints.filter((sprint) => sprint.projectId === projectId && sprint.state === "closed");
+  const burn = active ? burnSeries(active, items, histories) : [];
+  const max = Math.max(1, ...burn.map((point) => Math.max(point.remaining, point.ideal)));
+  const velocity = closed.map((sprint) => {
+    const done = items.filter((item) => item.sprintId === sprint.id && columnOf(item.kind, item.status) === "done");
+    return { id: sprint.id, name: sprint.name, points: done.reduce((sum, item) => sum + (item.storyPoints ?? 0), 0) };
+  });
+  const velocityMax = Math.max(1, ...velocity.map((row) => row.points));
+  const versionRows = versions
+    .filter((version) => version.projectId === projectId)
+    .map((version) => {
+      const scope = items.filter((item) => item.versionId === version.id);
+      const open = scope.filter((item) => {
+        const column = columnOf(item.kind, item.status);
+        return column !== "done" && column !== "cancelled";
+      });
+      return { id: version.id, name: `${version.versionNumber} ${version.name}`, points: open.reduce((sum, item) => sum + (item.storyPoints ?? 0), 0) };
+    });
+  return (
+    <section className="rounded-sm border border-border bg-surface p-4">
+      <h2 className="type-section">迭代燃尽</h2>
+      {!active || burn.length === 0 ? <p className="type-meta mt-2">没有进行中的迭代，或迭代里还没有故事点。</p> : null}
+      {burn.length > 0 ? (
+        <>
+          <svg viewBox="0 0 320 120" className="mt-3 h-32 w-full" role="img" aria-label="迭代燃尽">
+            <polyline fill="none" stroke="#8993a4" strokeWidth="2" points={linePoints(burn.map((point) => point.ideal), max)} />
+            <polyline fill="none" stroke="#0052cc" strokeWidth="2" points={linePoints(burn.map((point) => point.remaining), max)} />
+          </svg>
+          <p className="type-caption mt-1">灰线是理想剩余，蓝线是按当前仍在迭代中的事项、以及流转到完成的日期估算的剩余。移出迭代的事项不在图上。</p>
+        </>
+      ) : null}
+      <h2 className="type-section mt-4">速率</h2>
+      {velocity.length === 0 ? <p className="type-meta mt-2">还没有已完成的迭代。</p> : null}
+      <div className="mt-3 flex flex-col gap-2">
+        {velocity.map((row) => (
+          <Meter key={row.id} label={row.name} value={row.points} max={velocityMax} total={row.points} bare />
+        ))}
+      </div>
+      <h2 className="type-section mt-4">版本剩余点数</h2>
+      <div className="mt-3 flex flex-col gap-2">
+        {versionRows.map((row) => (
+          <p key={row.id} className="type-body">
+            {row.name} · {row.points} 点未完成
+          </p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function burnSeries(sprint: Sprint, items: WorkItem[], histories: LifecycleRecord[]) {
+  const members = items.filter((item) => item.sprintId === sprint.id && (item.storyPoints ?? 0) > 0);
+  if (members.length === 0) return [];
+  const start = utcDay(sprint.start);
+  const end = utcDay(sprint.end);
+  const today = utcDay(new Date().toISOString());
+  const last = Math.min(end, today);
+  if (last < start) return [];
+  const doneAt = new Map<string, number>();
+  for (const history of histories) {
+    const item = members.find((entry) => entry.id === history.itemId);
+    if (!item || columnOf(item.kind, history.toStatus) !== "done") continue;
+    const day = utcDay(history.createdAt);
+    const previous = doneAt.get(item.id);
+    if (previous === undefined || day < previous) doneAt.set(item.id, day);
+  }
+  const total = members.reduce((sum, item) => sum + (item.storyPoints ?? 0), 0);
+  const points = [];
+  for (let day = start; day <= last; day += 1) {
+    const remaining = members.reduce((sum, item) => {
+      const done = doneAt.get(item.id);
+      return done !== undefined && done <= day ? sum : sum + (item.storyPoints ?? 0);
+    }, 0);
+    const ideal = total * (1 - (day - start) / Math.max(end - start, 1));
+    points.push({ remaining, ideal });
+  }
+  return points;
+}
+
+function linePoints(values: number[], max: number) {
+  if (values.length === 0) return "";
+  return values
+    .map((value, index) => {
+      const x = values.length === 1 ? 0 : (index / (values.length - 1)) * 320;
+      const y = 112 - (value / max) * 104;
+      return `${x},${y}`;
+    })
+    .join(" ");
+}
+
+function utcDay(iso: string) {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  return Date.UTC(year, month - 1, day) / 86_400_000;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

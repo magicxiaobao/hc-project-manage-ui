@@ -15,6 +15,7 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
   const logs = usePm((state) => state.workLogs);
   const people = usePm((state) => state.people);
   const histories = usePm((state) => state.histories);
+  const feeds = usePm((state) => state.feeds);
   const currentUserId = usePm((state) => state.currentUserId);
   const goToItem = useGoToItem();
   const projectItems = useMemo(() => items.filter((item) => item.projectId === project?.id), [items, project?.id]);
@@ -33,16 +34,75 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
   const failed = executions.filter((execution) => projectRuns.some((run) => run.id === execution.runId) && (execution.result === "FAILED" || execution.result === "BLOCKED"));
   const pending = logs.filter((entry) => entry.projectId === project.id && workLogStatus(entry) === "PENDING").length;
   const testing = versions.filter((version) => version.projectId === project.id && (version.status === "TESTING" || version.status === "DEVELOPMENT"));
+  const weekAgo = shiftDay(-6);
+  const today = shiftDay(0);
+  const soon = shiftDay(7);
+  const created = projectItems.filter((item) => item.createdAt.slice(0, 10) >= weekAgo && item.createdAt.slice(0, 10) <= today).length;
+  const updated = projectItems.filter((item) => item.updatedAt.slice(0, 10) >= weekAgo && item.updatedAt.slice(0, 10) <= today).length;
+  const completed = new Set(
+    histories
+      .filter((entry) => {
+        const item = projectItems.find((candidate) => candidate.id === entry.itemId);
+        return item && columnOf(item.kind, entry.toStatus) === "done" && entry.createdAt.slice(0, 10) >= weekAgo && entry.createdAt.slice(0, 10) <= today;
+      })
+      .map((entry) => entry.itemId),
+  ).size;
+  const due = projectItems.filter((item) => {
+    const column = columnOf(item.kind, item.status);
+    return Boolean(item.dueDate && item.dueDate >= today && item.dueDate <= soon && column !== "done" && column !== "cancelled");
+  }).length;
+  const epics = projectItems.filter((item) => item.requirementType === "Epic");
+  const recent = feeds.filter((entry) => entry.projectId === project.id).slice(0, 6);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="仪表盘" hint={`${project.name} 的进度。数字随事项、测试和工时变化。`} />
+      <PageHeading title="仪表盘" hint={`${project.name} 的进度。上面四格是近 7 天和即将到期。`} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="近 7 天完成" value={String(completed)} />
+        <Stat label="近 7 天更新" value={String(updated)} />
+        <Stat label="近 7 天新建" value={String(created)} />
+        <Stat label="未来 7 天到期" value={String(due)} />
+      </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label={active ? active.name : "没有进行中的迭代"} value={active ? `${sprintDone}/${sprintItems.length}` : "—"} />
         <Stat label="未关缺陷" value={String(openDefects.length)} />
         <Stat label="失败或阻塞" value={String(failed.length)} />
         <Stat label="待审工时" value={String(pending)} />
       </div>
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <section className="overflow-hidden rounded-sm border border-border bg-surface">
+          <h2 className="type-section border-b border-border px-4 py-3">最近动态</h2>
+          {recent.length === 0 ? <p className="type-meta px-4 py-3">还没有动态。</p> : null}
+          {recent.map((entry) => (
+            <button key={entry.id} type="button" className="flex w-full flex-col gap-1 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-line" onClick={() => goToItem(entry.itemId)}>
+              <span className="type-body">{entry.text}</span>
+              <span className="type-caption">{entry.createdAt.slice(0, 10)}</span>
+            </button>
+          ))}
+        </section>
+        <section className="rounded-sm border border-border bg-surface p-4">
+          <h2 className="type-section">史诗进度</h2>
+          {epics.length === 0 ? <p className="type-meta mt-2">没有史诗。</p> : null}
+          <div className="mt-3 flex flex-col gap-3">
+            {epics.map((epic) => {
+              const children = projectItems.filter((item) => item.parentId === epic.id);
+              const done = children.filter((item) => columnOf(item.kind, item.status) === "done").length;
+              const width = children.length ? (done / children.length) * 100 : 0;
+              return (
+                <button key={epic.id} type="button" className="text-left" onClick={() => goToItem(epic.id)}>
+                  <span className="type-caption">
+                    {epic.key} {epic.title}
+                  </span>
+                  <span className="mt-1 block h-2 overflow-hidden rounded-sm bg-line">
+                    <span className="block h-full bg-primary" style={{ width: `${width}%` }} />
+                  </span>
+                  <span className="type-caption">{children.length ? `${done}/${children.length}` : "没有子事项"}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </section>
       <section className="overflow-hidden rounded-sm border border-border bg-surface">
         <h2 className="type-section border-b border-border px-4 py-3">我的未完成</h2>
         {mine.length === 0 ? <p className="type-meta px-4 py-3">没有分给你的未完成事项。</p> : null}
@@ -101,4 +161,10 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="type-section mt-1">{value}</div>
     </div>
   );
+}
+
+function shiftDay(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }

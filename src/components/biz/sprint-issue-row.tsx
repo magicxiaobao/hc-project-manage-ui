@@ -8,12 +8,14 @@ export function SprintIssueRow({
   sprints,
   onOpen,
   onSprint,
+  onDropBefore,
 }: {
   item: WorkItem;
   assignee?: Person | null;
   sprints: Sprint[];
   onOpen: (id: string) => void;
   onSprint: (sprintId: string | null) => void;
+  onDropBefore?: (id: string) => void;
 }) {
   return (
     <IssueRow
@@ -21,6 +23,7 @@ export function SprintIssueRow({
       assignee={assignee}
       draggable
       onOpen={onOpen}
+      onDropBefore={onDropBefore}
       extra={
         <div className="hidden w-40 md:block">
           <SprintSelect
