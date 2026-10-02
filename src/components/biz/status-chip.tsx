@@ -15,7 +15,7 @@ const CHIP_COLOR = {
 
 export function StateChip({ tone, children }: { tone: StateTone; children: string }) {
   return (
-    <Chip size="sm" color={CHIP_COLOR[tone]} variant="soft">
+    <Chip size="sm" color={CHIP_COLOR[tone]} variant="soft" className={`pm-state-chip pm-state-chip--${tone}`}>
       <Chip.Label>{children}</Chip.Label>
     </Chip>
   );

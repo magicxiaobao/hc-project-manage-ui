@@ -7,8 +7,8 @@
   --color-bg: #f4f5f7;
   --color-surface: #ffffff;
   --color-fg: #172b4d;
-  --color-muted: #5e6c84;
-  --color-faint: #8993a4;
+  --color-muted: #56647a;
+  --color-faint: #56647a;
   --color-primary: #0052cc;
   --color-primary-ink: #0747a6;
   --color-primary-soft: #deebff;
@@ -18,15 +18,15 @@
   --color-on-nav: #ffffff;
   --color-scrim: #091e42;
 
-  --color-warning: #e97f33;
+  --color-warning: #9a4d12;
   --color-warning-ink: #9a4d12;
   --color-warning-soft: #fff3e0;
   --color-warning-wash: #ffe0b2;
-  --color-success: #0b875b;
+  --color-success: #08704c;
   --color-success-ink: #08704c;
   --color-success-soft: #e4fcef;
   --color-success-wash: #c6f6d5;
-  --color-danger: #e13c3c;
+  --color-danger: #c52a2a;
   --color-danger-soft: #ffebe6;
 
   --color-epic: #904ee2;
@@ -34,7 +34,8 @@
   --color-task: #4fade6;
   --color-defect: #e44d42;
 
-  --radius-sm: 3px;
+  --radius-sm: 6px;
+  --radius-dialog: 12px;
 
   --text-title: 1.5rem;
   --text-title--line-height: 1.25;
@@ -42,8 +43,8 @@
   --text-body--line-height: 1.5;
   --text-caption: 0.75rem;
   --text-caption--line-height: 1.4;
-  --text-key: 0.75rem;
-  --text-key--line-height: 1rem;
+  --text-key: 0.875rem;
+  --text-key--line-height: 1.25rem;
   --text-field: 1rem;
 
   --font-weight-regular: 400;
@@ -122,8 +123,8 @@
 }
 
 @utility type-label {
-  font-size: var(--text-caption);
-  line-height: var(--text-caption--line-height);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
   font-weight: var(--font-weight-medium);
   color: var(--color-faint);
 }
@@ -160,8 +161,8 @@
 
 @layer components {
   .label {
-    font-size: var(--text-caption);
-    line-height: var(--text-caption--line-height);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
     font-weight: var(--font-weight-medium);
     color: var(--color-faint);
   }
@@ -270,4 +271,20 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+input::placeholder, textarea::placeholder { color: var(--color-muted); opacity: 1; }
+
+/* Shared geometry keeps compact desktop controls and consistent modal corners. */
+.button { border-radius: var(--radius-sm); min-height: 36px; }
+.modal__dialog { border-radius: var(--radius-dialog); }
+.pm-state-chip { font-size: var(--text-body); line-height: 1.5; border-radius: var(--radius-sm); }
+.pm-state-chip--neutral, .pm-state-chip--revert { background: var(--color-line); color: var(--color-muted); }
+.pm-state-chip--progress { background: var(--color-primary-soft); color: var(--color-primary-ink); }
+.pm-state-chip--review { background: var(--color-warning-soft); color: var(--color-warning-ink); }
+.pm-state-chip--done { background: var(--color-success-soft); color: var(--color-success-ink); }
+.pm-state-chip--danger { background: var(--color-danger-soft); color: var(--color-danger); }
+@media (max-width: 639px) {
+  .button { min-height: 44px; }
+  main button:not(:disabled), main select { min-height: 44px; }
 }

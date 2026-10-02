@@ -2,7 +2,7 @@ import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DayField, EmptyHint, OptionSelect, PageHeading, SprintStateChip } from "@/components/biz";
+import { DayField, EmptyHint, OptionSelect, PageHeading, SprintStateChip, StateAction } from "@/components/biz";
 import { formatDay } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 
@@ -77,9 +77,9 @@ export function SprintsView({ projectKey }: { projectKey: string }) {
               </Button>
             ) : null}
             {sprint.state === "active" ? (
-              <Button variant="secondary" onPress={() => usePm.getState().completeSprint(sprint.id)}>
+              <StateAction tone="done" onPress={() => usePm.getState().completeSprint(sprint.id)}>
                 完成
-              </Button>
+              </StateAction>
             ) : null}
           </div>
         </section>

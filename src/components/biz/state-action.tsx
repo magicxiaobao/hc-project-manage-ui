@@ -12,7 +12,7 @@ function tonePaint(tone: StateTone, active: boolean): { variant: NonNullable<But
       variant: "ghost",
       style: active
         ? paint("var(--color-success)", "var(--color-success-ink)", "var(--color-surface)")
-        : paint("var(--color-success-soft)", "var(--color-success-wash)", "var(--color-success)"),
+        : paint("var(--color-success-soft)", "var(--color-success-wash)", "var(--color-success-ink)"),
     };
   }
   if (tone === "review") {
