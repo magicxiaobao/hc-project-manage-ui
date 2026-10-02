@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 import { EmptyHint, IssueTypeIcon, PageHeading, StatusChip } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { aggregate } from "@/components/pm/stats-view";
@@ -56,19 +57,29 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="仪表盘" hint={`${project.name} 的进度。上面四格是近 7 天和即将到期。`} />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="近 7 天完成" value={String(completed)} />
-        <Stat label="近 7 天更新" value={String(updated)} />
-        <Stat label="近 7 天新建" value={String(created)} />
-        <Stat label="未来 7 天到期" value={String(due)} />
-      </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label={active ? active.name : "没有进行中的迭代"} value={active ? `${sprintDone}/${sprintItems.length}` : "—"} />
-        <Stat label="未关缺陷" value={String(openDefects.length)} />
-        <Stat label="失败或阻塞" value={String(failed.length)} />
-        <Stat label="待审工时" value={String(pending)} />
-      </div>
+      <PageHeading title="仪表盘" hint={`${project.name} · 先处理当前任务，再查看进度汇总。`} />
+      <section className="flex flex-col gap-2 rounded-sm border border-border bg-surface p-3">
+        <h2 className="type-section">需要处理</h2>
+        <div className="flex flex-wrap gap-2">
+          {failed.length > 0 ? <Link className="type-link min-h-10 rounded-sm border border-border px-3 py-2" to="/p/$projectKey/tests" params={{ projectKey }}>失败或阻塞 {failed.length} · 去测试</Link> : null}
+          {pending > 0 ? <Link className="type-link min-h-10 rounded-sm border border-border px-3 py-2" to="/p/$projectKey/worklogs" params={{ projectKey }}>待审工时 {pending} · 去审批</Link> : null}
+          {openDefects.length > 0 ? <Link className="type-link min-h-10 rounded-sm border border-border px-3 py-2" to="/p/$projectKey/defects" params={{ projectKey }}>未关缺陷 {openDefects.length} · 去处理</Link> : null}
+          {failed.length === 0 && pending === 0 && openDefects.length === 0 ? <p className="type-caption">当前没有失败或阻塞、待审工时和未关缺陷。</p> : null}
+        </div>
+      </section>
+      <section className="overflow-hidden rounded-sm border border-border bg-surface">
+        <h2 className="type-section border-b border-border px-4 py-3">我的未完成</h2>
+        {mine.length === 0 ? <p className="type-meta px-4 py-3">没有分给你的未完成事项。</p> : null}
+        {mine.slice(0, 8).map((item) => (
+          <button key={item.id} type="button" className="flex w-full flex-wrap items-center gap-2 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-line" onClick={() => goToItem(item.id)}>
+            <IssueTypeIcon item={item} />
+            <span className="type-link shrink-0">{item.key}</span>
+            <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>
+            <StatusChip kind={item.kind} status={item.status} />
+          </button>
+        ))}
+      </section>
+
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <section className="overflow-hidden rounded-sm border border-border bg-surface">
           <h2 className="type-section border-b border-border px-4 py-3">最近动态</h2>
@@ -103,18 +114,21 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
           </div>
         </section>
       </section>
-      <section className="overflow-hidden rounded-sm border border-border bg-surface">
-        <h2 className="type-section border-b border-border px-4 py-3">我的未完成</h2>
-        {mine.length === 0 ? <p className="type-meta px-4 py-3">没有分给你的未完成事项。</p> : null}
-        {mine.slice(0, 8).map((item) => (
-          <button key={item.id} type="button" className="flex w-full items-center gap-2 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-line" onClick={() => goToItem(item.id)}>
-            <IssueTypeIcon item={item} />
-            <span className="type-link shrink-0">{item.key}</span>
-            <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>
-            <StatusChip kind={item.kind} status={item.status} />
-          </button>
-        ))}
-      </section>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">进度汇总</summary>
+<div className="flex flex-col gap-3 p-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="近 7 天完成" value={String(completed)} />
+        <Stat label="近 7 天更新" value={String(updated)} />
+        <Stat label="近 7 天新建" value={String(created)} />
+        <Stat label="未来 7 天到期" value={String(due)} />
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label={active ? active.name : "没有进行中的迭代"} value={active ? `${sprintDone}/${sprintItems.length}` : "—"} />
+        <Stat label="未关缺陷" value={String(openDefects.length)} />
+        <Stat label="失败或阻塞" value={String(failed.length)} />
+        <Stat label="待审工时" value={String(pending)} />
+      </div>
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <BarGroup title="需求状态" rows={summary.requirementStatuses.map((row) => ({ id: row.status, label: row.label, value: row.count }))} />
         <BarGroup title="未关缺陷" rows={summary.severities.map((row) => ({ id: row.severity, label: row.label, value: row.count }))} empty="没有未关缺陷。" />
@@ -129,6 +143,9 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
           </p>
         ))}
       </section>
+
+</div>
+</details>
     </div>
   );
 }

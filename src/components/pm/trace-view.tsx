@@ -1,6 +1,6 @@
 import { Button } from "@heroui/react";
 import { useMemo, useState, type ReactNode } from "react";
-import { EmptyHint, IssueTypeIcon, PageHeading, StateChip, StatusChip, VersionStatusChip } from "@/components/biz";
+import { EmptyHint, IssueTypeIcon, OptionSelect, PageHeading, StateChip, StatusChip, VersionStatusChip } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { TEST_CASE_STATUS_LABEL, TEST_RESULT_LABEL, type TestResult, type WorkItem } from "@/lib/pm/domain";
 import { openDefects, traceGaps, traceRequirement, evidenceMatrix, type RequirementTrace, type TraceGap } from "@/lib/pm/trace";
@@ -21,6 +21,10 @@ const RESULT_TONE: Record<TestResult, StateTone> = {
   SKIPPED: "neutral",
 };
 
+// View-only memory keeps the selected source visible when returning from an item.
+// It lasts for this SPA session and never enters PM persistence.
+const selectedObjects = new Map<string, string>();
+
 export function TraceView({ projectKey }: { projectKey: string }) {
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const items = usePm((state) => state.items);
@@ -31,7 +35,8 @@ export function TraceView({ projectKey }: { projectKey: string }) {
   const histories = usePm((state) => state.histories);
   const people = usePm((state) => state.people);
   const goToItem = useGoToItem();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setChoice] = useState<string | null>(() => selectedObjects.get(projectKey) ?? null);
+  const setSelectedId = (id: string) => { selectedObjects.set(projectKey, id); setChoice(id); };
 
   const requirements = useMemo(
     () => items.filter((item) => item.projectId === project?.id && item.kind === "requirement").sort((a, b) => a.key.localeCompare(b.key)),
@@ -50,7 +55,12 @@ export function TraceView({ projectKey }: { projectKey: string }) {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="需求追溯" hint="从需求看到拆出的任务、挂上的用例、执行结果、关联缺陷和版本。关系由归属推出来，没有另一套关系表。" />
+      <PageHeading title="需求追溯" hint="先选择需求，查看它的任务、用例、执行、缺陷和版本。" />
+      {traces.length === 0 ? <EmptyHint>这个项目还没有需求。</EmptyHint> : <OptionSelect label="当前需求" value={selected?.requirement.id ?? ""} options={requirements.map((item) => ({ id: item.id, label: `${item.key} ${item.title}` }))} onChange={setSelectedId} />}
+      {selected ? <TraceDetail trace={selected} histories={histories} people={people} items={items} onOpen={goToItem} /> : null}
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">项目追溯概览 · {traces.length} 条需求</summary>
+<div className="flex flex-col gap-3 p-3">
       <div className="grid grid-cols-3 gap-3">
         <Stat label="无用例" value={missingCases} />
         <Stat label="有失败" value={failed} />
@@ -64,11 +74,12 @@ export function TraceView({ projectKey }: { projectKey: string }) {
           return (
             <button
               key={trace.requirement.id}
+              aria-pressed={active}
               type="button"
               className={cn("flex w-full flex-col gap-2 border-b border-border px-3 py-3 text-left last:border-b-0", active && "bg-line")}
               onClick={() => setSelectedId(trace.requirement.id)}
             >
-              <span className="flex min-w-0 items-center gap-2">
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <IssueTypeIcon item={trace.requirement} />
                 <span className="type-link shrink-0">{trace.requirement.key}</span>
                 <span className="type-body min-w-0 flex-1 truncate">{trace.requirement.title}</span>
@@ -84,7 +95,10 @@ export function TraceView({ projectKey }: { projectKey: string }) {
           );
         })}
       </div>
-      {selected ? <TraceDetail trace={selected} histories={histories} people={people} items={items} onOpen={goToItem} /> : null}
+
+</div>
+</details>
+
     </div>
   );
 }
@@ -255,7 +269,7 @@ function Bucket({ title, empty, children }: { title: string; empty: string; chil
 
 function ItemLine({ item, onOpen }: { item: WorkItem; onOpen: (id: string) => void }) {
   return (
-    <button type="button" className="flex items-center gap-2 text-left" onClick={() => onOpen(item.id)}>
+    <button type="button" className="flex flex-wrap items-center gap-2 text-left" onClick={() => onOpen(item.id)}>
       <IssueTypeIcon item={item} />
       <span className="type-link shrink-0">{item.key}</span>
       <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>

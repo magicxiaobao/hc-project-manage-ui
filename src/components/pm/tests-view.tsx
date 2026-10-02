@@ -1,6 +1,6 @@
 import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppModal, EmptyHint, LabeledField, OptionSelect, PageHeading, PersonAvatar, PriorityMark, StateAction, StateChip, VersionSelect } from "@/components/biz";
 import type { StateTone } from "@/components/biz/state-tone";
@@ -36,7 +36,32 @@ function verdict(run: TestRun, rows: TestExecution[]) {
   return run.status === "COMPLETED" ? "已完成，没有失败或阻塞。" : "结果已齐，没有失败或阻塞。";
 }
 
+// View-only memory keeps the selected source visible when returning from an item.
+// It lasts for this SPA session and never enters PM persistence.
+const selectedObjects = new Map<string, string>();
+
+const expandedPanels = new Map<string, Set<string>>();
+
 export function TestsView({ projectKey }: { projectKey: string }) {
+  const panelRoot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = panelRoot.current;
+    const remember = (event: Event) => {
+      const panel = event.target;
+      if (!(panel instanceof HTMLDetailsElement)) return;
+      const label = panel.querySelector("summary")?.textContent?.split(" · ")[0].trim() ?? "";
+      const expanded = expandedPanels.get(projectKey) ?? new Set<string>();
+      if (panel.open) expanded.add(label); else expanded.delete(label);
+      expandedPanels.set(projectKey, expanded);
+    };
+    const expanded = expandedPanels.get(projectKey);
+    for (const panel of root?.querySelectorAll("details") ?? []) {
+      const label = panel.querySelector("summary")?.textContent?.split(" · ")[0].trim() ?? "";
+      panel.open = expanded?.has(label) ?? false;
+    }
+    root?.addEventListener("toggle", remember, true);
+    return () => root?.removeEventListener("toggle", remember, true);
+  }, [projectKey]);
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const cases = usePm((state) => state.testCases);
   const runs = usePm((state) => state.testRuns);
@@ -47,7 +72,8 @@ export function TestsView({ projectKey }: { projectKey: string }) {
   const projectRuns = useMemo(() => runs.filter((run) => run.projectId === project?.id), [runs, project?.id]);
   const projectCases = useMemo(() => cases.filter((entry) => entry.projectId === project?.id), [cases, project?.id]);
   const projectVersions = useMemo(() => versions.filter((entry) => entry.projectId === project?.id), [versions, project?.id]);
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setChoice] = useState<string | null>(() => selectedObjects.get(projectKey) ?? null);
+  const setRunId = (id: string) => { selectedObjects.set(projectKey, id); setChoice(id); };
   const [name, setName] = useState("");
   const [runType, setRunType] = useState("全量回归");
   const [environment, setEnvironment] = useState("测试环境");
@@ -64,7 +90,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
   const goToItem = useGoToItem();
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
-  const activeRun = projectRuns.find((run) => run.id === (runId ?? projectRuns[0]?.id)) ?? null;
+  const activeRun = projectRuns.find((run) => run.id === (runId ?? projectRuns.find((run) => run.status === "RUNNING")?.id ?? projectRuns[0]?.id)) ?? null;
   const rows = executions.filter((execution) => execution.runId === activeRun?.id);
   const version = versions.find((entry) => entry.id === activeRun?.versionId);
   const source = runs.find((entry) => entry.id === activeRun?.sourceRunId);
@@ -93,82 +119,16 @@ export function TestsView({ projectKey }: { projectKey: string }) {
   };
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="测试" hint="创建运行，开始后记通过、失败、阻塞或跳过。失败和阻塞可以建缺陷。全部记完才能完成，完成后可以对失败项做定向复测。" />
+    <div ref={panelRoot} className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+      <PageHeading title="测试" hint="先执行当前运行。新建运行和管理用例可按需展开。" />
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">切换运行 · {projectRuns.length} 次</summary>
+<div className="flex flex-col gap-3 p-3">
       <div className="grid grid-cols-3 gap-3">
         <Stat label="运行" value={projectRuns.length} />
         <Stat label="执行中" value={runningCount} />
         <Stat label="待建缺陷" value={defectGap} />
       </div>
-      <form
-        className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const caseIds = runType === "全量回归" ? activeCases.map((entry) => entry.id) : picked;
-          const result = usePm.getState().createRun({
-            projectId: project.id,
-            name,
-            runType,
-            environment,
-            versionId: versionId || null,
-            caseIds,
-          });
-          if (!result.ok) {
-            setError(result.message);
-            return;
-          }
-          setError("");
-          setName("");
-          setPicked([]);
-          setRunId(result.id);
-          setCancelling(false);
-        }}
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <TextField value={name} onChange={setName}>
-            <Label>运行名称</Label>
-            <Input placeholder="例如 1.8.0 回归" />
-          </TextField>
-          <LabeledField label="类型">
-            <OptionSelect label="运行类型" value={runType} options={CREATE_TYPES.map((id) => ({ id, label: id, hint: id === "全量回归" ? "只纳入生效用例" : "自己勾选用例" }))} onChange={setRunType} />
-          </LabeledField>
-          <LabeledField label="环境">
-            <OptionSelect label="环境" value={environment} options={ENVIRONMENTS.map((id) => ({ id, label: id }))} onChange={setEnvironment} />
-          </LabeledField>
-          <LabeledField label="版本">
-            <VersionSelect versions={projectVersions} value={versionId} onChange={setVersionId} emptyLabel="不指定版本" />
-          </LabeledField>
-        </div>
-        {runType === "全量回归" ? <p className="type-meta">将纳入 {activeCases.length} 条生效用例。</p> : null}
-        {runType === "临时抽测" ? (
-          <div className="flex flex-col gap-2">
-            <div className="type-label">用例 · 已选 {picked.length}</div>
-            <div className="flex flex-wrap gap-1">
-              {pickable.map((testCase) => {
-                const on = picked.includes(testCase.id);
-                return (
-                  <button
-                    key={testCase.id}
-                    type="button"
-                    aria-pressed={on}
-                    className={cn("rounded-sm px-2 py-1", on ? "type-emphasis bg-line text-primary" : "type-caption border border-border")}
-                    onClick={() => setPicked((current) => (current.includes(testCase.id) ? current.filter((id) => id !== testCase.id) : [...current, testCase.id]))}
-                  >
-                    {testCase.key}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-        {error ? <p className="type-body text-danger">{error}</p> : null}
-        <div>
-          <Button type="submit" variant="primary">
-            创建运行
-          </Button>
-        </div>
-      </form>
-      <h2 className="type-section">运行</h2>
       {projectRuns.length === 0 ? <EmptyHint>这个项目还没有测试运行。</EmptyHint> : null}
       <div className="overflow-hidden rounded-sm border border-border bg-surface">
         {projectRuns.map((run) => {
@@ -179,6 +139,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
           return (
             <button
               key={run.id}
+              aria-pressed={selected}
               type="button"
               className={cn("flex w-full flex-col gap-1 border-b border-border px-3 py-3 text-left last:border-b-0", selected && "bg-line")}
               onClick={() => {
@@ -199,8 +160,13 @@ export function TestsView({ projectKey }: { projectKey: string }) {
           );
         })}
       </div>
+
+</div>
+</details>
+      {!activeRun ? <EmptyHint>还没有测试运行，可展开新建运行开始。</EmptyHint> : null}
       {activeRun ? (
         <>
+          <div className="flex flex-wrap items-center gap-2"><h2 className="type-section">当前运行 · {activeRun.name}</h2><StateChip tone={runTone(activeRun.status)}>{TEST_RUN_STATUS_LABEL[activeRun.status]}</StateChip></div>
           <div className="flex flex-col gap-2">
             <p className="type-meta">
               {activeRun.runType} · {activeRun.environment}
@@ -269,12 +235,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
               </form>
             ) : null}
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Stat label="通过" value={count("PASSED")} />
-            <Stat label="失败" value={count("FAILED")} />
-            <Stat label="阻塞" value={count("BLOCKED")} />
-            <Stat label="未测" value={count(null)} />
-          </div>
+          <p className="type-caption">通过 {count("PASSED")} · 失败 {count("FAILED")} · 阻塞 {count("BLOCKED")} · 未测 {count(null)}</p>
           <div className="overflow-hidden rounded-sm border border-border bg-surface">
             {rows.map((execution) => {
               const testCase = cases.find((entry) => entry.id === execution.caseId);
@@ -343,6 +304,9 @@ export function TestsView({ projectKey }: { projectKey: string }) {
               );
             })}
           </div>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">运行报告 · 通过率 {rate}%</summary>
+<div className="flex flex-col gap-3 p-3">
           <section className="rounded-sm border border-border bg-surface p-4">
             <h2 className="type-section">运行报告</h2>
             <p className="type-meta mt-1">
@@ -374,8 +338,89 @@ export function TestsView({ projectKey }: { projectKey: string }) {
               </div>
             ) : null}
           </section>
+
+</div>
+</details>
         </>
       ) : null}
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">新建运行</summary>
+<div className="flex flex-col gap-3 p-3">
+      <form
+        className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const caseIds = runType === "全量回归" ? activeCases.map((entry) => entry.id) : picked;
+          const result = usePm.getState().createRun({
+            projectId: project.id,
+            name,
+            runType,
+            environment,
+            versionId: versionId || null,
+            caseIds,
+          });
+          if (!result.ok) {
+            setError(result.message);
+            return;
+          }
+          setError("");
+          setName("");
+          setPicked([]);
+          setRunId(result.id);
+          setCancelling(false);
+        }}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <TextField value={name} onChange={setName}>
+            <Label>运行名称</Label>
+            <Input placeholder="例如 1.8.0 回归" />
+          </TextField>
+          <LabeledField label="类型">
+            <OptionSelect label="运行类型" value={runType} options={CREATE_TYPES.map((id) => ({ id, label: id, hint: id === "全量回归" ? "只纳入生效用例" : "自己勾选用例" }))} onChange={setRunType} />
+          </LabeledField>
+          <LabeledField label="环境">
+            <OptionSelect label="环境" value={environment} options={ENVIRONMENTS.map((id) => ({ id, label: id }))} onChange={setEnvironment} />
+          </LabeledField>
+          <LabeledField label="版本">
+            <VersionSelect versions={projectVersions} value={versionId} onChange={setVersionId} emptyLabel="不指定版本" />
+          </LabeledField>
+        </div>
+        {runType === "全量回归" ? <p className="type-meta">将纳入 {activeCases.length} 条生效用例。</p> : null}
+        {runType === "临时抽测" ? (
+          <div className="flex flex-col gap-2">
+            <div className="type-label">用例 · 已选 {picked.length}</div>
+            <div className="flex flex-wrap gap-1">
+              {pickable.map((testCase) => {
+                const on = picked.includes(testCase.id);
+                return (
+                  <button
+                    key={testCase.id}
+                    type="button"
+                    aria-pressed={on}
+                    className={cn("rounded-sm px-2 py-1", on ? "type-emphasis bg-line text-primary" : "type-caption border border-border")}
+                    onClick={() => setPicked((current) => (current.includes(testCase.id) ? current.filter((id) => id !== testCase.id) : [...current, testCase.id]))}
+                  >
+                    {testCase.key}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        {error ? <p className="type-body text-danger">{error}</p> : null}
+        <div>
+          <Button type="submit" variant="primary">
+            创建运行
+          </Button>
+        </div>
+      <button type="button" className="type-body min-h-10 self-start rounded-sm border border-border px-3 py-2" onClick={(event) => { const panel = event.currentTarget.closest("details"); panel?.removeAttribute("open"); panel?.querySelector("summary")?.focus(); }}>收起（保留草稿）</button>
+</form>
+
+</div>
+</details>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">用例库与套件 · {projectCases.length} 条用例</summary>
+<div className="flex flex-col gap-3 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="type-section">用例库</h2>
         <Button variant="outline" onPress={() => setShowArchived((value) => !value)}>{showArchived ? "隐藏已归档" : "显示已归档"}</Button>
@@ -448,6 +493,9 @@ export function TestsView({ projectKey }: { projectKey: string }) {
           ))}
         </section>
       ) : null}
+
+</div>
+</details>
       {detailId ? <CaseDetail key={detailId} caseId={detailId} onClose={() => setDetailId(null)} onOpen={setDetailId} /> : null}
     </div>
   );

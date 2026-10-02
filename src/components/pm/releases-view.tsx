@@ -1,13 +1,38 @@
 import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DayField, EmptyHint, OptionSelect, PageHeading, StateChip, VersionCard } from "@/components/biz";
 import { columnOf, RELEASE_STATUS_LABEL, type TestExecution, type TestRun, type WorkItem } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 import { useGoToItem } from "@/components/pm/use-go-item";
 
+// View-only memory keeps the selected source visible when returning from an item.
+// It lasts for this SPA session and never enters PM persistence.
+const selectedObjects = new Map<string, string>();
+
+const expandedPanels = new Map<string, Set<string>>();
+
 export function ReleasesView({ projectKey }: { projectKey: string }) {
+  const panelRoot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = panelRoot.current;
+    const remember = (event: Event) => {
+      const panel = event.target;
+      if (!(panel instanceof HTMLDetailsElement)) return;
+      const label = panel.querySelector("summary")?.textContent?.split(" · ")[0].trim() ?? "";
+      const expanded = expandedPanels.get(projectKey) ?? new Set<string>();
+      if (panel.open) expanded.add(label); else expanded.delete(label);
+      expandedPanels.set(projectKey, expanded);
+    };
+    const expanded = expandedPanels.get(projectKey);
+    for (const panel of root?.querySelectorAll("details") ?? []) {
+      const label = panel.querySelector("summary")?.textContent?.split(" · ")[0].trim() ?? "";
+      panel.open = expanded?.has(label) ?? false;
+    }
+    root?.addEventListener("toggle", remember, true);
+    return () => root?.removeEventListener("toggle", remember, true);
+  }, [projectKey]);
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const allVersions = usePm((state) => state.versions);
   const allItems = usePm((state) => state.items);
@@ -19,8 +44,12 @@ export function ReleasesView({ projectKey }: { projectKey: string }) {
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="版本" hint="版本可以开始开发、测试、冻结或退回。发布单先提交，通过后再看门禁；不通过必须填写豁免原因。发布后快照不再变化。" />
+    <div ref={panelRoot} className="mx-auto flex max-w-4xl flex-col gap-4 p-4 md:p-6">
+      <PageHeading title="版本" hint="先查看当前发布单的门禁、审批与发布动作。版本管理可按需展开。" />
+      <ReleaseDesk projectId={project.id} />
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">版本管理 · {versions.length} 个版本</summary>
+<div className="flex flex-col gap-3 p-3">
       {versions.map((version) => (
         <VersionCard
           key={version.id}
@@ -36,7 +65,9 @@ export function ReleasesView({ projectKey }: { projectKey: string }) {
         />
       ))}
       <NewVersion projectId={project.id} />
-      <ReleaseDesk projectId={project.id} />
+
+</div>
+</details>
     </div>
   );
 }
@@ -47,6 +78,9 @@ function NewVersion({ projectId }: { projectId: string }) {
   const [plannedReleaseDate, setPlannedReleaseDate] = useState("2026-11-14");
   const [description, setDescription] = useState("");
   return (
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">新建版本</summary>
+<div className="flex flex-col gap-3 p-3">
     <form
       className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4"
       onSubmit={(event) => {
@@ -61,7 +95,6 @@ function NewVersion({ projectId }: { projectId: string }) {
         }
       }}
     >
-      <h2 className="type-section">新建版本</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextField value={versionNumber} onChange={setVersionNumber}>
           <Label>版本号</Label>
@@ -82,7 +115,11 @@ function NewVersion({ projectId }: { projectId: string }) {
           添加版本
         </Button>
       </div>
-    </form>
+    <button type="button" className="type-body min-h-10 self-start rounded-sm border border-border px-3 py-2" onClick={(event) => { const panel = event.currentTarget.closest("details"); panel?.removeAttribute("open"); panel?.querySelector("summary")?.focus(); }}>收起（保留草稿）</button>
+</form>
+</div>
+</details>
+
   );
 }
 
@@ -129,10 +166,11 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
   const [title, setTitle] = useState("");
   const [environmentId, setEnvironmentId] = useState(environments[0]?.id ?? "");
   const [releaseVersionId, setReleaseVersionId] = useState(versions[0]?.id ?? "");
-  const [releaseId, setReleaseId] = useState(releases[0]?.id ?? "");
+  const [releaseId, setChoice] = useState(() => selectedObjects.get(projectId) ?? "");
+  const setReleaseId = (id: string) => { selectedObjects.set(projectId, id); setChoice(id); };
   const [note, setNote] = useState("");
   const [waiver, setWaiver] = useState("");
-  const selected = releases.find((entry) => entry.id === releaseId) ?? releases[0] ?? null;
+  const selected = releases.find((entry) => entry.id === releaseId) ?? releases.find((entry) => entry.status === "SUBMITTED" || entry.status === "APPROVED") ?? releases[0] ?? null;
   const scoped = items.filter((item) => item.versionId === versionId);
   const outside = items.filter((item) => item.versionId !== versionId);
   const versionOptions = versions.map((version) => ({ id: version.id, label: `${version.versionNumber} ${version.name}` }));
@@ -140,6 +178,88 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
 
   return (
     <>
+        {selected ? (
+          <ReleaseDetail
+            release={selected}
+            gate={versionReadiness(selected.versionId, items, cases, runs, allExecutions)}
+            note={note}
+            waiver={waiver}
+            onNote={setNote}
+            onWaiver={setWaiver}
+          />
+        ) : null}
+
+      {releases.length === 0 ? <EmptyHint>还没有发布单，可展开新建发布单生成草稿。</EmptyHint> : null}
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">切换发布单 · {releases.length} 张</summary>
+<div className="flex flex-col gap-3 p-3">
+      <section className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
+        {releases.map((release) => {
+          const version = versions.find((entry) => entry.id === release.versionId);
+          const environment = environments.find((entry) => entry.id === release.environmentId);
+          return (
+            <button
+              key={release.id}
+              aria-pressed={release.id === selected?.id}
+              type="button"
+              className={`flex w-full flex-col gap-1 border-b border-border px-2 py-3 text-left last:border-b-0 ${release.id === selected?.id ? "bg-line" : ""}`}
+              onClick={() => { setReleaseId(release.id); setNote(""); setWaiver(""); }}
+            >
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="type-emphasis">{release.title}</span>
+                <StateChip tone={release.status === "PUBLISHED" ? "done" : release.status === "APPROVED" ? "progress" : release.status === "SUBMITTED" ? "review" : "neutral"}>{RELEASE_STATUS_LABEL[release.status]}</StateChip>
+              </span>
+              <span className="type-caption">{version?.versionNumber ?? "未选版本"} · {environment?.name ?? "未选环境"}</span>
+              <span className="type-body whitespace-pre-wrap">{release.summary}</span>
+            </button>
+          );
+        })}
+</section>
+
+</div>
+</details>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">新建发布单</summary>
+<div className="flex flex-col gap-3 p-3">
+        <TextField value={title} onChange={setTitle}>
+          <Label>标题</Label>
+          <Input placeholder="1.7.0 发布草稿" />
+        </TextField>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <OptionSelect label="版本" value={releaseVersionId} options={versionOptions} onChange={setReleaseVersionId} />
+          <OptionSelect label="环境" value={environmentId} options={[{ id: "", label: "不指定" }, ...environments.map((environment) => ({ id: environment.id, label: environment.name }))]} onChange={setEnvironmentId} />
+        </div>
+        <div>
+          <Button
+            variant="primary"
+            onPress={() => {
+              const done = items.filter((item) => item.versionId === releaseVersionId && columnOf(item.kind, item.status) === "done");
+              const summary = done.map((item) => `${item.key} ${item.title}`).join("\n");
+              const result = usePm.getState().createRelease({
+                projectId,
+                versionId: releaseVersionId,
+                environmentId: environmentId || null,
+                title,
+                summary: summary || "范围内还没有已完成事项。",
+              });
+              if (!result.ok) toast.error(result.message);
+              else {
+                setTitle("");
+                setReleaseId(result.id);
+                notifyPmChange("已创建发布草稿");
+              }
+            }}
+          >
+            从范围生成草稿
+          </Button>
+        </div>
+
+<button type="button" className="type-body min-h-10 self-start rounded-sm border border-border px-3 py-2" onClick={(event) => { const panel = event.currentTarget.closest("details"); panel?.removeAttribute("open"); panel?.querySelector("summary")?.focus(); }}>收起（保留草稿）</button>
+</div>
+</details>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">版本范围 · {ready.scope} 项</summary>
+<div className="flex flex-col gap-3 p-3">
       <section className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
         <h2 className="type-section">版本范围</h2>
         <p className="type-meta">冻结、已发布或已废弃的版本不能加减事项。</p>
@@ -176,6 +296,12 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
           </Button>
         </div>
       </section>
+
+</div>
+</details>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">发布环境 · {environments.length} 个</summary>
+<div className="flex flex-col gap-3 p-3">
       <section className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
         <h2 className="type-section">发布环境</h2>
         {environments.map((environment) => (
@@ -207,70 +333,10 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
           </Button>
         </div>
       </section>
-      <section className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
-        <h2 className="type-section">发布单</h2>
-        {releases.map((release) => {
-          const version = versions.find((entry) => entry.id === release.versionId);
-          const environment = environments.find((entry) => entry.id === release.environmentId);
-          return (
-            <button
-              key={release.id}
-              type="button"
-              className={`flex w-full flex-col gap-1 border-b border-border px-2 py-3 text-left last:border-b-0 ${release.id === selected?.id ? "bg-line" : ""}`}
-              onClick={() => { setReleaseId(release.id); setNote(""); setWaiver(""); }}
-            >
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="type-emphasis">{release.title}</span>
-                <StateChip tone={release.status === "PUBLISHED" ? "done" : release.status === "APPROVED" ? "progress" : release.status === "SUBMITTED" ? "review" : "neutral"}>{RELEASE_STATUS_LABEL[release.status]}</StateChip>
-              </span>
-              <span className="type-caption">{version?.versionNumber ?? "未选版本"} · {environment?.name ?? "未选环境"}</span>
-              <span className="type-body whitespace-pre-wrap">{release.summary}</span>
-            </button>
-          );
-        })}
-        <TextField value={title} onChange={setTitle}>
-          <Label>标题</Label>
-          <Input placeholder="1.7.0 发布草稿" />
-        </TextField>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <OptionSelect label="版本" value={releaseVersionId} options={versionOptions} onChange={setReleaseVersionId} />
-          <OptionSelect label="环境" value={environmentId} options={[{ id: "", label: "不指定" }, ...environments.map((environment) => ({ id: environment.id, label: environment.name }))]} onChange={setEnvironmentId} />
-        </div>
-        <div>
-          <Button
-            variant="primary"
-            onPress={() => {
-              const done = items.filter((item) => item.versionId === releaseVersionId && columnOf(item.kind, item.status) === "done");
-              const summary = done.map((item) => `${item.key} ${item.title}`).join("\n");
-              const result = usePm.getState().createRelease({
-                projectId,
-                versionId: releaseVersionId,
-                environmentId: environmentId || null,
-                title,
-                summary: summary || "范围内还没有已完成事项。",
-              });
-              if (!result.ok) toast.error(result.message);
-              else {
-                setTitle("");
-                setReleaseId(result.id);
-                notifyPmChange("已创建发布草稿");
-              }
-            }}
-          >
-            从范围生成草稿
-          </Button>
-        </div>
-        {selected ? (
-          <ReleaseDetail
-            release={selected}
-            gate={versionReadiness(selected.versionId, items, cases, runs, allExecutions)}
-            note={note}
-            waiver={waiver}
-            onNote={setNote}
-            onWaiver={setWaiver}
-          />
-        ) : null}
-      </section>
+
+<button type="button" className="type-body min-h-10 self-start rounded-sm border border-border px-3 py-2" onClick={(event) => { const panel = event.currentTarget.closest("details"); panel?.removeAttribute("open"); panel?.querySelector("summary")?.focus(); }}>收起（保留草稿）</button>
+</div>
+</details>
     </>
   );
 }
@@ -313,7 +379,8 @@ function ReleaseDetail({
   return (
     <div className="flex flex-col gap-3 rounded-sm border border-border bg-bg p-3">
       <div>
-        <h3 className="type-section">{release.title}</h3>
+        <h3 className="type-section">当前发布单 · {release.title}</h3>
+        <StateChip tone={release.status === "PUBLISHED" ? "done" : release.status === "APPROVED" ? "progress" : release.status === "SUBMITTED" ? "review" : "neutral"}>{RELEASE_STATUS_LABEL[release.status]}</StateChip>
         <p className="type-caption mt-1">{published ? "以下是发布当时的快照，之后改范围或测试结果不会改这里。" : "门禁看当前范围。发布后会冻住当时的事项和失败结果。"}</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -327,6 +394,9 @@ function ReleaseDetail({
       </div>
       {release.decisionNote ? <p className="type-body">审批意见：{release.decisionNote}</p> : null}
       {published?.waiver ? <p className="type-body">豁免：{published.waiver}</p> : null}
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">范围与失败明细 · {items.length} 项 · {failures.length} 条失败或阻塞</summary>
+<div className="flex flex-col gap-3 p-3">
       {items.length === 0 ? <p className="type-caption">范围内还没有事项。</p> : null}
       {items.map((item) => (
         <p key={item.id} className="type-body">
@@ -342,6 +412,9 @@ function ReleaseDetail({
           ))}
         </div>
       ) : null}
+
+</div>
+</details>
       {release.status === "DRAFT" ? (
         <div>
           <Button variant="primary" onPress={() => act(usePm.getState().submitRelease(release.id), "已提交审批")}>提交审批</Button>

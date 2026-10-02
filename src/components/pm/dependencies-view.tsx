@@ -47,13 +47,77 @@ export function DependenciesView({ projectKey }: { projectKey: string }) {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="依赖" hint="只加在任务上。有效的完成-开始会挡住后置任务的开始和继续；前置已完成或已取消则放行。作废后不再拦截，也不再计入环和时间冲突。" />
+      <PageHeading title="依赖" hint="先检查时间冲突和已有依赖。有效的完成-开始会阻止后置开始；前置已完成或已取消则放行。" />
       <div className="grid grid-cols-3 gap-3">
         <Stat label="有效" value={activeCount} />
         <Stat label="已作废" value={projectDeps.length - activeCount} />
         <Stat label="时间冲突" value={conflicts.length} />
       </div>
+      <section className="flex flex-col gap-2">
+        <h2 className="type-section">时间冲突</h2>
+        {conflicts.length === 0 ? <p className="type-caption">有效依赖和当前排期没有冲突。</p> : null}
+        {conflicts.map((conflict) => (
+          <p key={conflict.dependency.id} className="type-body">
+            {conflict.predecessor.key} 的{conflict.from === "end" ? "结束" : "开始"}
+            {conflict.dependency.lagDays > 0 ? `再延后 ${conflict.dependency.lagDays} 天` : ""}要到 {formatDay(conflict.ready)}，晚于 {conflict.successor.key} 的{conflict.to === "end" ? "结束" : "开始"} {formatDay(conflict.actual)}。
+          </p>
+        ))}
+      </section>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="w-44">
+          <OptionSelect label="筛选类型" value={typeFilter} options={[{ id: "", label: "全部类型" }, ...TYPE_OPTIONS]} onChange={setTypeFilter} />
+        </div>
+        <button
+          type="button"
+          className={cn("h-10 rounded-sm px-3", activeOnly ? "type-emphasis bg-line text-primary" : "type-body")}
+          aria-pressed={activeOnly}
+          onClick={() => setActiveOnly((value) => !value)}
+        >
+          只看有效
+        </button>
+      </div>
+      <div className="overflow-hidden rounded-sm border border-border bg-surface">
+        {visible.length === 0 ? <EmptyHint>没有符合条件的依赖。</EmptyHint> : null}
+        {visible.map((entry) => {
+          const predecessor = items.find((item) => item.id === entry.predecessorId);
+          const successor = items.find((item) => item.id === entry.successorId);
+          return (
+            <div key={entry.id} className={cn("flex flex-col gap-2 border-b border-border px-3 py-3 last:border-b-0 md:flex-row md:flex-wrap md:items-center", focusId === entry.id && "bg-line")}>
+              <TaskEnd item={predecessor} onOpen={goToItem} />
+              <span className="type-caption shrink-0">
+                {DEPENDENCY_TYPE_LABEL[entry.dependencyType]}
+                {entry.lagDays > 0 ? ` · 延迟 ${entry.lagDays} 天` : ""}
+              </span>
+              <TaskEnd item={successor} onOpen={goToItem} />
+              <span className="md:ml-auto flex shrink-0 items-center gap-2">
+                <StateChip tone={entry.status === "ACTIVE" ? "progress" : "neutral"}>{DEPENDENCY_STATUS_LABEL[entry.status]}</StateChip>
+                <button type="button" className="type-body min-h-10 rounded-sm px-3 py-2 hover:bg-line" aria-expanded={focusId === entry.id} aria-controls={`dependency-impact-${entry.id}`} onClick={() => setFocusId((current) => (current === entry.id ? null : entry.id))}>影响</button>
+                <StateAction
+                  tone={entry.status === "ACTIVE" ? "danger" : "progress"}
+                  onPress={() => {
+                    const result = usePm.getState().setDependencyStatus(entry.id, entry.status === "ACTIVE" ? "INACTIVE" : "ACTIVE");
+                    if (!result.ok) toast(result.message);
+                  }}
+                >
+                  {entry.status === "ACTIVE" ? "作废" : "启用"}
+                </StateAction>
+              </span>
+              {entry.memo ? <p className="type-caption w-full">{entry.memo}</p> : null}
+              {focusId === entry.id ? <div id={`dependency-impact-${entry.id}`} className="w-full"><Impact projectDeps={projectDeps} items={items} focusId={entry.id} onOpen={goToItem} /></div> : null}
+            </div>
+          );
+        })}
+      </div>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">依赖图 · {activeCount} 条有效依赖</summary>
+<div className="flex flex-col gap-3 p-3">
       <DependencyCanvas tasks={tasks} dependencies={projectDeps} onOpen={goToItem} />
+{activeCount === 0 ? <EmptyHint>没有有效依赖可显示。</EmptyHint> : null}
+</div>
+</details>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">新建依赖</summary>
+<div className="flex flex-col gap-3 p-3">
       <form
         className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4"
         onSubmit={(event) => {
@@ -106,64 +170,11 @@ export function DependenciesView({ projectKey }: { projectKey: string }) {
             添加依赖
           </Button>
         </div>
-      </form>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="w-44">
-          <OptionSelect label="筛选类型" value={typeFilter} options={[{ id: "", label: "全部类型" }, ...TYPE_OPTIONS]} onChange={setTypeFilter} />
-        </div>
-        <button
-          type="button"
-          className={cn("h-10 rounded-sm px-3", activeOnly ? "type-emphasis bg-line text-primary" : "type-body")}
-          aria-pressed={activeOnly}
-          onClick={() => setActiveOnly((value) => !value)}
-        >
-          只看有效
-        </button>
-      </div>
-      <div className="overflow-hidden rounded-sm border border-border bg-surface">
-        {visible.length === 0 ? <EmptyHint>没有符合条件的依赖。</EmptyHint> : null}
-        {visible.map((entry) => {
-          const predecessor = items.find((item) => item.id === entry.predecessorId);
-          const successor = items.find((item) => item.id === entry.successorId);
-          return (
-            <div key={entry.id} className={cn("flex flex-col gap-2 border-b border-border px-3 py-3 last:border-b-0 md:flex-row md:flex-wrap md:items-center", focusId === entry.id && "bg-line")}>
-              <TaskEnd item={predecessor} onOpen={goToItem} />
-              <span className="type-caption shrink-0">
-                {DEPENDENCY_TYPE_LABEL[entry.dependencyType]}
-                {entry.lagDays > 0 ? ` · 延迟 ${entry.lagDays} 天` : ""}
-              </span>
-              <TaskEnd item={successor} onOpen={goToItem} />
-              <span className="md:ml-auto flex shrink-0 items-center gap-2">
-                <StateChip tone={entry.status === "ACTIVE" ? "progress" : "neutral"}>{DEPENDENCY_STATUS_LABEL[entry.status]}</StateChip>
-                <StateAction tone="neutral" onPress={() => setFocusId((current) => (current === entry.id ? null : entry.id))}>
-                  影响
-                </StateAction>
-                <StateAction
-                  tone={entry.status === "ACTIVE" ? "danger" : "progress"}
-                  onPress={() => {
-                    const result = usePm.getState().setDependencyStatus(entry.id, entry.status === "ACTIVE" ? "INACTIVE" : "ACTIVE");
-                    if (!result.ok) toast(result.message);
-                  }}
-                >
-                  {entry.status === "ACTIVE" ? "作废" : "启用"}
-                </StateAction>
-              </span>
-              {entry.memo ? <p className="type-caption w-full">{entry.memo}</p> : null}
-            </div>
-          );
-        })}
-      </div>
-      {focusId ? <Impact projectDeps={projectDeps} items={items} focusId={focusId} onOpen={goToItem} /> : null}
-      <section className="flex flex-col gap-2">
-        <h2 className="type-section">时间冲突</h2>
-        {conflicts.length === 0 ? <p className="type-caption">有效依赖和当前排期没有冲突。</p> : null}
-        {conflicts.map((conflict) => (
-          <p key={conflict.dependency.id} className="type-body">
-            {conflict.predecessor.key} 的{conflict.from === "end" ? "结束" : "开始"}
-            {conflict.dependency.lagDays > 0 ? `再延后 ${conflict.dependency.lagDays} 天` : ""}要到 {formatDay(conflict.ready)}，晚于 {conflict.successor.key} 的{conflict.to === "end" ? "结束" : "开始"} {formatDay(conflict.actual)}。
-          </p>
-        ))}
-      </section>
+      <button type="button" className="type-body min-h-10 self-start rounded-sm border border-border px-3 py-2" onClick={(event) => { const panel = event.currentTarget.closest("details"); panel?.removeAttribute("open"); panel?.querySelector("summary")?.focus(); }}>收起（保留草稿）</button>
+</form>
+
+</div>
+</details>
     </div>
   );
 }

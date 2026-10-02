@@ -6,6 +6,9 @@ import { useGoToItem } from "@/components/pm/use-go-item";
 import { formatDay, WORK_LOG_STATUS_LABEL, workLogStatus, type WorkLog, type WorkLogStatus } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 
+// Keep the source partition on item return, scoped to the project and current user.
+const taskViews = new Map<string, "pending" | "mine" | "all">();
+
 export function WorklogView({ projectKey }: { projectKey: string }) {
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const logs = usePm((state) => state.workLogs);
@@ -27,6 +30,10 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
   const [editHours, setEditHours] = useState("1");
   const [editDate, setEditDate] = useState("");
   const [editNote, setEditNote] = useState("");
+  const viewKey = `${projectKey}:${currentUserId}`;
+  const [choice, setChoice] = useState<{ key: string; view: "pending" | "mine" | "all" } | null>(null);
+  const view = choice?.key === viewKey ? choice.view : taskViews.get(viewKey) ?? (project?.leadId === currentUserId ? "pending" : "mine");
+  const setView = (next: "pending" | "mine" | "all") => { taskViews.set(viewKey, next); setChoice({ key: viewKey, view: next }); };
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
   const counted = rows.filter((entry) => workLogStatus(entry) !== "REJECTED");
@@ -47,6 +54,8 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
     hours: counted.filter((entry) => entry.workDate === date).reduce((sum, entry) => sum + entry.hours, 0),
   }));
   const peak = Math.max(1, ...byPerson.map((entry) => entry.hours), ...byTask.map((entry) => entry.hours), ...byDate.map((entry) => entry.hours));
+  const myRows = rows.filter((entry) => entry.userId === currentUserId);
+  const visibleRows = view === "pending" ? pending : view === "mine" ? myRows : rows;
   const me = people.find((person) => person.id === currentUserId);
 
   return (
@@ -58,75 +67,20 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
           导出
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-sm border border-border bg-surface px-4 py-3">
-          <div className="type-caption">合计</div>
-          <div className="type-section mt-1">{trimHours(total)} 小时</div>
-        </div>
-        <div className="rounded-sm border border-border bg-surface px-4 py-3">
-          <div className="type-caption">记录</div>
-          <div className="type-section mt-1">{rows.length} 条</div>
-        </div>
+      <div aria-label="工时任务" className="flex flex-wrap gap-2">
+        {([{ id: "pending", label: "待审批", count: pending.length }, { id: "mine", label: "我的登记", count: myRows.length }, { id: "all", label: "全部记录", count: rows.length }] as const).map((entry) => <button key={entry.id} type="button" aria-pressed={view === entry.id} className={`type-body min-h-10 rounded-sm border border-border px-3 py-2 ${view === entry.id ? "bg-line text-primary" : ""}`} onClick={() => setView(entry.id)}>{entry.label} {entry.count}</button>)}
       </div>
-      {byPerson.length > 0 ? <Summary title="按人" rows={byPerson} peak={peak} /> : null}
-      {byTask.length > 0 ? <Summary title="按任务" rows={byTask} peak={peak} /> : null}
-      {byDate.length > 0 ? <Summary title="按日期" rows={byDate} peak={peak} /> : null}
-      <form
-        className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const amount = Number(hours);
-          if (!itemId) {
-            setError("先选择事项");
-            return;
-          }
-          if (!Number.isFinite(amount) || amount <= 0 || amount > 24) {
-            setError("工时要在 0 到 24 小时之间");
-            return;
-          }
-          usePm.getState().addWorkLog({ projectId: project.id, itemId, hours: amount, workDate, note });
-          setNote("");
-          setHours("1");
-          setError("");
-        }}
-      >
-        <div className="type-section">登记工时{me ? ` · ${me.name}` : ""}</div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <LabeledField label="事项">
-            <OptionSelect
-              label="事项"
-              value={itemId}
-              options={projectItems.map((item) => ({ id: item.id, label: `${item.key} ${item.title}`, icon: <IssueTypeIcon item={item} /> }))}
-              onChange={setItemId}
-            />
-          </LabeledField>
-          <DayField label="日期" value={workDate} onChange={setWorkDate} />
-          <TextField value={hours} onChange={setHours}>
-            <Label>小时</Label>
-            <Input type="number" min={0.5} max={24} step={0.5} />
-          </TextField>
-        </div>
-        <TextField value={note} onChange={setNote}>
-          <Label>说明</Label>
-          <TextArea placeholder="做了什么" />
-        </TextField>
-        {error ? <p className="type-body text-danger">{error}</p> : null}
-        <div>
-          <Button type="submit" variant="primary">
-            记一笔
-          </Button>
-        </div>
-      </form>
+      <h2 className="type-section">{view === "pending" ? "待审批" : view === "mine" ? "我的登记" : "全部记录"}</h2>
       <div className="overflow-hidden rounded-sm border border-border bg-surface">
-        {rows.length === 0 ? <EmptyHint>还没有工时记录。</EmptyHint> : null}
-        {rows.map((entry) => {
+        {visibleRows.length === 0 ? <EmptyHint>{view === "pending" ? "没有待审批工时。" : view === "mine" ? "你还没有登记工时。" : "还没有工时记录。"}</EmptyHint> : null}
+        {visibleRows.map((entry) => {
           const item = items.find((candidate) => candidate.id === entry.itemId);
           const person = people.find((candidate) => candidate.id === entry.userId);
           return (
-            <div key={entry.id} className="grid grid-cols-[72px_48px_minmax(0,1fr)] items-center gap-3 border-b border-border px-3 py-3 last:border-b-0 sm:grid-cols-[88px_72px_minmax(0,1fr)]">
+            <div key={entry.id} className="grid grid-cols-2 items-center gap-3 border-b border-border px-3 py-3 last:border-b-0 sm:grid-cols-[88px_72px_minmax(0,1fr)]">
               <span className="type-caption">{formatDay(entry.workDate)}</span>
               <span className="type-emphasis">{trimHours(entry.hours)}h</span>
-              <span className="flex min-w-0 items-center gap-2">
+              <span className="col-span-full flex min-w-0 flex-wrap items-center gap-2 sm:col-auto">
                 <PersonAvatar person={person} />
                 {item ? (
                   <button type="button" className="type-link shrink-0" onClick={() => goToItem(item.id)}>
@@ -188,6 +142,78 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
           );
         })}
       </div>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">登记工时</summary>
+<div className="flex flex-col gap-3 p-3">
+      <form
+        className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const amount = Number(hours);
+          if (!itemId) {
+            setError("先选择事项");
+            return;
+          }
+          if (!Number.isFinite(amount) || amount <= 0 || amount > 24) {
+            setError("工时要在 0 到 24 小时之间");
+            return;
+          }
+          usePm.getState().addWorkLog({ projectId: project.id, itemId, hours: amount, workDate, note });
+          setNote("");
+          setHours("1");
+          setError("");
+        }}
+      >
+        <div className="type-section">登记工时{me ? ` · ${me.name}` : ""}</div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <LabeledField label="事项">
+            <OptionSelect
+              label="事项"
+              value={itemId}
+              options={projectItems.map((item) => ({ id: item.id, label: `${item.key} ${item.title}`, icon: <IssueTypeIcon item={item} /> }))}
+              onChange={setItemId}
+            />
+          </LabeledField>
+          <DayField label="日期" value={workDate} onChange={setWorkDate} />
+          <TextField value={hours} onChange={setHours}>
+            <Label>小时</Label>
+            <Input type="number" min={0.5} max={24} step={0.5} />
+          </TextField>
+        </div>
+        <TextField value={note} onChange={setNote}>
+          <Label>说明</Label>
+          <TextArea placeholder="做了什么" />
+        </TextField>
+        {error ? <p className="type-body text-danger">{error}</p> : null}
+        <div>
+          <Button type="submit" variant="primary">
+            记一笔
+          </Button>
+        </div>
+      <button type="button" className="type-body min-h-10 self-start rounded-sm border border-border px-3 py-2" onClick={(event) => { const panel = event.currentTarget.closest("details"); panel?.removeAttribute("open"); panel?.querySelector("summary")?.focus(); }}>收起（保留草稿）</button>
+</form>
+
+</div>
+</details>
+<details className="rounded-sm border border-border bg-surface">
+<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">工时汇总与分析</summary>
+<div className="flex flex-col gap-3 p-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-sm border border-border bg-surface px-4 py-3">
+          <div className="type-caption">合计</div>
+          <div className="type-section mt-1">{trimHours(total)} 小时</div>
+        </div>
+        <div className="rounded-sm border border-border bg-surface px-4 py-3">
+          <div className="type-caption">记录</div>
+          <div className="type-section mt-1">{rows.length} 条</div>
+        </div>
+      </div>
+      {byPerson.length > 0 ? <Summary title="按人" rows={byPerson} peak={peak} /> : null}
+      {byTask.length > 0 ? <Summary title="按任务" rows={byTask} peak={peak} /> : null}
+      {byDate.length > 0 ? <Summary title="按日期" rows={byDate} peak={peak} /> : null}
+
+</div>
+</details>
     </div>
   );
 }
