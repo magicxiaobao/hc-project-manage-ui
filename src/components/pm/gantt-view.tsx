@@ -10,7 +10,8 @@ import { alignPlans, dependencyAnchor, type PlanRange } from "@/lib/pm/schedule"
 import { cn } from "@/lib/utils";
 import { usePm } from "@/lib/pm/store";
 
-const ROW = 64;
+// SVG coordinates scale with the full row container at either responsive height.
+const SVG_ROW = 64;
 
 function dayNumber(iso: string) {
   const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
@@ -89,8 +90,8 @@ function ProjectGanttView({ projectKey }: { projectKey: string }) {
       const from = rows[indexOf.get(entry.predecessorId) ?? 0];
       const to = rows[indexOf.get(entry.successorId) ?? 0];
       const anchor = dependencyAnchor(entry.dependencyType);
-      const y1 = (indexOf.get(entry.predecessorId) ?? 0) * ROW + ROW / 2;
-      const y2 = (indexOf.get(entry.successorId) ?? 0) * ROW + ROW / 2;
+      const y1 = (indexOf.get(entry.predecessorId) ?? 0) * SVG_ROW + SVG_ROW / 2;
+      const y2 = (indexOf.get(entry.successorId) ?? 0) * SVG_ROW + SVG_ROW / 2;
       return { id: entry.id, x1: edgeX(from, anchor.from, origin, span), y1, x2: edgeX(to, anchor.to, origin, span), y2, type: entry.dependencyType };
     });
   const conflicts = scheduleConflicts(
@@ -218,16 +219,16 @@ function ProjectGanttView({ projectKey }: { projectKey: string }) {
             const width = Math.max(((dayNumber(end) - dayNumber(start) + 1) / span) * 100, 2);
             const progress = Math.min(Math.max(item.progress, 0), 100);
             return (
-              <div key={item.id} className="grid h-16 grid-cols-[148px_minmax(0,1fr)] border-b border-border last:border-b-0 sm:grid-cols-[240px_minmax(0,1fr)]">
+              <div key={item.id} className="grid h-24 grid-cols-[148px_minmax(0,1fr)] border-b border-border last:border-b-0 sm:h-16 sm:grid-cols-[240px_minmax(0,1fr)]">
                 <div className="flex min-w-0 flex-col justify-center">
-                <button type="button" className="flex min-w-0 items-center gap-2 pr-3 text-left hover:bg-line" style={{ paddingLeft: 12 + depth * 16 }} onClick={() => goToItem(item.id)}>
+                <button type="button" className="flex h-11 min-w-0 shrink-0 items-center gap-2 pr-3 text-left hover:bg-line sm:h-auto" style={{ paddingLeft: 12 + depth * 16 }} onClick={() => goToItem(item.id)}>
                   <IssueTypeIcon item={item} />
                   <span className="min-w-0">
                     <span className={header ? "type-emphasis block" : "type-link block"}>{item.key}</span>
                     <span className="type-caption block truncate">{item.title}</span>
                   </span>
                 </button>
-                {header ? null : <button type="button" data-focus-key={`plan-${item.id}`} aria-label={`编辑 ${item.key} 计划日期，${start} 至 ${end}，进度 ${progress}%`} className="type-caption min-h-6 truncate rounded-sm px-3 text-left text-primary hover:bg-line focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setEditingId(item.id)}>{start.slice(5)} — {end.slice(5)} · {progress}%</button>}
+                {header ? null : <button type="button" data-focus-key={`plan-${item.id}`} aria-label={`编辑 ${item.key} 计划日期，${start} 至 ${end}，进度 ${progress}%`} className="type-caption h-11 min-h-6 shrink-0 truncate rounded-sm px-3 text-left text-primary hover:bg-line focus-visible:outline-2 focus-visible:outline-primary sm:h-6" onClick={() => setEditingId(item.id)}>{start.slice(5)} — {end.slice(5)} · {progress}%</button>}
                 </div>
                 <span className="relative mr-3" data-gantt-id={item.id}>
                   {showToday ? <span className="absolute inset-y-0 w-px bg-danger" style={{ left: `${((today - origin) / span) * 100}%` }} /> : null}
@@ -269,7 +270,7 @@ function ProjectGanttView({ projectKey }: { projectKey: string }) {
             );
           })}
           {lines.length > 0 ? (
-            <svg className="pointer-events-none absolute top-0 right-3 bottom-0 left-[148px] sm:left-[240px]" viewBox={`0 0 100 ${rows.length * ROW}`} preserveAspectRatio="none">
+            <svg className="pointer-events-none absolute top-0 right-3 bottom-0 left-[148px] h-full w-[calc(100%_-_160px)] sm:left-[240px] sm:w-[calc(100%_-_252px)]" viewBox={`0 0 100 ${rows.length * SVG_ROW}`} preserveAspectRatio="none">
               {lines.map((line) => (
                 <path
                   key={line.id}
