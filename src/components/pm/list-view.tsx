@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyHint, ListFilterBar, PageHeading, PersonSelect } from "@/components/biz";
 import { rememberBrowse, useGoToItem } from "@/components/pm/use-go-item";
-import { columnOf, needsReason, nextStatuses, statusLabel, type WorkItem } from "@/lib/pm/domain";
+import { columnOf, kindLabel, needsReason, nextStatuses, statusLabel, type WorkItem } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
+import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 type SortKey = "key" | "title" | "priority" | "status" | "points" | "updated";
 
@@ -21,6 +22,9 @@ export function ListView({ projectKey }: { projectKey: string }) {
   const navigate = useNavigate();
   const router = useRouter();
   const [query, setQuery] = useState(search.query ?? "");
+  const [edited, setEdited] = useState<{ id: string; accepted: boolean } | null>(null);
+  const ready = usePm((state) => state.ready);
+  const persistenceError = usePm((state) => state.persistenceError);
   useEffect(() => {
     // Do not overwrite immediate typing with an older committed route match.
     if ((search.query ?? "") === (router.state.location.search.query ?? "")) {
@@ -63,6 +67,11 @@ export function ListView({ projectKey }: { projectKey: string }) {
   }, [rows]);
 
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
+  const hasProjectItems = items.some((item) => item.projectId === project.id);
+  const showEdit = (id: string, result: { ok: true } | { ok: false; message: string }) => {
+    setEdited({ id, accepted: result.ok });
+    if (!result.ok) toast(result.message);
+  };
   const members = people.filter((person) => project.memberIds.includes(person.id));
   const sort = (key: SortKey) => {
     if (sortKey === key) setFilter({ ascending: !ascending });
@@ -119,7 +128,10 @@ export function ListView({ projectKey }: { projectKey: string }) {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={8}>
-                  <EmptyHint>没有符合筛选的事项</EmptyHint>
+                  <EmptyHint>{hasProjectItems ? "没有符合筛选的事项。" : "这个项目还没有事项。"}</EmptyHint>
+                  <div className="flex justify-center pb-4">
+                    {hasProjectItems ? <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => { setQuery(""); setFilter({ query: undefined, kind: "all", mine: false, hideDone: false }); }}>清空筛选，查看全部事项</button> : <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => usePm.getState().setCreateOpen(true)}>创建工作项</button>}
+                  </div>
                 </td>
               </tr>
             ) : null}
@@ -140,6 +152,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                     >
                       {item.key}
                     </button>
+                    <span className="type-caption block">{kindLabel(item)}</span>
                   </td>
                   <td className="max-w-64 px-3 py-2">
                     <button
@@ -151,6 +164,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                     >
                       {item.title}
                     </button>
+                    {edited?.id === item.id ? <div className="mt-2"><PersistenceStatus ready={ready} error={persistenceError} saved={edited.accepted} automatic onRetry={() => usePm.getState().retryPersistence()} /></div> : null}
                   </td>
                   <td className="type-caption px-3 py-2">
                     {item.priority === "HIGH" ? "高" : item.priority === "LOW" ? "低" : "中"}
@@ -169,7 +183,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                           return;
                         }
                         const result = usePm.getState().transition(item.id, to);
-                        if (!result.ok) toast(result.message);
+                        showEdit(item.id, result);
                       }}
                     >
                       {choices.map((status) => (
@@ -184,9 +198,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                       showRole={false}
                       people={members}
                       value={item.assigneeId ?? ""}
-                      onChange={(assigneeId) =>
-                        usePm.getState().updateItem(item.id, { assigneeId: assigneeId || null })
-                      }
+                      onChange={(assigneeId) => showEdit(item.id, usePm.getState().updateItem(item.id, { assigneeId: assigneeId || null }))}
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -199,11 +211,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                         min={0}
                         value={item.storyPoints ?? 0}
                         className="type-caption h-8 w-16 rounded-sm border border-border bg-surface px-1"
-                        onChange={(event) =>
-                          usePm
-                            .getState()
-                            .updateItem(item.id, { storyPoints: Number(event.target.value) })
-                        }
+                        onChange={(event) => showEdit(item.id, usePm.getState().updateItem(item.id, { storyPoints: Number(event.target.value) }))}
                       />
                     )}
                   </td>

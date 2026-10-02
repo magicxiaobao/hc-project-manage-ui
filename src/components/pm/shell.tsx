@@ -16,6 +16,7 @@ import {
 import { ContentSkeleton } from "@/components/biz/skeleton";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { bindPmPersistence, usePm } from "@/lib/pm/store";
+import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -121,17 +122,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         {persistenceError ? (
           <section
-            role="alert"
             className="shrink-0 border-b border-danger bg-danger-soft px-4 py-3"
           >
-            <p className="type-body">{persistenceError}</p>
-            <button
-              type="button"
-              className="type-emphasis mt-2 rounded-sm border border-danger px-3 py-1"
-              onClick={() => usePm.getState().retryPersistence()}
-            >
-              重试保存
-            </button>
+            <PersistenceStatus ready={ready} error={persistenceError} onRetry={() => usePm.getState().retryPersistence()} />
           </section>
         ) : null}
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 lg:hidden">

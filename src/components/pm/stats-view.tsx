@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { EmptyHint, PageHeading, SprintStateChip, StatusChip, VersionStatusChip } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
@@ -202,6 +203,30 @@ export function StatsView({ projectKey }: { projectKey: string }) {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
       <PageHeading title="统计" hint="按类型、需求状态、负责人和迭代看这个项目。取消的需求不计入完成率。" />
+      <nav aria-label="统计行动入口" className="type-link flex flex-wrap gap-x-4 gap-y-2">
+        <Link to="/p/$projectKey/issues" params={{ projectKey }} search={{ query: undefined, kind: "all", mine: false, hideDone: true }}>查看未完成事项</Link>
+        <Link to="/p/$projectKey/issues" params={{ projectKey }} search={{ query: undefined, kind: "all", mine: false, hideDone: false }}>查看全部事项</Link>
+        <Link to="/p/$projectKey/defects" params={{ projectKey }}>查看缺陷</Link>
+        <Link to="/p/$projectKey/sprints" params={{ projectKey }}>查看迭代</Link>
+        <Link to="/p/$projectKey/releases" params={{ projectKey }}>查看版本</Link>
+      </nav>
+      <section className="overflow-hidden rounded-sm border border-border bg-surface">
+        <h2 className="type-section border-b border-border px-4 py-3">高优先级未完成</h2>
+        {summary.urgent.length === 0 ? <p className="type-meta px-4 py-3">没有高优先级的未完成事项。</p> : null}
+        {summary.urgent.slice(0, 8).map((item) => (
+          <button key={item.id} type="button" className="flex w-full flex-col gap-1 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-line" onClick={() => goToItem(item.id)}>
+            <span className="flex items-center gap-2">
+              <span className="type-link">{item.key}</span>
+              <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
+              <StatusChip kind={item.kind} status={item.status} />
+              <span className="type-caption">{priorityLabel(item.priority)}</span>
+            </span>
+          </button>
+        ))}
+        {summary.urgent.length > 8 ? <p className="type-caption px-4 py-3">还有 {summary.urgent.length - 8} 条。</p> : null}
+      </section>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="未完成" value={String(summary.open)} />
         <Stat label="已完成" value={String(summary.done)} />
@@ -297,23 +322,7 @@ export function StatsView({ projectKey }: { projectKey: string }) {
           ))}
         </div>
       </section>
-      <section className="overflow-hidden rounded-sm border border-border bg-surface">
-        <h2 className="type-section border-b border-border px-4 py-3">高优先级未完成</h2>
-        {summary.urgent.length === 0 ? <p className="type-meta px-4 py-3">没有高优先级的未完成事项。</p> : null}
-        {summary.urgent.slice(0, 8).map((item) => (
-          <button key={item.id} type="button" className="flex w-full flex-col gap-1 border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-line" onClick={() => goToItem(item.id)}>
-            <span className="flex items-center gap-2">
-              <span className="type-link">{item.key}</span>
-              <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>
-            </span>
-            <span className="flex flex-wrap items-center gap-2">
-              <StatusChip kind={item.kind} status={item.status} />
-              <span className="type-caption">{priorityLabel(item.priority)}</span>
-            </span>
-          </button>
-        ))}
-        {summary.urgent.length > 8 ? <p className="type-caption px-4 py-3">还有 {summary.urgent.length - 8} 条。</p> : null}
-      </section>
+
     </div>
   );
 }

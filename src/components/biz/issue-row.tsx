@@ -4,6 +4,7 @@ import { IssueTypeIcon } from "@/components/biz/issue-type-icon";
 import { PersonAvatar } from "@/components/biz/person-avatar";
 import { PriorityMark } from "@/components/biz/priority-mark";
 import { StatusChip } from "@/components/biz/status-chip";
+import { kindLabel } from "@/lib/pm/domain";
 
 export function IssueRow({
   item,
@@ -59,6 +60,7 @@ export function IssueRow({
         onClick={() => onOpen(item.id)}
       >
         {item.key}
+        <span className="type-caption block max-w-24 break-words whitespace-normal">{kindLabel(item)}</span>
       </button>
       <button
         data-focus-key={`item-title:${item.id}`}

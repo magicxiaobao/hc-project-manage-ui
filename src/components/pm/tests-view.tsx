@@ -8,6 +8,7 @@ import { useGoToItem } from "@/components/pm/use-go-item";
 import { TEST_CASE_STATUS_LABEL, TEST_RESULT_LABEL, TEST_RUN_STATUS_LABEL, type TestExecution, type TestResult, type TestRun, type TestRunStatus } from "@/lib/pm/domain";
 import { cn } from "@/lib/utils";
 import { usePm } from "@/lib/pm/store";
+import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 const RESULT_TONE: Record<TestResult, StateTone> = {
   PASSED: "done",
@@ -48,6 +49,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
 
 function ProjectTestsView({ projectKey }: { projectKey: string }) {
   const panelRoot = useRef<HTMLDivElement>(null);
+  const library = useRef<HTMLDetailsElement>(null);
   useLayoutEffect(() => {
     const root = panelRoot.current;
     const remember = (event: Event) => {
@@ -138,6 +140,19 @@ function ProjectTestsView({ projectKey }: { projectKey: string }) {
   return (
     <div ref={panelRoot} className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
       <PageHeading title="测试" hint="先执行当前运行。新建运行和管理用例可按需展开。" />
+      {activeCases.length === 0 ? (
+        <section className="rounded-sm border border-border bg-surface p-3">
+          <p className="type-body">{projectCases.length === 0 ? "还没有用例。当前用例库仅支持管理已有用例；新建套件不会生成用例。" : "没有生效用例。可查看已有用例，或在详情中恢复已归档用例；复制会产生草稿，不能直接用于全量回归。"}</p>
+          <Button variant="outline" onPress={() => {
+            setShowArchived(true);
+            if (library.current) {
+              library.current.open = true;
+              library.current.querySelector("summary")?.focus();
+              library.current.scrollIntoView({ block: "nearest" });
+            }
+          }}>查看用例库与套件</Button>
+        </section>
+      ) : null}
 <details className="rounded-sm border border-border bg-surface">
 <summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">切换运行 · {projectRuns.length} 次</summary>
 <div className="flex flex-col gap-3 p-3">
@@ -433,7 +448,7 @@ function ProjectTestsView({ projectKey }: { projectKey: string }) {
 
 </div>
 </details>
-<details className="rounded-sm border border-border bg-surface">
+<details ref={library} className="rounded-sm border border-border bg-surface">
 <summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">用例库与套件 · {projectCases.length} 条用例</summary>
 <div className="flex flex-col gap-3 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -527,15 +542,21 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 function CaseDetail({ caseId, onClose, onOpen }: { caseId: string; onClose: () => void; onOpen: (id: string) => void }) {
   const current = usePm((state) => state.testCases.find((entry) => entry.id === caseId));
-  const requirements = usePm((state) => state.items.filter((item) => item.projectId === current?.projectId && item.kind === "requirement"));
-  const suiteNames = usePm((state) => state.suites.filter((entry) => entry.projectId === current?.projectId).map((entry) => entry.name));
+  const items = usePm((state) => state.items);
+  const suites = usePm((state) => state.suites);
+  const requirements = items.filter((item) => item.projectId === current?.projectId && item.kind === "requirement");
+  const suiteNames = suites.filter((entry) => entry.projectId === current?.projectId).map((entry) => entry.name);
   const [precondition, setPrecondition] = useState(current?.precondition ?? "");
   const [steps, setSteps] = useState(current?.steps ?? []);
   const [suite, setSuite] = useState(current?.suite ?? "");
   const [requirementId, setRequirementId] = useState(current?.requirementId ?? "");
   const [action, setAction] = useState("");
   const [expected, setExpected] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const ready = usePm((state) => state.ready);
+  const persistenceError = usePm((state) => state.persistenceError);
   if (!current) return null;
+  const draft = precondition !== (current.precondition ?? "") || JSON.stringify(steps) !== JSON.stringify(current.steps ?? []) || suite !== current.suite || requirementId !== (current.requirementId ?? "") || Boolean(action || expected);
   return (
     <AppModal open title={`${current.key} ${current.title}`} onClose={onClose} size="lg">
       <div className="flex flex-col gap-3">
@@ -583,7 +604,10 @@ function CaseDetail({ caseId, onClose, onOpen }: { caseId: string; onClose: () =
           <Button variant="primary" onPress={() => {
             const result = usePm.getState().updateCase(current.id, { precondition, steps, suite, requirementId: requirementId || null });
             if (!result.ok) toast.error(result.message);
-            else notifyPmChange("已保存用例");
+            else {
+              setSubmitted(true);
+              notifyPmChange(action || expected ? "已保存已加入的步骤；输入中的新步骤尚未提交。" : "已保存用例");
+            }
           }}>保存</Button>
           <Button variant="outline" onPress={() => {
             const result = usePm.getState().copyCase(current.id);
@@ -600,6 +624,7 @@ function CaseDetail({ caseId, onClose, onOpen }: { caseId: string; onClose: () =
             else onClose();
           }}>{current.status === "ARCHIVED" ? "恢复" : "归档"}</Button>
         </div>
+        <PersistenceStatus ready={ready} error={persistenceError} draft={draft} saved={submitted} onRetry={() => usePm.getState().retryPersistence()} />
       </div>
     </AppModal>
   );

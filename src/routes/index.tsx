@@ -30,6 +30,11 @@ function HomeBody() {
     if (item.assigneeId !== currentUserId) return false;
     const column = columnOf(item.kind, item.status);
     return column !== "done" && column !== "cancelled";
+  }).sort((a, b) => {
+    if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+    if (Boolean(a.dueDate) !== Boolean(b.dueDate)) return a.dueDate ? -1 : 1;
+    const priority = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+    return priority[a.priority] - priority[b.priority] || a.key.localeCompare(b.key);
   });
   const active = sprints.find((sprint) => sprint.state === "active" && sprint.projectId === "pr-hc");
   const sprintItems = items.filter((item) => item.sprintId === active?.id);
@@ -39,7 +44,7 @@ function HomeBody() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeading title={`${greeting()}，${me?.name.slice(1) ?? ""}`} hint="今天先处理负责人是你的事项。看板只接受状态机允许的拖拽。" />
+        <PageHeading title={`${greeting()}，${me?.name.slice(1) ?? ""}`} hint="我负责的未完成事项：先按已有截止日期，再按优先级排列。未设置截止日期的事项排在后面。" />
         <Button variant="primary" onPress={() => usePm.getState().setCreateOpen(true)}>
           创建工作项
         </Button>

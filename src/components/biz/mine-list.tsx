@@ -29,7 +29,7 @@ export function MineList({
               item={item}
               assignee={people.find((person) => person.id === item.assigneeId)}
               onOpen={onOpen}
-              extra={<span className="type-caption hidden w-24 truncate md:inline">{project?.name}</span>}
+              extra={<span className="type-caption flex flex-wrap gap-x-2"><span>{item.dueDate ? `截止 ${item.dueDate.slice(5, 10)}` : "未设截止"}</span><span className="hidden max-w-24 truncate md:inline">{project?.name}</span></span>}
             />
           );
         })}

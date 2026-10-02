@@ -40,23 +40,35 @@ export function ProjectSidebar({
               </div>
             </div>
             <div className="my-4 h-px bg-border" />
-            <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+            <nav aria-label="项目模块" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+              <div role="group" aria-label="概览" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">概览</h2>
+                <ProjectLink projectKey={project.key} to="/p/$projectKey/dashboard" active={pathname.endsWith("/dashboard")} icon={<LayoutDashboard className="size-4" />} label="仪表盘" onClose={onClose} />
+                <ProjectLink projectKey={project.key} to="/p/$projectKey/stats" active={pathname.endsWith("/stats")} icon={<BarChart3 className="size-4" />} label="统计" onClose={onClose} />
+              </div>
+              <div role="group" aria-label="计划与交付" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">计划与交付</h2>
               <ProjectLink projectKey={project.key} to="/p/$projectKey" active={pathname === `/p/${project.key}`} icon={<Kanban className="size-4" />} label="看板" onClose={onClose} />
-              <ProjectLink projectKey={project.key} to="/p/$projectKey/dashboard" active={pathname.endsWith("/dashboard")} icon={<LayoutDashboard className="size-4" />} label="仪表盘" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/backlog" active={pathname.endsWith("/backlog")} icon={<Layers className="size-4" />} label="待办" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/sprints" active={pathname.endsWith("/sprints")} icon={<CalendarRange className="size-4" />} label="迭代" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/issues" active={pathname.includes("/issues") || pathname.includes("/items/")} icon={<SquareCheckBig className="size-4" />} label="事项" onClose={onClose} />
-              <ProjectLink projectKey={project.key} to="/p/$projectKey/defects" active={pathname.endsWith("/defects")} icon={<Bug className="size-4" />} label="缺陷" onClose={onClose} />
-              <ProjectLink projectKey={project.key} to="/p/$projectKey/assignment" active={pathname.endsWith("/assignment")} icon={<Users className="size-4" />} label="分配" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/requirements" active={pathname.endsWith("/requirements")} icon={<ListTree className="size-4" />} label="需求" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/trace" active={pathname.endsWith("/trace")} icon={<Waypoints className="size-4" />} label="追溯" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/gantt" active={pathname.endsWith("/gantt")} icon={<ChartGantt className="size-4" />} label="甘特图" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/dependencies" active={pathname.endsWith("/dependencies")} icon={<GitBranch className="size-4" />} label="依赖" onClose={onClose} />
+              </div>
+              <div role="group" aria-label="质量与发布" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">质量与发布</h2>
+                <ProjectLink projectKey={project.key} to="/p/$projectKey/defects" active={pathname.endsWith("/defects")} icon={<Bug className="size-4" />} label="缺陷" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/tests" active={pathname.endsWith("/tests")} icon={<FlaskConical className="size-4" />} label="测试" onClose={onClose} />
-              <ProjectLink projectKey={project.key} to="/p/$projectKey/worklogs" active={pathname.endsWith("/worklogs")} icon={<Clock3 className="size-4" />} label="工时" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/releases" active={pathname.endsWith("/releases")} icon={<Package className="size-4" />} label="版本" onClose={onClose} />
-              <ProjectLink projectKey={project.key} to="/p/$projectKey/stats" active={pathname.endsWith("/stats")} icon={<BarChart3 className="size-4" />} label="统计" onClose={onClose} />
+              </div>
+              <div role="group" aria-label="项目管理" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">项目管理</h2>
+                <ProjectLink projectKey={project.key} to="/p/$projectKey/assignment" active={pathname.endsWith("/assignment")} icon={<Users className="size-4" />} label="分配" onClose={onClose} />
+                <ProjectLink projectKey={project.key} to="/p/$projectKey/worklogs" active={pathname.endsWith("/worklogs")} icon={<Clock3 className="size-4" />} label="工时" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/settings" active={pathname.endsWith("/settings")} icon={<Settings className="size-4" />} label="设置" onClose={onClose} />
+              </div>
             </nav>
           </>
         ) : (

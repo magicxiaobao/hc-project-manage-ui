@@ -21,6 +21,8 @@ import type {
   WorkItem,
 } from "@/lib/pm/domain";
 import { formatRelative, kindLabel, needsReason } from "@/lib/pm/domain";
+import { usePm } from "@/lib/pm/store";
+import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 export function IssueDialog({
   projectKey,
@@ -78,6 +80,8 @@ export function IssueDialog({
   const itemNavigationState = useItemNavigationState();
   const [pending, setPending] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const ready = usePm((state) => state.ready);
+  const persistenceError = usePm((state) => state.persistenceError);
 
   const apply = (to: string, given?: string) => {
     const result = onTransition(to, given);
@@ -130,6 +134,9 @@ export function IssueDialog({
       dialogClassName="max-w-[1040px] rounded-sm"
       bodyClassName="min-h-0 p-0"
     >
+      <div className="shrink-0 border-b border-border bg-surface px-5 py-2">
+        <PersistenceStatus ready={ready} error={persistenceError} automatic onRetry={() => usePm.getState().retryPersistence()} />
+      </div>
       <div className="grid min-h-0 flex-1 gap-6 overflow-auto px-5 py-5 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div>
           {parent ? (

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { EmptyHint, OptionSelect, PageHeading } from "@/components/biz";
 import { cn } from "@/lib/utils";
+import { PersistenceStatus } from "@/components/biz/persistence-status";
 import { usePm } from "@/lib/pm/store";
 
 export function SettingsView({ projectKey }: { projectKey: string }) {
@@ -13,7 +14,11 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
   const [summary, setSummary] = useState(project?.summary ?? "");
   const [members, setMembers] = useState<string[]>(project?.memberIds ?? []);
   const [leadId, setLeadId] = useState(project?.leadId ?? "");
+  const [submitted, setSubmitted] = useState(false);
+  const ready = usePm((state) => state.ready);
+  const persistenceError = usePm((state) => state.persistenceError);
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
+  const draft = name !== project.name || summary !== project.summary || leadId !== project.leadId || JSON.stringify(members) !== JSON.stringify(project.memberIds);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6">
@@ -24,7 +29,7 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
           event.preventDefault();
           const result = usePm.getState().updateProject(project.id, { name, summary, memberIds: members, leadId });
           if (!result.ok) toast.error(result.message);
-          else notifyPmChange("已保存项目设置");
+          else { setSubmitted(true); notifyPmChange("已保存项目设置"); }
         }}
       >
         <TextField value={name} onChange={setName}>
@@ -70,6 +75,7 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
             保存
           </Button>
         </div>
+        <PersistenceStatus ready={ready} error={persistenceError} draft={draft} saved={submitted} onRetry={() => usePm.getState().retryPersistence()} />
       </form>
     </div>
   );

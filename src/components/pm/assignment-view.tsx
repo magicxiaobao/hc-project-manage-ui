@@ -33,7 +33,8 @@ export function AssignmentView({ projectKey }: { projectKey: string }) {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
       <PageHeading title="任务分配" hint="只看未完成的任务。改负责人会记一笔对象动态。" />
-      {groups.map((group) => {
+      {tasks.length === 0 ? <EmptyHint>当前没有未完成任务。</EmptyHint> : null}
+      {groups.filter((group) => group.tasks.length > 0).map((group) => {
         const points = group.tasks.reduce((sum, item) => sum + (item.storyPoints ?? 0), 0);
         const estimated = group.tasks.reduce((sum, item) => sum + (item.estimatedHours ?? 0), 0);
         const hours = logs.filter((entry) => entry.userId === group.id && group.tasks.some((item) => item.id === entry.itemId)).reduce((sum, entry) => sum + entry.hours, 0);
@@ -77,6 +78,14 @@ export function AssignmentView({ projectKey }: { projectKey: string }) {
           </section>
         );
       })}
+      {groups.some((group) => group.tasks.length === 0) ? (
+        <details className="rounded-sm border border-border bg-surface">
+          <summary className="type-section cursor-pointer px-4 py-3 focus-visible:outline-2 focus-visible:outline-primary">暂无未完成任务的成员 · {groups.filter((group) => group.tasks.length === 0).length} 人</summary>
+          <ul className="flex flex-col gap-2 px-4 pb-3">
+            {groups.filter((group) => group.tasks.length === 0).map((group) => <li key={group.id} className="type-body">{group.name}<span className="type-caption ml-2">无未完成任务</span></li>)}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }

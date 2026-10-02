@@ -3,6 +3,7 @@ import { StatusChip } from "@/components/biz/status-chip";
 import { IssueTypeIcon } from "@/components/biz/issue-type-icon";
 import { PersonAvatar } from "@/components/biz/person-avatar";
 import { PriorityMark } from "@/components/biz/priority-mark";
+import { kindLabel } from "@/lib/pm/domain";
 
 export function IssueCard({
   item,
@@ -64,6 +65,7 @@ export function IssueCard({
         <h3 className="type-body mt-2 min-w-0 break-words line-clamp-2 leading-snug" title={item.title}>{item.title}</h3>
         <div className="mt-3 flex items-center">
           <IssueTypeIcon item={item} />
+          <span className="type-caption ml-2 min-w-0 break-words">{kindLabel(item)}</span>
           <span className="ml-2">
             <PriorityMark priority={item.priority} />
           </span>
