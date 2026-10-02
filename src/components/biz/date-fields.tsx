@@ -1,4 +1,5 @@
 import { Calendar, DateField, DatePicker, DateRangePicker, Label, RangeCalendar } from "@heroui/react";
+import { useId, useState } from "react";
 import { parseDate, type DateValue } from "@internationalized/date";
 
 export type CalendarMark = {
@@ -170,5 +171,47 @@ export function SprintRangeField({
         <RangeDayCalendar label="迭代起止" marks={marks} />
       </DateRangePicker.Popover>
     </DateRangePicker>
+  );
+}
+
+// A local form for the existing day-level plan operation; it never writes by itself.
+export function PlanDateFields({ start, end, onSave, onCancel }: {
+  start: string;
+  end: string;
+  onSave: (start: string, end: string) => void;
+  onCancel: () => void;
+}) {
+  const [nextStart, setStart] = useState(start.slice(0, 10));
+  const [nextEnd, setEnd] = useState(end.slice(0, 10));
+  const [error, setError] = useState("");
+  const errorId = useId();
+  return (
+    <form noValidate className="flex flex-col gap-3" onKeyDown={(event) => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); }
+    }} onSubmit={(event) => {
+      event.preventDefault();
+      try {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(nextStart) || !/^\d{4}-\d{2}-\d{2}$/.test(nextEnd)) throw new Error();
+        parseDate(nextStart); parseDate(nextEnd);
+      } catch {
+        setError("请填写有效的计划开始和结束日期。"); return;
+      }
+      if (nextStart > nextEnd) { setError("计划结束不能早于开始；可以在同一天开始和结束。"); return; }
+      setError(""); onSave(nextStart, nextEnd);
+    }}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="type-label flex min-w-0 flex-col gap-1">计划开始
+          <input autoFocus type="date" required value={nextStart} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} onChange={(event) => setStart(event.target.value)} className="type-body h-10 min-w-0 rounded-sm border border-border bg-surface px-2" />
+        </label>
+        <label className="type-label flex min-w-0 flex-col gap-1">计划结束
+          <input type="date" required value={nextEnd} aria-invalid={!!error} aria-describedby={error ? errorId : undefined} onChange={(event) => setEnd(event.target.value)} className="type-body h-10 min-w-0 rounded-sm border border-border bg-surface px-2" />
+        </label>
+      </div>
+      {error ? <p id={errorId} role="alert" className="type-body text-danger">{error}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="type-emphasis min-h-10 rounded-sm bg-primary px-3 text-white">保存计划</button>
+        <button type="button" onClick={onCancel} className="type-body min-h-10 rounded-sm border border-border px-3">取消计划编辑</button>
+      </div>
+    </form>
   );
 }

@@ -6,7 +6,7 @@ import { PersonSelect, PrioritySelect, SprintSelect, VersionSelect } from "@/com
 import { ProgressSlider } from "@/components/biz/progress-slider";
 import { SeverityChip, StatusChip } from "@/components/biz/status-chip";
 import { useGoToItem } from "@/components/pm/use-go-item";
-import { DEPENDENCY_TYPE_LABEL, fsBlockers, type Person, type ReleaseVersion, type Sprint, type WorkItem } from "@/lib/pm/domain";
+import { DEPENDENCY_TYPE_LABEL, formatDay, fsBlockers, type Person, type ReleaseVersion, type Sprint, type WorkItem } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 
 type Patch = Partial<Pick<WorkItem, "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "dueDate" | "tags">>;
@@ -24,6 +24,9 @@ export function IssueProperties({
   versions: ReleaseVersion[];
   onPatch: (patch: Patch) => void;
 }) {
+  const sprint = sprints.find((entry) => entry.id === item.sprintId);
+  const planStart = item.planStart ?? sprint?.start;
+  const planEnd = item.planEnd ?? sprint?.end;
   const reporter = people.find((person) => person.id === item.reporterId);
   const dependencies = usePm((state) => state.dependencies);
   const items = usePm((state) => state.items);
@@ -72,6 +75,11 @@ export function IssueProperties({
           <ProgressSlider value={item.progress} onChange={(progress) => onPatch({ progress })} />
         </LabeledField>
       ) : null}
+      <div>
+        <div className="type-label mb-1">计划日期</div>
+        <p className="type-body">{planStart && planEnd ? `${formatDay(planStart)} 至 ${formatDay(planEnd)}` : "未排期"}</p>
+        {planStart && planEnd && (!item.planStart || !item.planEnd) ? <p className="type-caption">未单独设置的日期沿用迭代起止。</p> : null}
+      </div>
       <LabeledField label="到期日">
         <input
           type="date"

@@ -50,15 +50,26 @@ export function NavigationFocus({ ready }: { ready: boolean }) {
             origin.focus.text &&
             element.textContent?.trim() === origin.focus.text,
         );
+      // A closed disclosure can still contain the exact remembered source.
+      // Respect the user's collapse and use its visible summary, never reopen it.
+      const visible = (element: HTMLElement | null | undefined) => {
+        if (!element || element.getClientRects().length === 0 || getComputedStyle(element).visibility === "hidden") return false;
+        // Chromium can retain a closed details child's layout rect; its summary is the visible part.
+        const closed = element.closest("details:not([open])");
+        return !closed || !!closed.querySelector(":scope > summary")?.contains(element);
+      };
+      const summary = target?.closest("details:not([open])")?.querySelector<HTMLElement>(":scope > summary");
       const heading = document.querySelector<HTMLElement>("main h1");
-      if (!target && heading) heading.tabIndex = -1;
-      (target ?? heading)?.focus({ preventScroll: true });
+      const focusTarget = visible(target) ? target : visible(summary) ? summary : heading;
+      if (focusTarget === heading && heading) heading.tabIndex = -1;
+      focusTarget?.focus({ preventScroll: true });
       const main = document.querySelector("main > div");
       if (main) main.scrollTop = origin.scrollTop;
       const board =
         document.querySelector("main [data-pm-board-scroll]") ??
         document.querySelector("main .overflow-x-auto");
       if (board) board.scrollLeft = origin.scrollLeft;
+      if (focusTarget !== target) focusTarget?.scrollIntoView({ block: "nearest", inline: "nearest" });
       for (const column of document.querySelectorAll<HTMLElement>("main [data-pm-column]")) {
         const top = origin.columnScroll?.[column.dataset.pmColumn as ColumnId];
         if (top !== undefined) column.scrollTop = top;

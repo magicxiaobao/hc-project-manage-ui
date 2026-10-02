@@ -105,9 +105,9 @@ function RequirementNode({
   return (
     <div>
       <div className="flex items-center gap-1 border-b border-border pr-3 hover:bg-line" style={{ paddingLeft: 8 + depth * 16 }}>
-        <button type="button" className="flex size-8 shrink-0 items-center justify-center rounded-sm" aria-label={hidden ? "展开" : "收起"} disabled={children.length === 0} onClick={() => onToggle(item.id)}>
-          {children.length > 0 ? <ChevronRight className={cn("size-4 text-muted", !hidden && "rotate-90")} /> : <span className="size-4" />}
-        </button>
+        {children.length > 0 ? <button type="button" className="flex size-8 shrink-0 items-center justify-center rounded-sm focus-visible:outline-2 focus-visible:outline-primary" aria-label={`${hidden ? "展开" : "收起"} ${item.key} ${item.title}`} aria-expanded={!hidden} aria-controls={`requirement-children-${item.id}`} onClick={() => onToggle(item.id)}>
+          <ChevronRight aria-hidden="true" className={cn("size-4 text-muted", !hidden && "rotate-90")} />
+        </button> : <span aria-hidden="true" className="size-8 shrink-0" />}
         <button type="button" className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left" onClick={() => onOpen(item.id)}>
           <IssueTypeIcon item={item} />
           <span className="type-link w-16 shrink-0">{item.key}</span>
@@ -123,9 +123,11 @@ function RequirementNode({
           </span>
         </button>
       </div>
-      {hidden ? null : children.map((child) => (
-        <RequirementNode key={child.id} item={child} people={people} depth={depth + 1} collapsed={collapsed} childrenOf={childrenOf} onOpen={onOpen} onToggle={onToggle} />
-      ))}
+      {children.length > 0 ? <div id={`requirement-children-${item.id}`} hidden={hidden}>
+        {children.map((child) => (
+          <RequirementNode key={child.id} item={child} people={people} depth={depth + 1} collapsed={collapsed} childrenOf={childrenOf} onOpen={onOpen} onToggle={onToggle} />
+        ))}
+      </div> : null}
     </div>
   );
 }

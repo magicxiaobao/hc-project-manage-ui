@@ -1,6 +1,7 @@
 import { useMemo, useState, type PointerEvent } from "react";
 import { Button } from "@heroui/react";
 import { toast } from "sonner";
+import { PlanDateFields } from "@/components/biz/date-fields";
 import { EmptyHint, IssueTypeIcon, PageHeading } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import type { WorkItem } from "@/lib/pm/domain";
@@ -43,6 +44,10 @@ function barTone(item: WorkItem) {
 type Row = { item: WorkItem; start: string; end: string; depth: number; header: boolean };
 
 export function GanttView({ projectKey }: { projectKey: string }) {
+  return <ProjectGanttView key={projectKey} projectKey={projectKey} />;
+}
+
+function ProjectGanttView({ projectKey }: { projectKey: string }) {
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const allItems = usePm((state) => state.items);
   const sprints = usePm((state) => state.sprints);
@@ -51,6 +56,7 @@ export function GanttView({ projectKey }: { projectKey: string }) {
   const items = useMemo(() => allItems.filter((entry) => entry.projectId === project?.id), [allItems, project?.id]);
   const goToItem = useGoToItem();
   const [draft, setDraft] = useState<Record<string, PlanRange> | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
   const scheduled = items.flatMap((item) => {
@@ -93,6 +99,30 @@ export function GanttView({ projectKey }: { projectKey: string }) {
     sprints,
   );
 
+  // Both drag/resize and date entry use the same existing alignment and store action.
+  const commitPlan = (row: Row, proposed: PlanRange, base = Object.fromEntries(rows.map((entry) => [entry.item.id, { start: entry.start, end: entry.end }]))) => {
+    const aligned = alignPlans(base, dependencies, row.item.id, proposed);
+    const updates = rows.flatMap((entry) => {
+      const plan = aligned[entry.item.id];
+      if (!plan || (plan.start === entry.start && plan.end === entry.end)) return [];
+      return [{ id: entry.item.id, planStart: plan.start, planEnd: plan.end }];
+    });
+    if (updates.length === 0) return false;
+    usePm.getState().setItemPlans(updates);
+    const shifted = updates.filter((update) => update.id !== row.item.id);
+    if (shifted.length > 0) {
+      const names = shifted.map((update) => rows.find((entry) => entry.item.id === update.id)?.item.key).filter(Boolean);
+      toast(`已按依赖顺延 ${names.join("、")}`);
+    }
+    return true;
+  };
+  const editing = rows.find((row) => row.item.id === editingId && !row.header);
+  const closeEditor = () => {
+    // Restore before removing the form; no delayed focus can steal a newer navigation.
+    document.querySelector<HTMLElement>(`[data-focus-key="plan-${editingId}"]`)?.focus();
+    setEditingId(null);
+  };
+
   const drag = (row: Row, edge: "move" | "end", event: PointerEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -117,21 +147,8 @@ export function GanttView({ projectKey }: { projectKey: string }) {
       if (delta === 0) return;
       const start = edge === "move" ? start0 + delta : start0;
       const end = Math.max(end0 + delta, start);
-      const aligned = alignPlans(base, dependencies, row.item.id, { start: isoFromDay(start), end: isoFromDay(end) });
-      const updates = rows.flatMap((entry) => {
-        const plan = aligned[entry.item.id];
-        if (!plan || (plan.start === entry.start && plan.end === entry.end)) return [];
-        return [{ id: entry.item.id, planStart: plan.start, planEnd: plan.end }];
-      });
-      if (updates.length === 0) {
+      if (!commitPlan(row, { start: isoFromDay(start), end: isoFromDay(end) }, base)) {
         toast("这次拖动违反依赖，计划没有改。");
-        return;
-      }
-      usePm.getState().setItemPlans(updates);
-      const shifted = updates.filter((update) => update.id !== row.item.id);
-      if (shifted.length > 0) {
-        const names = shifted.map((update) => rows.find((entry) => entry.item.id === update.id)?.item.key).filter(Boolean);
-        toast(`已按依赖顺延 ${names.join("、")}`);
       }
     };
     window.addEventListener("pointermove", move);
@@ -141,7 +158,7 @@ export function GanttView({ projectKey }: { projectKey: string }) {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <PageHeading title="甘特图" hint="拖动条形改计划，拖右缘只改结束。任务左端圆点拖到另一条上，会加上完成-开始依赖。细条是基线。" />
+        <PageHeading title="甘特图" hint="点计划日期或用键盘编辑；也可拖动条形改计划、拖右缘改结束。任务圆点拖到另一条上加完成-开始依赖。细条是基线。" />
         <Button
           variant="outline"
           onPress={() => {
@@ -162,6 +179,13 @@ export function GanttView({ projectKey }: { projectKey: string }) {
         <span className="type-caption">实线 完成-开始</span>
         <span className="type-caption">虚线 开始-开始 / 完成-完成 / 开始-完成</span>
       </div>
+      {editing ? (
+        <section className="rounded-sm border border-border bg-surface p-3" aria-label={`${editing.item.key} 计划日期编辑`}>
+          <h2 className="type-section mb-2">{editing.item.key} · 编辑计划日期</h2>
+          <p className="type-caption mb-3">保存时按已有有效依赖顺延后置事项。开始和结束可以是同一天。</p>
+          <PlanDateFields key={editing.item.id} start={editing.start} end={editing.end} onCancel={closeEditor} onSave={(start, end) => { commitPlan(editing, { start, end }); closeEditor(); }} />
+        </section>
+      ) : null}
       <div className="overflow-hidden rounded-sm border border-border bg-surface">
         {rows.length === 0 ? <EmptyHint>还没有可画到时间线上的事项。</EmptyHint> : null}
         {rows.length > 0 ? (
@@ -191,6 +215,7 @@ export function GanttView({ projectKey }: { projectKey: string }) {
             const progress = Math.min(Math.max(item.progress, 0), 100);
             return (
               <div key={item.id} className="grid h-16 grid-cols-[148px_minmax(0,1fr)] border-b border-border last:border-b-0 sm:grid-cols-[240px_minmax(0,1fr)]">
+                <div className="flex min-w-0 flex-col justify-center">
                 <button type="button" className="flex min-w-0 items-center gap-2 pr-3 text-left hover:bg-line" style={{ paddingLeft: 12 + depth * 16 }} onClick={() => goToItem(item.id)}>
                   <IssueTypeIcon item={item} />
                   <span className="min-w-0">
@@ -198,6 +223,8 @@ export function GanttView({ projectKey }: { projectKey: string }) {
                     <span className="type-caption block truncate">{item.title}</span>
                   </span>
                 </button>
+                {header ? null : <button type="button" data-focus-key={`plan-${item.id}`} aria-label={`编辑 ${item.key} 计划日期，${start} 至 ${end}，进度 ${progress}%`} className="type-caption min-h-6 truncate rounded-sm px-3 text-left text-primary hover:bg-line focus-visible:outline-2 focus-visible:outline-primary" onClick={() => setEditingId(item.id)}>{start.slice(5)} — {end.slice(5)} · {progress}%</button>}
+                </div>
                 <span className="relative mr-3" data-gantt-id={item.id}>
                   {showToday ? <span className="absolute inset-y-0 w-px bg-danger" style={{ left: `${((today - origin) / span) * 100}%` }} /> : null}
                   {versions
