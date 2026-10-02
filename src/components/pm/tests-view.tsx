@@ -1,3 +1,4 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -235,7 +236,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
                     apply(result, () => {
                       if (result.ok) {
                         setRunId(result.id);
-                        toast.success("已创建定向复测");
+                        notifyPmChange("已创建定向复测");
                       }
                     });
                   }}
@@ -325,7 +326,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
                             apply(result, () => {
                               if (result.ok) {
                                 const item = usePm.getState().items.find((entry) => entry.id === result.itemId);
-                                toast.success(item ? `已创建缺陷 ${item.key}` : "已创建缺陷");
+                                notifyPmChange(item ? `已创建缺陷 ${item.key}` : "已创建缺陷");
                               }
                             });
                           }}
@@ -380,7 +381,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
           if (!result.ok) toast.error(result.message);
           else {
             setSuiteName("");
-            toast("已添加套件");
+            notifyPmChange("已添加套件");
           }
         }}
       >

@@ -1,3 +1,4 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -22,7 +23,7 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
           event.preventDefault();
           const result = usePm.getState().updateProject(project.id, { name, summary, memberIds: members });
           if (!result.ok) toast.error(result.message);
-          else toast("已保存项目设置");
+          else notifyPmChange("已保存项目设置");
         }}
       >
         <TextField value={name} onChange={setName}>

@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import { EmptyHint, IssueDialog } from "@/components/biz";
 import { usePm } from "@/lib/pm/store";
 
@@ -39,7 +40,10 @@ export function IssuePage({ projectKey, itemKey }: { projectKey: string; itemKey
       onClose={() => {
         void navigate({ to: "/p/$projectKey", params: { projectKey } });
       }}
-      onPatch={(patch) => usePm.getState().updateItem(item.id, patch)}
+      onPatch={(patch) => {
+        const result = usePm.getState().updateItem(item.id, patch);
+        if (!result.ok) toast.error(result.message);
+      }}
       onTransition={(to, reason) => usePm.getState().transition(item.id, to, reason)}
       onComment={(body) => usePm.getState().addComment(item.id, body)}
     />

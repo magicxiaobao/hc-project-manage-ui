@@ -39,6 +39,7 @@ import {
   dependencyReaches,
 } from "./domain";
 import { seed } from "./seed";
+import { readStoredJson, writeStoredJson, type StorageResult } from "./persistence";
 
 const STORAGE_KEY = "hc-pm-sample-v1";
 
@@ -69,18 +70,23 @@ interface PmUi {
   navOpen: boolean;
   noticeOpen: boolean;
   ready: boolean;
+  persistenceError: string | null;
 }
 
+export type PmActionResult = { ok: true } | { ok: false; message: string };
+export type PmMoveResult = { ok: true } | { ok: false; message: string; requiresReason?: string };
+
 interface PmActions {
+  retryPersistence: () => void;
   setCreateOpen: (open: boolean) => void;
   setNavOpen: (open: boolean) => void;
   setNoticeOpen: (open: boolean) => void;
   markNoticesRead: () => void;
   markNoticeRead: (id: string) => void;
   setCurrentUser: (id: string) => void;
-  moveToColumn: (id: string, column: ColumnId) => { ok: true } | { ok: false; message: string };
+  moveToColumn: (id: string, column: ColumnId, reason?: string, expectedStatus?: string) => PmMoveResult;
   transition: (id: string, to: string, reason?: string) => { ok: true } | { ok: false; message: string };
-  updateItem: (id: string, patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "planStart" | "planEnd">>) => void;
+  updateItem: (id: string, patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "planStart" | "planEnd">>) => PmActionResult;
   addComment: (itemId: string, body: string) => void;
   createItem: (input: {
     projectId: string;
@@ -170,6 +176,12 @@ export const usePm = create<PmState>((set, get) => ({
   navOpen: false,
   noticeOpen: false,
   ready: false,
+  persistenceError: null,
+  retryPersistence: () => {
+    if (!get().ready) { bindPmPersistence(); return; }
+    const result = persistPm(get());
+    set({ persistenceError: result.ok ? null : result.message });
+  },
   setCreateOpen: (open) => set({ createOpen: open }),
   setNavOpen: (open) => set({ navOpen: open }),
   setNoticeOpen: (open) => set({ noticeOpen: open }),
@@ -179,9 +191,12 @@ export const usePm = create<PmState>((set, get) => ({
     if (!get().people.some((person) => person.id === id)) return;
     set({ currentUserId: id });
   },
-  moveToColumn: (id, column) => {
+  moveToColumn: (id, column, reason, expectedStatus) => {
     const item = get().items.find((entry) => entry.id === id);
     if (!item) return { ok: false, message: "事项不存在" };
+    if (expectedStatus !== undefined && item.status !== expectedStatus) {
+      return { ok: false, message: "事项状态已变化，请重新选择流转。" };
+    }
     if (columnOf(item.kind, item.status) === column) return { ok: true };
     const target = nextStatuses(item).find((status) => columnOf(item.kind, status) === column);
     if (!target) {
@@ -195,10 +210,10 @@ export const usePm = create<PmState>((set, get) => ({
         message: `${item.key} 不能直接拖到这一列。当前可执行：${names}。`,
       };
     }
-    if (needsReason(target)) {
-      return get().transition(id, target, "看板拖拽");
+    if (needsReason(target) && !reason?.trim()) {
+      return { ok: false, requiresReason: target, message: "这次流转需要填写真实原因。" };
     }
-    return get().transition(id, target);
+    return get().transition(id, target, reason);
   },
   transition: (id, to, reason) => {
     const data = get();
@@ -255,7 +270,19 @@ export const usePm = create<PmState>((set, get) => ({
   updateItem: (id, patch) => {
     const data = get();
     const item = data.items.find((entry) => entry.id === id);
-    if (!item) return;
+    if (!item) return { ok: false, message: "事项不存在。" };
+    if (patch.versionId !== undefined && patch.versionId !== item.versionId) {
+      const locked = (versionId: string | null) => {
+        const version = data.versions.find((entry) => entry.id === versionId);
+        return version && ["FROZEN", "RELEASED", "DEPRECATED"].includes(version.status);
+      };
+      if (locked(item.versionId) || locked(patch.versionId)) {
+        return { ok: false, message: "版本已冻结、发布或废弃，不能改范围。" };
+      }
+      if (patch.versionId !== null && !data.versions.some((entry) => entry.id === patch.versionId && entry.projectId === item.projectId)) {
+        return { ok: false, message: "版本不属于这个项目。" };
+      }
+    }
     const at = nowIso();
     const actorId = data.currentUserId;
     const feeds = [...data.feeds];
@@ -296,6 +323,7 @@ export const usePm = create<PmState>((set, get) => ({
       feeds,
       items: data.items.map((entry) => (entry.id === id ? { ...entry, ...patch, updatedAt: at } : entry)),
     });
+    return { ok: true };
   },
   addComment: (itemId, body) => {
     const text = body.trim();
@@ -729,21 +757,7 @@ export const usePm = create<PmState>((set, get) => ({
     set({ environments: [...get().environments, entry] });
     return { ok: true };
   },
-  setItemVersion: (itemId, versionId) => {
-    const data = get();
-    const item = data.items.find((entry) => entry.id === itemId);
-    if (!item) return { ok: false, message: "事项不存在。" };
-    const locked = (id: string | null) => {
-      const version = data.versions.find((entry) => entry.id === id);
-      return version ? version.status === "FROZEN" || version.status === "RELEASED" || version.status === "DEPRECATED" : false;
-    };
-    if (locked(item.versionId) || locked(versionId)) return { ok: false, message: "版本已冻结、发布或废弃，不能改范围。" };
-    if (versionId && !data.versions.some((entry) => entry.id === versionId && entry.projectId === item.projectId)) {
-      return { ok: false, message: "版本不属于这个项目。" };
-    }
-    get().updateItem(itemId, { versionId });
-    return { ok: true };
-  },
+  setItemVersion: (itemId, versionId) => get().updateItem(itemId, { versionId }),
   createRelease: (input) => {
     const title = input.title.trim();
     if (!title) return { ok: false, message: "发布单标题不能为空。" };
@@ -806,47 +820,104 @@ function withLogStatus(logs: WorkLog[] | undefined) {
   return list.map((entry) => (entry.status ? entry : { ...entry, status: seedLogsById.get(entry.id)?.status ?? "APPROVED" }));
 }
 
-export function readPersistedPm(): PmData | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-  try {
-    const data = JSON.parse(raw) as Partial<PmData>;
-    if (!data.items || !data.projects || !data.currentUserId) return null;
-    return {
-      people: data.people ?? seed.people,
-      projects: data.projects,
-      sprints: data.sprints ?? seed.sprints,
-      versions: data.versions ?? seed.versions,
-      items: withDefectParents(data.items),
-      comments: data.comments ?? seed.comments,
-      feeds: data.feeds ?? seed.feeds,
-      histories: data.histories ?? seed.histories,
-      notices: data.notices ?? seed.notices,
-      testCases: withCaseSteps(data.testCases),
-      testRuns: mergeById(data.testRuns, seed.testRuns),
-      testExecutions: mergeById(data.testExecutions, seed.testExecutions),
-      workLogs: withLogStatus(data.workLogs),
-      dependencies: data.dependencies ?? seed.dependencies,
-      boards: data.boards ?? seed.boards,
-      suites: data.suites ?? seed.suites,
-      environments: data.environments ?? seed.environments,
-      releases: data.releases ?? seed.releases,
-      currentUserId: data.currentUserId,
-    };
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY);
-    return null;
+// 只验证领域字段的基本类型，不在读取层复制业务枚举、状态机或关系规则。
+// -? 使可选字段也必须出现在映射中：新增领域字段时，类型检查会提示补齐读取边界。
+type FieldCheck = (value: unknown) => boolean;
+type CollectionName = Exclude<keyof PmData, "currentUserId">;
+type RecordChecks = { [K in CollectionName]: { [F in keyof PmData[K][number]]-?: FieldCheck } };
+const text: FieldCheck = (value) => typeof value === "string";
+const optionalText: FieldCheck = (value) => value === undefined || text(value);
+// 历史样板允许这些可空字段缺失；不改变既有兼容行为。
+const nullableText: FieldCheck = (value) => value == null || text(value);
+const finiteNumber: FieldCheck = (value) => typeof value === "number" && Number.isFinite(value);
+const nullableNumber: FieldCheck = (value) => value == null || finiteNumber(value);
+const stringList: FieldCheck = (value) => Array.isArray(value) && value.every(text);
+const optionalSteps: FieldCheck = (value) => value === undefined || (Array.isArray(value) && value.every((step) =>
+  step !== null && typeof step === "object" && !Array.isArray(step) && text(step.action) && text(step.expected),
+));
+const recordChecks = {
+  people: { id: text, name: text, role: text },
+  projects: { id: text, key: text, name: text, summary: text, leadId: text, memberIds: stringList },
+  sprints: { id: text, projectId: text, name: text, goal: text, state: text, start: text, end: text },
+  versions: { id: text, projectId: text, name: text, versionNumber: text, versionType: text, status: text, plannedReleaseDate: text, description: text },
+  items: {
+    id: text, key: text, projectId: text, kind: text, requirementType: nullableText, taskType: nullableText, defectType: nullableText, severity: nullableText,
+    title: text, description: text, priority: text, status: text, assigneeId: nullableText, reporterId: text, sprintId: nullableText, versionId: nullableText,
+    parentId: nullableText, storyPoints: nullableNumber, progress: finiteNumber, estimatedHours: nullableNumber, tags: stringList,
+    createdAt: text, updatedAt: text, planStart: optionalText, planEnd: optionalText,
+  },
+  comments: { id: text, itemId: text, authorId: text, body: text, createdAt: text },
+  feeds: { id: text, itemId: text, projectId: text, actorId: text, text, createdAt: text },
+  histories: { id: text, itemId: text, fromStatus: text, toStatus: text, transitionName: text, actorId: text, reason: nullableText, createdAt: text },
+  notices: { id: text, text, itemId: nullableText, read: (value: unknown) => typeof value === "boolean", createdAt: text },
+  testCases: { id: text, key: text, projectId: text, title: text, testType: text, priority: text, status: text, suite: text, requirementId: nullableText, assigneeId: nullableText, steps: optionalSteps },
+  testRuns: { id: text, projectId: text, name: text, runType: text, status: text, environment: text, versionId: nullableText, sourceRunId: nullableText, cancelReason: nullableText },
+  testExecutions: { id: text, runId: text, caseId: text, result: nullableText, defectId: nullableText },
+  workLogs: { id: text, projectId: text, itemId: text, userId: text, hours: finiteNumber, workDate: text, note: text, status: optionalText },
+  dependencies: { id: text, projectId: text, predecessorId: text, successorId: text, dependencyType: text, lagDays: finiteNumber, memo: text, status: text },
+  boards: { id: text, projectId: text, name: text, sprintId: nullableText },
+  suites: { id: text, projectId: text, name: text },
+  environments: { id: text, projectId: text, name: text, kind: text },
+  releases: { id: text, projectId: text, versionId: text, environmentId: nullableText, title: text, summary: text, status: text, createdAt: text },
+} satisfies RecordChecks;
+
+function assertRenderableRecord(collection: string, entry: unknown) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("invalid record");
+  if (!Object.hasOwn(recordChecks, collection)) throw new Error("invalid collection");
+  const record = entry as Record<string, unknown>;
+  const checks = recordChecks[collection as CollectionName];
+  for (const [field, check] of Object.entries(checks)) {
+    if (!check(record[field])) throw new Error("invalid field");
   }
 }
 
-export function loadPersistedPm() {
-  const data = readPersistedPm();
-  if (data) usePm.getState().replaceData(data);
+function decodePersistedPm(raw: unknown): PmData {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid data");
+  const data = raw as Partial<PmData>;
+  if (!Array.isArray(data.items) || !Array.isArray(data.projects) || typeof data.currentUserId !== "string") {
+    throw new Error("missing required data");
+  }
+  for (const [key, value] of Object.entries(data)) {
+    if (key === "currentUserId") continue;
+    if (!Array.isArray(value)) throw new Error("invalid collection");
+    value.forEach((entry) => assertRenderableRecord(key, entry));
+  }
+  return {
+    people: data.people ?? seed.people,
+    projects: data.projects,
+    sprints: data.sprints ?? seed.sprints,
+    versions: data.versions ?? seed.versions,
+    items: withDefectParents(data.items),
+    comments: data.comments ?? seed.comments,
+    feeds: data.feeds ?? seed.feeds,
+    histories: data.histories ?? seed.histories,
+    notices: data.notices ?? seed.notices,
+    testCases: withCaseSteps(data.testCases),
+    testRuns: mergeById(data.testRuns, seed.testRuns),
+    testExecutions: mergeById(data.testExecutions, seed.testExecutions),
+    workLogs: withLogStatus(data.workLogs),
+    dependencies: data.dependencies ?? seed.dependencies,
+    boards: data.boards ?? seed.boards,
+    suites: data.suites ?? seed.suites,
+    environments: data.environments ?? seed.environments,
+    releases: data.releases ?? seed.releases,
+    currentUserId: data.currentUserId,
+  };
 }
 
-export function persistPm(state: PmState) {
-  if (typeof window === "undefined") return;
+export function readPersistedPm(): StorageResult<PmData | null> {
+  if (typeof window === "undefined") return { ok: true, value: null };
+  return readStoredJson(() => window.localStorage, STORAGE_KEY, decodePersistedPm);
+}
+
+export function loadPersistedPm(): StorageResult<PmData | null> {
+  const result = readPersistedPm();
+  if (result.ok) usePm.setState({ ...(result.value ?? {}), ready: true, persistenceError: null });
+  else usePm.setState({ ready: false, persistenceError: result.message });
+  return result;
+}
+
+function pmData(state: PmState): PmData {
   const data: PmData = {
     people: state.people,
     projects: state.projects,
@@ -868,15 +939,31 @@ export function persistPm(state: PmState) {
     releases: state.releases,
     currentUserId: state.currentUserId,
   };
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  return data;
 }
 
-let listening = false;
+export function persistPm(state: PmState): StorageResult<null> {
+  if (typeof window === "undefined") return { ok: false, message: "本机保存不可用。" };
+  return writeStoredJson(() => window.localStorage, STORAGE_KEY, pmData(state));
+}
 
-export function bindPmPersistence() {
-  if (listening || typeof window === "undefined") return;
-  listening = true;
-  const data = readPersistedPm();
-  usePm.setState(data ? { ...data, ready: true } : { ready: true });
-  usePm.subscribe((state) => persistPm(state));
+let unsubscribe: (() => void) | undefined;
+
+export function unbindPmPersistence() {
+  unsubscribe?.();
+  unsubscribe = undefined;
+}
+
+export function bindPmPersistence(): () => void {
+  if (unsubscribe || typeof window === "undefined") return unbindPmPersistence;
+  // SPA 导航会重新挂载壳层；不能用磁盘旧值丢掉当前页尚未保存的改动。
+  if (!usePm.getState().ready && !loadPersistedPm().ok) return unbindPmPersistence;
+  unsubscribe = usePm.subscribe((state, previous) => {
+    const data = pmData(state);
+    const old = pmData(previous);
+    if (!(Object.keys(data) as (keyof PmData)[]).some((key) => data[key] !== old[key])) return;
+    const saved = persistPm(state);
+    usePm.setState({ persistenceError: saved.ok ? null : saved.message });
+  });
+  return unbindPmPersistence;
 }

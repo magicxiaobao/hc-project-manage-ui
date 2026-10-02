@@ -1,3 +1,4 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyHint, PageHeading, SprintActions, SprintBucket, SprintIssueRow, SprintRangeField, sprintBadge, sprintDates, sprintTone } from "@/components/biz";
@@ -79,7 +80,7 @@ export function BacklogView({ projectKey }: { projectKey: string }) {
               onComplete={() => {
                 usePm.getState().completeSprint(sprint.id);
                 setConfirmId(null);
-                toast(`${sprint.name} 已完成，未完成事项回到未排期`);
+                notifyPmChange(`${sprint.name} 已完成，未完成事项回到未排期`);
               }}
             />
           }

@@ -1,3 +1,4 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { useState } from "react";
@@ -39,7 +40,7 @@ function CreateProject() {
             toast.error(result.message);
             return;
           }
-          toast("已创建项目");
+          notifyPmChange("已创建项目");
           void navigate({ to: "/p/$projectKey", params: { projectKey: result.key } });
         }}
       >

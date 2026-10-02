@@ -1,6 +1,6 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@heroui/react";
-import { toast } from "sonner";
 import { OptionSelect, PageHeading } from "@/components/biz";
 import { usePm } from "@/lib/pm/store";
 
@@ -31,7 +31,7 @@ function Page() {
         variant="outline"
         onPress={() => {
           usePm.getState().reset();
-          toast("已恢复示例数据");
+          notifyPmChange("已恢复示例数据");
         }}
       >
         恢复示例数据

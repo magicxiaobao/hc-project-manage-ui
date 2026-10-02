@@ -1,3 +1,4 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -56,7 +57,7 @@ function NewVersion({ projectId }: { projectId: string }) {
           setName("");
           setVersionNumber("");
           setDescription("");
-          toast("已添加版本");
+          notifyPmChange("已添加版本");
         }
       }}
     >
@@ -190,7 +191,7 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
               if (!result.ok) toast.error(result.message);
               else {
                 setEnvName("");
-                toast("已添加环境");
+                notifyPmChange("已添加环境");
               }
             }}
           >
@@ -253,7 +254,7 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
               if (!result.ok) toast.error(result.message);
               else {
                 setTitle("");
-                toast("已创建发布草稿");
+                notifyPmChange("已创建发布草稿");
               }
             }}
           >

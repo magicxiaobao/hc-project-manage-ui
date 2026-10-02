@@ -1,7 +1,8 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Toaster, toast } from "sonner";
+import { Toaster } from "sonner";
 import { AppRail, CreateIssueDialog, Loading, NoticePanel, ProjectSidebar, RouteProgress, SearchDialog } from "@/components/biz";
 import { ContentSkeleton } from "@/components/biz/skeleton";
 import { useGoToItem } from "@/components/pm/use-go-item";
@@ -18,6 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const currentUserId = usePm((state) => state.currentUserId);
   const noticeOpen = usePm((state) => state.noticeOpen);
   const ready = usePm((state) => state.ready);
+  const persistenceError = usePm((state) => state.persistenceError);
   const me = people.find((person) => person.id === currentUserId);
   const project = projects.find((entry) => pathname === `/p/${entry.key}` || pathname.startsWith(`/p/${entry.key}/`));
   const unread = notices.filter((notice) => !notice.read).length;
@@ -25,7 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const goToItem = useGoToItem();
 
   useLayoutEffect(() => {
-    bindPmPersistence();
+    return bindPmPersistence();
   }, []);
 
   useEffect(() => {
@@ -47,6 +49,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (!ready || !persistenceError) return;
+    const warnUnsaved = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnUnsaved);
+    return () => window.removeEventListener("beforeunload", warnUnsaved);
+  }, [ready, persistenceError]);
+
+  if (!ready && persistenceError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-bg p-6 text-fg">
+        <section role="alert" className="max-w-lg rounded-sm border border-danger bg-surface p-6">
+          <h1 className="type-title">无法读取本机数据</h1>
+          <p className="type-body mt-3">{persistenceError}</p>
+          <button type="button" className="type-emphasis mt-4 rounded-sm bg-primary px-4 py-2 text-on-nav" onClick={() => usePm.getState().retryPersistence()}>
+            重试读取
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
       <RouteProgress />
@@ -63,6 +89,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       />
       <ProjectSidebar open={navOpen} pathname={pathname} project={project} onClose={() => setNavOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
+        {persistenceError ? (
+          <section role="alert" className="shrink-0 border-b border-danger bg-danger-soft px-4 py-3">
+            <p className="type-body">{persistenceError}</p>
+            <button type="button" className="type-emphasis mt-2 rounded-sm border border-danger px-3 py-1" onClick={() => usePm.getState().retryPersistence()}>
+              重试保存
+            </button>
+          </section>
+        ) : null}
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:hidden">
           <button type="button" className="rounded-sm p-2 hover:bg-line" aria-label="打开导航" onClick={() => setNavOpen(true)}>
             <Menu className="size-4" />
@@ -80,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onOpen={goToItem}
           onReset={() => {
             usePm.getState().reset();
-            toast("已恢复示例数据");
+            notifyPmChange("已恢复示例数据");
           }}
         />
       ) : null}

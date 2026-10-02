@@ -1,3 +1,4 @@
+import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -45,7 +46,7 @@ export function SprintsView({ projectKey }: { projectKey: string }) {
               else {
                 setName("");
                 setGoal("");
-                toast("已添加迭代");
+                notifyPmChange("已添加迭代");
               }
             }}
           >
@@ -111,7 +112,7 @@ export function SprintsView({ projectKey }: { projectKey: string }) {
               if (!result.ok) toast.error(result.message);
               else {
                 setBoardName("");
-                toast("已添加看板");
+                notifyPmChange("已添加看板");
               }
             }}
           >
