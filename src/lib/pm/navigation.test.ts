@@ -8,6 +8,18 @@ import {
   validReturnHref,
 } from "./navigation.ts";
 
+it("keeps only finite nonnegative positions of the four actual board columns", () => {
+  const origin = readItemOrigin({ href: "/p/HC", index: 1, columnScroll: { todo: 0, doing: 174, check: 23, done: 0, unrelated: 999 } });
+  assert.deepEqual(origin?.columnScroll, { todo: 0, doing: 174, check: 23, done: 0 });
+  assert.equal(readItemOrigin({ href: "/p/HC", index: 1 })?.columnScroll, undefined);
+});
+
+it("does not restore column scroll from arrays, negative, nonfinite or wrong scalar positions", () => {
+  for (const columnScroll of [[174], "174", { todo: -1, doing: Infinity, check: "23", done: {} }]) {
+    assert.equal(readItemOrigin({ href: "/p/HC", index: 1, columnScroll })?.columnScroll, undefined);
+  }
+});
+
 it("accepts same-app source views with filters, never detail-to-detail return loops", () => {
   for (const href of [
     "/",

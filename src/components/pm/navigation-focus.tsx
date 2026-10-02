@@ -1,5 +1,6 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useLayoutEffect } from "react";
+import type { ColumnId } from "@/lib/pm/domain";
 import { isItemPath, readItemOrigin, type ItemOrigin } from "@/lib/pm/navigation";
 
 let pendingOrigin: ItemOrigin | undefined;
@@ -56,6 +57,10 @@ export function NavigationFocus({ ready }: { ready: boolean }) {
       if (main) main.scrollTop = origin.scrollTop;
       const board = document.querySelector("main .overflow-x-auto");
       if (board) board.scrollLeft = origin.scrollLeft;
+      for (const column of document.querySelectorAll<HTMLElement>("main [data-pm-column]")) {
+        const top = origin.columnScroll?.[column.dataset.pmColumn as ColumnId];
+        if (top !== undefined) column.scrollTop = top;
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [ready, location, status, resolvedKey, router]);

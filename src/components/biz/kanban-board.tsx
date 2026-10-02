@@ -31,6 +31,7 @@ export function KanbanBoard({
             return (
               <KanbanColumn
                 key={column.id}
+                id={column.id}
                 name={column.name}
                 tone={columnTone(column.id)}
                 count={cards.length}

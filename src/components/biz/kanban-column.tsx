@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import type { ColumnId } from "@/lib/pm/domain";
 import { toneDotClass, type StateTone } from "@/components/biz/state-tone";
 import { cn } from "@/lib/utils";
 
 export function KanbanColumn({
+  id,
   name,
   tone = "neutral",
   count,
@@ -13,6 +15,7 @@ export function KanbanColumn({
   onDrop,
   children,
 }: {
+  id: ColumnId;
   name: string;
   tone?: StateTone;
   count: number;
@@ -37,7 +40,7 @@ export function KanbanColumn({
         </h2>
         <span className="type-caption">{count}</span>
       </header>
-      <div className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
+      <div data-pm-column={id} className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
         {empty ? <div className="type-caption px-2 py-6 text-center">这一列还没有事项</div> : null}
         {children}
       </div>

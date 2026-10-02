@@ -28,6 +28,11 @@ export function useItemNavigationState() {
         focus,
         scrollTop: document.querySelector("main > div")?.scrollTop ?? 0,
         scrollLeft: document.querySelector("main .overflow-x-auto")?.scrollLeft ?? 0,
+        columnScroll: Object.fromEntries(
+          Array.from(document.querySelectorAll<HTMLElement>("main [data-pm-column]")).map(
+            (column) => [column.dataset.pmColumn, column.scrollTop],
+          ),
+        ),
       },
     };
   };

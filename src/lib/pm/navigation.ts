@@ -1,4 +1,4 @@
-import type { ItemKind } from "./domain";
+import { COLUMNS, type ColumnId, type ItemKind } from "./domain";
 
 export type ProjectViewSearch = {
   query?: string;
@@ -33,6 +33,7 @@ export type ItemOrigin = {
   focus: ReturnFocus;
   scrollTop: number;
   scrollLeft: number;
+  columnScroll?: Partial<Record<ColumnId, number>>;
 };
 
 declare module "@tanstack/history" {
@@ -70,6 +71,14 @@ export function readItemOrigin(value: unknown): ItemOrigin | undefined {
     return undefined;
   const f = v.focus && typeof v.focus === "object" ? (v.focus as Record<string, unknown>) : {};
   const shortText = (x: unknown) => (typeof x === "string" && x.length <= 300 ? x : undefined);
+  const columnScroll: Partial<Record<ColumnId, number>> = {};
+  if (v.columnScroll && typeof v.columnScroll === "object" && !Array.isArray(v.columnScroll)) {
+    const positions = v.columnScroll as Record<string, unknown>;
+    for (const { id } of COLUMNS) {
+      const top = positions[id];
+      if (typeof top === "number" && Number.isFinite(top) && top >= 0) columnScroll[id] = top;
+    }
+  }
   return {
     href: v.href,
     index: v.index as number,
@@ -87,6 +96,7 @@ export function readItemOrigin(value: unknown): ItemOrigin | undefined {
       typeof v.scrollLeft === "number" && Number.isFinite(v.scrollLeft) && v.scrollLeft >= 0
         ? v.scrollLeft
         : 0,
+    ...(Object.keys(columnScroll).length ? { columnScroll } : {}),
   };
 }
 

@@ -1,6 +1,6 @@
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import type { ProjectViewSearch } from "@/lib/pm/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EmptyHint, IssueRow, ListFilterBar, PageHeading } from "@/components/biz";
 import { columnOf } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
@@ -15,7 +15,13 @@ export function ListView({ projectKey }: { projectKey: string }) {
   const search = useSearch({ from: "/p/$projectKey" });
   const navigate = useNavigate();
   const router = useRouter();
-  const query = search.query ?? "";
+  const [query, setQuery] = useState(search.query ?? "");
+  useEffect(() => {
+    // Ignore an older committed match while a newer query navigation is pending.
+    if ((search.query ?? "") === (router.state.location.search.query ?? "")) {
+      setQuery(search.query ?? "");
+    }
+  }, [search.query, router]);
   const kind = search.kind ?? "all";
   const mine = search.mine ?? false;
   const hideDone = search.hideDone ?? true;
@@ -54,7 +60,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
           kind={kind}
           mine={mine}
           hideDone={hideDone}
-          onQuery={(query) => setFilter({ query })}
+          onQuery={(query) => { setQuery(query); setFilter({ query }); }}
           onKind={(kind) => setFilter({ kind: kind as ProjectViewSearch["kind"] })}
           onMine={(mine) => setFilter({ mine })}
           onHideDone={(hideDone) => setFilter({ hideDone })}
