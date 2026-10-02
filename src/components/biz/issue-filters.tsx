@@ -56,7 +56,11 @@ export function BoardFilterBar({
       if (!panel.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        const restoreFocus = panel.current?.contains(document.activeElement);
+        setOpen(false);
+        if (restoreFocus) panel.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      }
     };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
@@ -103,7 +107,7 @@ export function BoardFilterBar({
           筛选{extra > 0 ? ` ${extra}` : ""}
         </button>
         {open ? (
-          <div className="absolute right-0 z-30 mt-1 w-72 max-w-[calc(100vw-6rem)] rounded-sm border border-border bg-surface p-3 shadow-pop">
+          <div className="pm-board-filter-panel fixed top-16 left-20 z-30 w-72 max-w-[calc(100vw-6rem)] max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-sm border border-border bg-surface p-3 shadow-pop lg:absolute lg:top-auto lg:right-0 lg:left-auto lg:mt-1">
             <div className="type-label">负责人</div>
             <div className="mt-2 flex flex-col gap-1">
               {people.length === 0 ? <p className="type-caption">没有成员</p> : null}

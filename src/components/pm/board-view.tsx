@@ -192,7 +192,7 @@ export function BoardView({
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg">
       <div className="flex shrink-0 flex-col gap-3 px-5 pt-6 pb-3">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
           <PageHeading
             title={lockedKind === "defect" ? "缺陷看板" : (board?.name ?? "看板")}
             hint="跨列拖动走状态流转。同一列上下拖是排序。列头可以填在制品上限，超出只提示。"

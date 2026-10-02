@@ -291,6 +291,10 @@ input::placeholder, textarea::placeholder { color: var(--color-muted); opacity: 
 
 .project-nav-dialog { max-height: calc(100dvh - 2rem); }
 .project-nav-dialog nav { padding: 4px; }
+@media (max-width: 1023px) {
+  .pm-kanban-board { flex: 0 0 auto; }
+  .pm-kanban-board [data-pm-board-scroll] { flex: none; height: clamp(18rem, 50dvh, 36rem); }
+}
 @media (max-width: 639px) {
   .pm-issue-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; }
   .pm-issue-row > svg { display: none; }

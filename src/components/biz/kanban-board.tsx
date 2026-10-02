@@ -37,7 +37,7 @@ export function KanbanBoard({
   const scroller = useRef<HTMLDivElement>(null);
   const byId = new Map((catalog ?? items).map((item) => [item.id, item]));
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
+    <div className="pm-kanban-board flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
       <nav aria-label="看板列" className="flex shrink-0 flex-wrap items-center gap-2 xl:hidden">
         {COLUMNS.map((column) => {
           const count = items.filter((item) => columnOf(item.kind, item.status) === column.id).length;

@@ -38,7 +38,7 @@ export function KanbanColumn({
       id={sectionId}
       data-board-column={id}
       className={cn(
-        "flex h-full w-72 shrink-0 flex-col rounded-sm bg-line/70 px-2 pt-2 md:w-auto md:min-w-56 md:flex-1",
+        "flex h-full w-72 max-w-full shrink-0 flex-col rounded-sm bg-line/70 px-2 pt-2 md:w-auto md:min-w-56 md:flex-1",
         over && "ring-2 ring-primary",
       )}
       onDragOver={onDragOver}
