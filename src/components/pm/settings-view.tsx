@@ -2,7 +2,7 @@ import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { EmptyHint, PageHeading } from "@/components/biz";
+import { EmptyHint, OptionSelect, PageHeading } from "@/components/biz";
 import { cn } from "@/lib/utils";
 import { usePm } from "@/lib/pm/store";
 
@@ -12,6 +12,7 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
   const [name, setName] = useState(project?.name ?? "");
   const [summary, setSummary] = useState(project?.summary ?? "");
   const [members, setMembers] = useState<string[]>(project?.memberIds ?? []);
+  const [leadId, setLeadId] = useState(project?.leadId ?? "");
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
   return (
@@ -21,7 +22,7 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
         className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const result = usePm.getState().updateProject(project.id, { name, summary, memberIds: members });
+          const result = usePm.getState().updateProject(project.id, { name, summary, memberIds: members, leadId });
           if (!result.ok) toast.error(result.message);
           else notifyPmChange("已保存项目设置");
         }}
@@ -36,6 +37,7 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
         </TextField>
         <div>
           <div className="type-label mb-2">成员</div>
+          <p className="type-caption mb-2">负责人只有一个。取消成员前要先换负责人。</p>
           <div className="flex flex-wrap gap-2">
             {people.map((person) => {
               const on = members.includes(person.id);
@@ -45,14 +47,24 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
                   type="button"
                   aria-pressed={on}
                   className={cn("type-emphasis rounded-sm border px-3 py-1.5", on ? "border-primary bg-primary/10 text-primary" : "border-border")}
-                  onClick={() => setMembers((current) => (current.includes(person.id) ? current.filter((id) => id !== person.id) : [...current, person.id]))}
+                  onClick={() =>
+                    setMembers((current) => {
+                      if (current.includes(person.id)) {
+                        if (person.id === leadId) return current;
+                        return current.filter((id) => id !== person.id);
+                      }
+                      return [...current, person.id];
+                    })
+                  }
                 >
                   {person.name}
+                  {person.id === leadId ? " · 负责人" : on ? " · 成员" : ""}
                 </button>
               );
             })}
           </div>
         </div>
+        <OptionSelect label="负责人" value={leadId} options={people.filter((person) => members.includes(person.id)).map((person) => ({ id: person.id, label: person.name }))} onChange={setLeadId} />
         <div>
           <Button type="submit" variant="primary">
             保存

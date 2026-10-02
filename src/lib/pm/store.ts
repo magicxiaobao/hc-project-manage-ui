@@ -7,6 +7,7 @@ import {
   type ItemKind,
   type LifecycleRecord,
   type Notice,
+  type NoticeKind,
   type Person,
   type Priority,
   type Project,
@@ -133,16 +134,24 @@ interface PmActions {
     memo: string;
   }) => { ok: true } | { ok: false; message: string };
   setDependencyStatus: (id: string, status: DependencyStatus) => { ok: true } | { ok: false; message: string };
-  updateProject: (id: string, patch: Partial<Pick<Project, "name" | "summary" | "memberIds">>) => { ok: true } | { ok: false; message: string };
+  updateProject: (id: string, patch: Partial<Pick<Project, "name" | "summary" | "memberIds" | "leadId">>) => { ok: true } | { ok: false; message: string };
   createSprint: (input: { projectId: string; name: string; goal: string; start: string; end: string }) => { ok: true } | { ok: false; message: string };
   createBoard: (input: { projectId: string; name: string; sprintId: string | null }) => { ok: true } | { ok: false; message: string };
   createSuite: (input: { projectId: string; name: string }) => { ok: true } | { ok: false; message: string };
   saveCaseSteps: (id: string, steps: TestStep[]) => void;
+  updateCase: (id: string, patch: { precondition?: string; steps?: TestStep[]; status?: TestCase["status"]; suite?: string; requirementId?: string | null }) => { ok: true } | { ok: false; message: string };
+  copyCase: (id: string) => { ok: true; id: string } | { ok: false; message: string };
+  assignCaseSuite: (id: string, suite: string) => { ok: true } | { ok: false; message: string };
   reviewWorkLog: (id: string, status: Exclude<WorkLogStatus, "PENDING">) => { ok: true } | { ok: false; message: string };
+  updateWorkLog: (id: string, patch: { hours: number; workDate: string; note: string }) => { ok: true } | { ok: false; message: string };
+  setItemPlans: (updates: { id: string; planStart: string; planEnd: string }[]) => void;
+  saveBaseline: (projectId: string) => { ok: true; count: number } | { ok: false; message: string };
   createEnvironment: (input: { projectId: string; name: string; kind: string }) => { ok: true } | { ok: false; message: string };
   setItemVersion: (itemId: string, versionId: string | null) => { ok: true } | { ok: false; message: string };
-  createRelease: (input: { projectId: string; versionId: string; environmentId: string | null; title: string; summary: string }) => { ok: true } | { ok: false; message: string };
-  publishRelease: (id: string) => { ok: true } | { ok: false; message: string };
+  createRelease: (input: { projectId: string; versionId: string; environmentId: string | null; title: string; summary: string }) => { ok: true; id: string } | { ok: false; message: string };
+  submitRelease: (id: string) => { ok: true } | { ok: false; message: string };
+  decideRelease: (id: string, decision: "APPROVED" | "DRAFT", note: string) => { ok: true } | { ok: false; message: string };
+  publishRelease: (id: string, waiver: string) => { ok: true } | { ok: false; message: string };
   reset: () => void;
   replaceData: (data: PmData) => void;
 }
@@ -168,6 +177,33 @@ const seedLogsById = new Map(seed.workLogs.map((item) => [item.id, item]));
 function personName(data: PmData, id: string | null) {
   if (!id) return "未分配";
   return data.people.find((person) => person.id === id)?.name ?? "未知";
+}
+
+function releaseGate(data: PmData, versionId: string) {
+  const scope = data.items.filter((item) => item.versionId === versionId);
+  const open = (item: WorkItem) => {
+    const column = columnOf(item.kind, item.status);
+    return column !== "done" && column !== "cancelled";
+  };
+  const requirementIds = new Set(scope.filter((item) => item.kind === "requirement").map((item) => item.id));
+  const caseIds = new Set(data.testCases.filter((entry) => entry.requirementId && requirementIds.has(entry.requirementId)).map((entry) => entry.id));
+  const runIds = new Set(data.testRuns.filter((run) => run.versionId === versionId && run.status !== "CANCELLED").map((run) => run.id));
+  const failedRows = data.testExecutions.filter((execution) => runIds.has(execution.runId) && caseIds.has(execution.caseId) && (execution.result === "FAILED" || execution.result === "BLOCKED"));
+  const openRequirements = scope.filter((item) => item.kind === "requirement" && open(item)).length;
+  const openTasks = scope.filter((item) => item.kind === "task" && open(item)).length;
+  const openDefects = scope.filter((item) => item.kind === "defect" && open(item)).length;
+  return {
+    scope,
+    openRequirements,
+    openTasks,
+    openDefects,
+    failed: failedRows.length,
+    failures: failedRows.map((execution) => {
+      const testCase = data.testCases.find((entry) => entry.id === execution.caseId);
+      return { key: testCase?.key ?? execution.caseId, title: testCase?.title ?? "", result: execution.result ?? "" };
+    }),
+    ready: scope.length > 0 && openRequirements === 0 && openTasks === 0 && openDefects === 0 && failedRows.length === 0,
+  };
 }
 
 export const usePm = create<PmState>((set, get) => ({
@@ -548,7 +584,16 @@ export const usePm = create<PmState>((set, get) => ({
     if (rows.length === 0 || rows.some((entry) => !entry.result)) {
       return { ok: false, message: "还有未记结果的用例，不能完成这次运行。" };
     }
-    set({ testRuns: data.testRuns.map((entry) => (entry.id === id ? { ...entry, status: "COMPLETED" } : entry)) });
+    const count = (result: TestResult) => rows.filter((entry) => entry.result === result).length;
+    const report = {
+      passed: count("PASSED"),
+      failed: count("FAILED"),
+      blocked: count("BLOCKED"),
+      skipped: count("SKIPPED"),
+      total: rows.length,
+      takenAt: nowIso(),
+    };
+    set({ testRuns: data.testRuns.map((entry) => (entry.id === id ? { ...entry, status: "COMPLETED" as const, report } : entry)) });
     return { ok: true };
   },
   cancelRun: (id, reason) => {
@@ -695,12 +740,11 @@ export const usePm = create<PmState>((set, get) => ({
     if (!project) return { ok: false, message: "项目不存在。" };
     const name = patch.name?.trim() ?? project.name;
     if (!name) return { ok: false, message: "项目名称不能为空。" };
+    const memberIds = patch.memberIds ?? project.memberIds;
+    const leadId = patch.leadId ?? project.leadId;
+    if (!memberIds.includes(leadId)) return { ok: false, message: "负责人必须是项目成员。" };
     set({
-      projects: get().projects.map((entry) =>
-        entry.id === id
-          ? { ...entry, name, summary: patch.summary?.trim() ?? entry.summary, memberIds: patch.memberIds ?? entry.memberIds }
-          : entry,
-      ),
+      projects: get().projects.map((entry) => (entry.id === id ? { ...entry, name, summary: patch.summary?.trim() ?? entry.summary, memberIds, leadId } : entry)),
     });
     return { ok: true };
   },
@@ -743,12 +787,120 @@ export const usePm = create<PmState>((set, get) => ({
       ),
     });
   },
+  updateCase: (id, patch) => {
+    const current = get().testCases.find((entry) => entry.id === id);
+    if (!current) return { ok: false, message: "用例不存在。" };
+    const steps = patch.steps?.map((step) => ({ action: step.action.trim(), expected: step.expected.trim() })).filter((step) => step.action || step.expected);
+    if (patch.suite !== undefined && patch.suite.trim() && !get().suites.some((entry) => entry.projectId === current.projectId && entry.name === patch.suite?.trim())) {
+      return { ok: false, message: "套件不存在。" };
+    }
+    if (patch.requirementId) {
+      const requirement = get().items.find((item) => item.id === patch.requirementId);
+      if (!requirement || requirement.kind !== "requirement" || requirement.projectId !== current.projectId) {
+        return { ok: false, message: "关联需求不属于这个项目。" };
+      }
+    }
+    set({
+      testCases: get().testCases.map((entry) =>
+        entry.id === id
+          ? {
+              ...entry,
+              precondition: patch.precondition !== undefined ? patch.precondition.trim() : entry.precondition,
+              steps: steps ?? entry.steps,
+              status: patch.status ?? entry.status,
+              suite: patch.suite !== undefined ? patch.suite.trim() : entry.suite,
+              requirementId: patch.requirementId !== undefined ? patch.requirementId : entry.requirementId,
+            }
+          : entry,
+      ),
+    });
+    return { ok: true };
+  },
+  copyCase: (id) => {
+    const data = get();
+    const current = data.testCases.find((entry) => entry.id === id);
+    if (!current) return { ok: false, message: "用例不存在。" };
+    const numbers = data.testCases
+      .filter((entry) => entry.projectId === current.projectId)
+      .map((entry) => Number(entry.key.split("-")[1]))
+      .filter((value) => Number.isFinite(value));
+    const next = Math.max(0, ...numbers) + 1;
+    const created: TestCase = {
+      ...current,
+      id: uid("tc"),
+      key: `TC-${next}`,
+      title: `${current.title} 副本`.slice(0, 80),
+      status: "DRAFT",
+      steps: current.steps?.map((step) => ({ ...step })),
+    };
+    set({ testCases: [created, ...data.testCases] });
+    return { ok: true, id: created.id };
+  },
+  assignCaseSuite: (id, suite) => {
+    const name = suite.trim();
+    const current = get().testCases.find((entry) => entry.id === id);
+    if (!current) return { ok: false, message: "用例不存在。" };
+    if (name && !get().suites.some((entry) => entry.projectId === current.projectId && entry.name === name)) {
+      return { ok: false, message: "套件不存在。" };
+    }
+    set({ testCases: get().testCases.map((entry) => (entry.id === id ? { ...entry, suite: name } : entry)) });
+    return { ok: true };
+  },
   reviewWorkLog: (id, status) => {
     const log = get().workLogs.find((entry) => entry.id === id);
     if (!log) return { ok: false, message: "工时不存在。" };
     if ((log.status ?? "APPROVED") !== "PENDING") return { ok: false, message: "只有待审批的工时可以处理。" };
     set({ workLogs: get().workLogs.map((entry) => (entry.id === id ? { ...entry, status } : entry)) });
     return { ok: true };
+  },
+  updateWorkLog: (id, patch) => {
+    const log = get().workLogs.find((entry) => entry.id === id);
+    if (!log) return { ok: false, message: "工时不存在。" };
+    if ((log.status ?? "APPROVED") !== "PENDING") return { ok: false, message: "已通过或已驳回的工时不能改，请另记一条。" };
+    if (!Number.isFinite(patch.hours) || patch.hours <= 0 || patch.hours > 24) return { ok: false, message: "工时要在 0 到 24 小时之间。" };
+    if (!patch.workDate) return { ok: false, message: "请填写日期。" };
+    set({
+      workLogs: get().workLogs.map((entry) =>
+        entry.id === id ? { ...entry, hours: patch.hours, workDate: patch.workDate, note: patch.note.trim() } : entry,
+      ),
+    });
+    return { ok: true };
+  },
+  setItemPlans: (updates) => {
+    const data = get();
+    const at = nowIso();
+    let items = data.items;
+    const feeds = [...data.feeds];
+    for (const update of updates) {
+      const item = items.find((entry) => entry.id === update.id);
+      if (!item || (item.planStart === update.planStart && item.planEnd === update.planEnd)) continue;
+      feeds.unshift({
+        id: uid("f"),
+        itemId: item.id,
+        projectId: item.projectId,
+        actorId: data.currentUserId,
+        text: `将 ${item.key} 的计划调整为 ${formatDay(update.planStart)} 至 ${formatDay(update.planEnd)}。`,
+        createdAt: at,
+      });
+      items = items.map((entry) => (entry.id === update.id ? { ...entry, planStart: update.planStart, planEnd: update.planEnd, updatedAt: at } : entry));
+    }
+    if (items !== data.items) set({ items, feeds });
+  },
+  saveBaseline: (projectId) => {
+    const data = get();
+    let count = 0;
+    const items = data.items.map((item) => {
+      if (item.projectId !== projectId) return item;
+      const sprint = data.sprints.find((entry) => entry.id === item.sprintId);
+      const start = item.planStart ?? sprint?.start;
+      const end = item.planEnd ?? sprint?.end;
+      if (!start || !end) return item;
+      count += 1;
+      return { ...item, baselineStart: start, baselineEnd: end };
+    });
+    if (count === 0) return { ok: false, message: "没有可记下的计划。" };
+    set({ items });
+    return { ok: true, count };
   },
   createEnvironment: (input) => {
     const name = input.name.trim();
@@ -774,17 +926,49 @@ export const usePm = create<PmState>((set, get) => ({
       createdAt: nowIso(),
     };
     set({ releases: [entry, ...get().releases] });
+    return { ok: true, id: entry.id };
+  },
+  submitRelease: (id) => {
+    const release = get().releases.find((entry) => entry.id === id);
+    if (!release) return { ok: false, message: "发布单不存在。" };
+    if (release.status !== "DRAFT") return { ok: false, message: "只有草稿可以提交审批。" };
+    set({ releases: get().releases.map((entry) => (entry.id === id ? { ...entry, status: "SUBMITTED" as const, decisionNote: null } : entry)) });
     return { ok: true };
   },
-  publishRelease: (id) => {
+  decideRelease: (id, decision, note) => {
+    const release = get().releases.find((entry) => entry.id === id);
+    if (!release) return { ok: false, message: "发布单不存在。" };
+    if (release.status !== "SUBMITTED") return { ok: false, message: "只有待审批的发布单可以审批。" };
+    const text = note.trim();
+    if (decision === "DRAFT" && !text) return { ok: false, message: "退回需要填写原因。" };
+    set({
+      releases: get().releases.map((entry) => (entry.id === id ? { ...entry, status: decision, decisionNote: text || null } : entry)),
+    });
+    return { ok: true };
+  },
+  publishRelease: (id, waiver) => {
     const data = get();
     const release = data.releases.find((entry) => entry.id === id);
     if (!release) return { ok: false, message: "发布单不存在。" };
     if (release.status === "PUBLISHED") return { ok: false, message: "发布单已经发布。" };
+    if (release.status !== "APPROVED") return { ok: false, message: "先通过审批，才能发布。" };
+    const gate = releaseGate(data, release.versionId);
+    const reason = waiver.trim();
+    if (!gate.ready && !reason) return { ok: false, message: "门禁未通过。未完成事项或失败用例还在，发布需要填写豁免原因。" };
     const at = nowIso();
+    const snapshot = {
+      takenAt: at,
+      items: gate.scope.map((item) => ({ id: item.id, key: item.key, title: item.title, kind: item.kind, status: item.status })),
+      openRequirements: gate.openRequirements,
+      openTasks: gate.openTasks,
+      openDefects: gate.openDefects,
+      failed: gate.failed,
+      failures: gate.failures,
+      waiver: gate.ready ? null : reason,
+    };
     set({
-      releases: data.releases.map((entry) => (entry.id === id ? { ...entry, status: "PUBLISHED" as const } : entry)),
-      notices: [{ id: uid("n"), text: `发布单「${release.title}」已发布。`, itemId: null, read: false, createdAt: at }, ...data.notices],
+      releases: data.releases.map((entry) => (entry.id === id ? { ...entry, status: "PUBLISHED" as const, snapshot } : entry)),
+      notices: [{ id: uid("n"), text: `发布单「${release.title}」已发布。`, itemId: null, kind: "release", read: false, createdAt: at }, ...data.notices],
     });
     return { ok: true };
   },
@@ -814,6 +998,18 @@ function withCaseSteps(cases: TestCase[] | undefined) {
   return list.map((entry) => (entry.steps?.length ? entry : { ...entry, steps: seedCasesById.get(entry.id)?.steps ?? [] }));
 }
 
+function withNoticeKind(notices: Notice[] | undefined) {
+  const list = notices ?? seed.notices;
+  return list.map((notice) => (notice.kind ? notice : { ...notice, kind: inferNoticeKind(notice) }));
+}
+
+function inferNoticeKind(notice: Notice): NoticeKind {
+  if (notice.text.includes("发布")) return "release";
+  if (notice.text.includes("Sprint") || notice.text.includes("迭代")) return "sprint";
+  if (notice.text.includes("提到") || notice.text.includes("评论")) return "mention";
+  return "item";
+}
+
 function withLogStatus(logs: WorkLog[] | undefined) {
   const list = logs ?? seed.workLogs;
   if (!list.some((entry) => !entry.status)) return list;
@@ -835,6 +1031,24 @@ const stringList: FieldCheck = (value) => Array.isArray(value) && value.every(te
 const optionalSteps: FieldCheck = (value) => value === undefined || (Array.isArray(value) && value.every((step) =>
   step !== null && typeof step === "object" && !Array.isArray(step) && text(step.action) && text(step.expected),
 ));
+const optionalReport: FieldCheck = (value) => {
+  if (value == null) return true;
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  const report = value as Record<string, unknown>;
+  return ["passed", "failed", "blocked", "skipped", "total"].every((key) => finiteNumber(report[key])) && text(report.takenAt);
+};
+const optionalSnapshot: FieldCheck = (value) => {
+  if (value == null) return true;
+  if (typeof value !== "object" || Array.isArray(value)) return false;
+  const snapshot = value as Record<string, unknown>;
+  const itemsOk = Array.isArray(snapshot.items) && snapshot.items.every((item) =>
+    item !== null && typeof item === "object" && !Array.isArray(item) && text(item.id) && text(item.key) && text(item.title) && text(item.kind) && text(item.status),
+  );
+  const failuresOk = snapshot.failures === undefined || (Array.isArray(snapshot.failures) && snapshot.failures.every((item) =>
+    item !== null && typeof item === "object" && !Array.isArray(item) && text(item.key) && text(item.title) && text(item.result),
+  ));
+  return text(snapshot.takenAt) && itemsOk && finiteNumber(snapshot.openRequirements) && finiteNumber(snapshot.openTasks) && finiteNumber(snapshot.openDefects) && finiteNumber(snapshot.failed) && (snapshot.waiver == null || text(snapshot.waiver)) && failuresOk;
+};
 const recordChecks = {
   people: { id: text, name: text, role: text },
   projects: { id: text, key: text, name: text, summary: text, leadId: text, memberIds: stringList },
@@ -844,21 +1058,21 @@ const recordChecks = {
     id: text, key: text, projectId: text, kind: text, requirementType: nullableText, taskType: nullableText, defectType: nullableText, severity: nullableText,
     title: text, description: text, priority: text, status: text, assigneeId: nullableText, reporterId: text, sprintId: nullableText, versionId: nullableText,
     parentId: nullableText, storyPoints: nullableNumber, progress: finiteNumber, estimatedHours: nullableNumber, tags: stringList,
-    createdAt: text, updatedAt: text, planStart: optionalText, planEnd: optionalText,
+    createdAt: text, updatedAt: text, planStart: optionalText, planEnd: optionalText, baselineStart: optionalText, baselineEnd: optionalText,
   },
   comments: { id: text, itemId: text, authorId: text, body: text, createdAt: text },
   feeds: { id: text, itemId: text, projectId: text, actorId: text, text, createdAt: text },
   histories: { id: text, itemId: text, fromStatus: text, toStatus: text, transitionName: text, actorId: text, reason: nullableText, createdAt: text },
-  notices: { id: text, text, itemId: nullableText, read: (value: unknown) => typeof value === "boolean", createdAt: text },
-  testCases: { id: text, key: text, projectId: text, title: text, testType: text, priority: text, status: text, suite: text, requirementId: nullableText, assigneeId: nullableText, steps: optionalSteps },
-  testRuns: { id: text, projectId: text, name: text, runType: text, status: text, environment: text, versionId: nullableText, sourceRunId: nullableText, cancelReason: nullableText },
+  notices: { id: text, text, itemId: nullableText, read: (value: unknown) => typeof value === "boolean", createdAt: text, kind: optionalText },
+  testCases: { id: text, key: text, projectId: text, title: text, testType: text, priority: text, status: text, suite: text, requirementId: nullableText, assigneeId: nullableText, precondition: optionalText, steps: optionalSteps },
+  testRuns: { id: text, projectId: text, name: text, runType: text, status: text, environment: text, versionId: nullableText, sourceRunId: nullableText, cancelReason: nullableText, report: optionalReport },
   testExecutions: { id: text, runId: text, caseId: text, result: nullableText, defectId: nullableText },
   workLogs: { id: text, projectId: text, itemId: text, userId: text, hours: finiteNumber, workDate: text, note: text, status: optionalText },
   dependencies: { id: text, projectId: text, predecessorId: text, successorId: text, dependencyType: text, lagDays: finiteNumber, memo: text, status: text },
   boards: { id: text, projectId: text, name: text, sprintId: nullableText },
   suites: { id: text, projectId: text, name: text },
   environments: { id: text, projectId: text, name: text, kind: text },
-  releases: { id: text, projectId: text, versionId: text, environmentId: nullableText, title: text, summary: text, status: text, createdAt: text },
+  releases: { id: text, projectId: text, versionId: text, environmentId: nullableText, title: text, summary: text, status: text, createdAt: text, decisionNote: nullableText, snapshot: optionalSnapshot },
 } satisfies RecordChecks;
 
 function assertRenderableRecord(collection: string, entry: unknown) {
@@ -891,7 +1105,7 @@ function decodePersistedPm(raw: unknown): PmData {
     comments: data.comments ?? seed.comments,
     feeds: data.feeds ?? seed.feeds,
     histories: data.histories ?? seed.histories,
-    notices: data.notices ?? seed.notices,
+    notices: withNoticeKind(data.notices),
     testCases: withCaseSteps(data.testCases),
     testRuns: mergeById(data.testRuns, seed.testRuns),
     testExecutions: mergeById(data.testExecutions, seed.testExecutions),

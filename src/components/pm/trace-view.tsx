@@ -3,7 +3,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { EmptyHint, IssueTypeIcon, PageHeading, StateChip, StatusChip, VersionStatusChip } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { TEST_CASE_STATUS_LABEL, TEST_RESULT_LABEL, type TestResult, type WorkItem } from "@/lib/pm/domain";
-import { openDefects, traceGaps, traceRequirement, type RequirementTrace, type TraceGap } from "@/lib/pm/trace";
+import { openDefects, traceGaps, traceRequirement, evidenceMatrix, type RequirementTrace, type TraceGap } from "@/lib/pm/trace";
 import { usePm } from "@/lib/pm/store";
 import { cn } from "@/lib/utils";
 import type { StateTone } from "@/components/biz/state-tone";
@@ -84,22 +84,23 @@ export function TraceView({ projectKey }: { projectKey: string }) {
           );
         })}
       </div>
-      {selected ? <TraceDetail trace={selected} histories={histories} people={people} onOpen={goToItem} /> : null}
+      {selected ? <TraceDetail trace={selected} histories={histories} people={people} items={items} onOpen={goToItem} /> : null}
     </div>
   );
 }
 
-function TraceDetail({ trace, histories, people, onOpen }: { trace: RequirementTrace; histories: { id: string; itemId: string; fromStatus: string; toStatus: string; transitionName: string; actorId: string; reason: string | null; createdAt: string }[]; people: { id: string; name: string }[]; onOpen: (id: string) => void }) {
+function TraceDetail({ trace, histories, people, items, onOpen }: { trace: RequirementTrace; histories: { id: string; itemId: string; fromStatus: string; toStatus: string; transitionName: string; actorId: string; reason: string | null; createdAt: string }[]; people: { id: string; name: string }[]; items: WorkItem[]; onOpen: (id: string) => void }) {
   const related = [trace.requirement, ...trace.children, ...trace.tasks, ...trace.defects];
   const ids = new Set(related.map((item) => item.id));
   const events = histories.filter((entry) => ids.has(entry.itemId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const matrix = evidenceMatrix(trace, items);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="type-section">
           {trace.requirement.key} {trace.requirement.title}
         </h2>
-        <Button variant="outline" onPress={() => exportTrace(trace)}>
+        <Button variant="outline" onPress={() => exportTrace(trace, items)}>
           导出
         </Button>
       </div>
@@ -148,6 +149,30 @@ function TraceDetail({ trace, histories, people, onOpen }: { trace: RequirementT
         </Bucket>
       </div>
       <section className="flex flex-col gap-2">
+        <h3 className="type-section">影响范围</h3>
+        <p className="type-body">改 {trace.requirement.key} 会碰到 {trace.tasks.length} 个任务、{trace.cases.length} 条用例、{trace.defects.length} 个缺陷、{trace.versions.length} 个版本。</p>
+        <div className="overflow-hidden rounded-sm border border-border bg-surface">
+          {[...trace.tasks.map((item) => `任务 ${item.key} ${item.title}`), ...trace.cases.map((entry) => `用例 ${entry.key} ${entry.title}`), ...trace.defects.map((item) => `缺陷 ${item.key} ${item.title}`), ...trace.versions.map((version) => `版本 ${version.versionNumber} ${version.name}`)].map((line) => (
+            <p key={line} className="type-body border-b border-border px-3 py-2 last:border-b-0">{line}</p>
+          ))}
+          {trace.tasks.length + trace.cases.length + trace.defects.length + trace.versions.length === 0 ? <p className="type-caption px-3 py-2">这条需求还没有带出任务、用例、缺陷或版本。</p> : null}
+        </div>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h3 className="type-section">证据矩阵</h3>
+        <div className="overflow-hidden rounded-sm border border-border bg-surface">
+          {matrix.length === 0 ? <p className="type-caption px-3 py-2">还没有挂上用例。</p> : null}
+          {matrix.map((row) => (
+            <div key={row.testCase.id} className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 last:border-b-0">
+              <span className="type-link">{row.testCase.key}</span>
+              <span className="type-body min-w-0 flex-1 truncate">{row.testCase.title}</span>
+              {row.result ? <StateChip tone={RESULT_TONE[row.result]}>{TEST_RESULT_LABEL[row.result]}</StateChip> : <StateChip tone="neutral">未测</StateChip>}
+              {row.defect ? <button type="button" className="type-link" onClick={() => onOpen(row.defect!.id)}>{row.defect.key}</button> : <span className="type-caption">无缺陷</span>}
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="flex flex-col gap-2">
         <h3 className="type-section">关系</h3>
         <div className="overflow-hidden rounded-sm border border-border bg-surface">
           {relationLines(trace).map((line) => (
@@ -178,7 +203,7 @@ function TraceDetail({ trace, histories, people, onOpen }: { trace: RequirementT
   );
 }
 
-function exportTrace(trace: RequirementTrace) {
+function exportTrace(trace: RequirementTrace, items: WorkItem[]) {
   const lines = ["关系,对象,标题"];
   const push = (relation: string, key: string, title: string) => lines.push([relation, key, title].map((value) => `"${value.replaceAll("\"", "\"\"")}"`).join(","));
   for (const item of trace.children) push("子需求", item.key, item.title);
@@ -187,6 +212,12 @@ function exportTrace(trace: RequirementTrace) {
   for (const item of trace.defects) push("缺陷", item.key, item.title);
   for (const version of trace.versions) push("版本", version.versionNumber, version.name);
   for (const run of trace.runs) push("运行", run.name, run.status);
+  for (const item of trace.tasks) push("影响-任务", item.key, item.title);
+  for (const entry of trace.cases) push("影响-用例", entry.key, entry.title);
+  for (const item of trace.defects) push("影响-缺陷", item.key, item.title);
+  for (const row of evidenceMatrix(trace, items)) {
+    push("证据", row.testCase.key, `${row.result ?? "未测"} ${row.defect?.key ?? ""}`.trim());
+  }
   const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

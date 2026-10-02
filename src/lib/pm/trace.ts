@@ -87,6 +87,20 @@ export function traceGaps(trace: RequirementTrace): TraceGap[] {
   return gaps;
 }
 
+export function evidenceMatrix(trace: RequirementTrace, items: WorkItem[]) {
+  return trace.cases.map((testCase) => {
+    const related = trace.executions.filter((entry) => entry.testCase.id === testCase.id);
+    const latest = [...related].reverse().find((entry) => entry.execution.result) ?? related.at(-1);
+    const defectId = [...related].reverse().find((entry) => entry.execution.defectId)?.execution.defectId ?? null;
+    return {
+      testCase,
+      result: latest?.execution.result ?? null,
+      runName: latest?.run?.name ?? "",
+      defect: items.find((item) => item.id === defectId) ?? null,
+    };
+  });
+}
+
 export function openDefects(trace: RequirementTrace) {
   return trace.defects.filter((item) => columnOf(item.kind, item.status) !== "done" && columnOf(item.kind, item.status) !== "cancelled");
 }

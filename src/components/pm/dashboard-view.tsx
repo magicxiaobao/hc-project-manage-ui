@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { EmptyHint, IssueTypeIcon, PageHeading, StatusChip } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
+import { aggregate } from "@/components/pm/stats-view";
 import { columnOf, workLogStatus } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 
@@ -12,10 +13,16 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
   const runs = usePm((state) => state.testRuns);
   const executions = usePm((state) => state.testExecutions);
   const logs = usePm((state) => state.workLogs);
+  const people = usePm((state) => state.people);
+  const histories = usePm((state) => state.histories);
   const currentUserId = usePm((state) => state.currentUserId);
   const goToItem = useGoToItem();
   const projectItems = useMemo(() => items.filter((item) => item.projectId === project?.id), [items, project?.id]);
-  if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
+  const summary = useMemo(
+    () => (project ? aggregate(project.id, items, people, sprints, versions, logs, histories) : null),
+    [project, items, people, sprints, versions, logs, histories],
+  );
+  if (!project || !summary) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
   const active = sprints.find((sprint) => sprint.projectId === project.id && sprint.state === "active");
   const sprintItems = active ? projectItems.filter((item) => item.sprintId === active.id) : [];
@@ -48,6 +55,11 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
           </button>
         ))}
       </section>
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <BarGroup title="需求状态" rows={summary.requirementStatuses.map((row) => ({ id: row.status, label: row.label, value: row.count }))} />
+        <BarGroup title="未关缺陷" rows={summary.severities.map((row) => ({ id: row.severity, label: row.label, value: row.count }))} empty="没有未关缺陷。" />
+      </section>
+      <BarGroup title="近四周完成" rows={summary.weeks.map((week) => ({ id: week.start, label: week.label, value: week.count }))} />
       <section className="rounded-sm border border-border bg-surface p-4">
         <h2 className="type-section">进行中的版本</h2>
         {testing.length === 0 ? <p className="type-meta mt-2">没有开发中或测试中的版本。</p> : null}
@@ -58,6 +70,27 @@ export function DashboardView({ projectKey }: { projectKey: string }) {
         ))}
       </section>
     </div>
+  );
+}
+
+function BarGroup({ title, rows, empty = "没有数据。" }: { title: string; rows: { id: string; label: string; value: number }[]; empty?: string }) {
+  const max = Math.max(1, ...rows.map((row) => row.value));
+  return (
+    <section className="rounded-sm border border-border bg-surface p-4">
+      <h2 className="type-section">{title}</h2>
+      {rows.length === 0 ? <p className="type-meta mt-2">{empty}</p> : null}
+      <div className="mt-3 flex flex-col gap-2">
+        {rows.map((row) => (
+          <div key={row.id} className="grid grid-cols-[72px_minmax(0,1fr)_32px] items-center gap-2">
+            <span className="type-caption truncate">{row.label}</span>
+            <span className="h-2 overflow-hidden rounded-sm bg-line">
+              <span className="block h-full rounded-sm bg-primary" style={{ width: `${(row.value / max) * 100}%` }} />
+            </span>
+            <span className="type-caption text-right">{row.value}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

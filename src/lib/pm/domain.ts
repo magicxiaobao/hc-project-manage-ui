@@ -1,3 +1,5 @@
+import { findScheduleHits, type PlanRange } from "./schedule";
+
 export type ItemKind = "requirement" | "task" | "defect";
 export type Priority = "HIGH" | "MEDIUM" | "LOW";
 export type ColumnId = "todo" | "doing" | "check" | "done";
@@ -67,6 +69,8 @@ export interface WorkItem {
   updatedAt: string;
   planStart?: string;
   planEnd?: string;
+  baselineStart?: string;
+  baselineEnd?: string;
 }
 
 export interface Comment {
@@ -97,13 +101,23 @@ export interface LifecycleRecord {
   createdAt: string;
 }
 
+export type NoticeKind = "mention" | "item" | "sprint" | "release";
+
 export interface Notice {
   id: string;
   text: string;
   itemId: string | null;
   read: boolean;
   createdAt: string;
+  kind: NoticeKind;
 }
+
+export const NOTICE_KIND_LABEL: Record<NoticeKind, string> = {
+  mention: "提及",
+  item: "事项",
+  sprint: "迭代",
+  release: "发布",
+};
 
 export type TestCaseStatus = "DRAFT" | "ACTIVE" | "REVIEW" | "ARCHIVED";
 export type TestRunStatus = "CREATED" | "RUNNING" | "COMPLETED" | "CANCELLED";
@@ -125,7 +139,17 @@ export interface TestCase {
   suite: string;
   requirementId: string | null;
   assigneeId: string | null;
+  precondition?: string;
   steps?: TestStep[];
+}
+
+export interface TestRunReport {
+  passed: number;
+  failed: number;
+  blocked: number;
+  skipped: number;
+  total: number;
+  takenAt: string;
 }
 
 export interface TestRun {
@@ -138,6 +162,7 @@ export interface TestRun {
   versionId: string | null;
   sourceRunId?: string | null;
   cancelReason?: string | null;
+  report?: TestRunReport | null;
 }
 
 export interface TestExecution {
@@ -181,7 +206,26 @@ export interface ReleaseEnvironment {
   kind: string;
 }
 
-export type ReleaseStatus = "DRAFT" | "PUBLISHED";
+export type ReleaseStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "PUBLISHED";
+
+export interface ReleaseSnapshotItem {
+  id: string;
+  key: string;
+  title: string;
+  kind: ItemKind;
+  status: string;
+}
+
+export interface ReleaseSnapshot {
+  takenAt: string;
+  items: ReleaseSnapshotItem[];
+  openRequirements: number;
+  openTasks: number;
+  openDefects: number;
+  failed: number;
+  waiver: string | null;
+  failures?: { key: string; title: string; result: string }[];
+}
 
 export interface ReleaseRecord {
   id: string;
@@ -192,6 +236,8 @@ export interface ReleaseRecord {
   summary: string;
   status: ReleaseStatus;
   createdAt: string;
+  decisionNote?: string | null;
+  snapshot?: ReleaseSnapshot | null;
 }
 
 export const WORK_LOG_STATUS_LABEL: Record<WorkLogStatus, string> = {
@@ -202,6 +248,8 @@ export const WORK_LOG_STATUS_LABEL: Record<WorkLogStatus, string> = {
 
 export const RELEASE_STATUS_LABEL: Record<ReleaseStatus, string> = {
   DRAFT: "草稿",
+  SUBMITTED: "待审批",
+  APPROVED: "已通过",
   PUBLISHED: "已发布",
 };
 
@@ -285,28 +333,23 @@ export function itemPlan(item: WorkItem, sprints: Sprint[]) {
   return { start: start.slice(0, 10), end: end.slice(0, 10) };
 }
 
-function shiftDay(iso: string, days: number) {
-  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + days));
-  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const nextDay = String(date.getUTCDate()).padStart(2, "0");
-  return `${date.getUTCFullYear()}-${nextMonth}-${nextDay}`;
+export function scheduleConflicts(dependencies: TaskDependency[], items: WorkItem[], sprints: Sprint[]) {
+  const plans: Record<string, PlanRange> = {};
+  for (const item of items) {
+    const plan = itemPlan(item, sprints);
+    if (plan) plans[item.id] = plan;
+  }
+  return findScheduleHits(dependencies, plans).flatMap((hit) => {
+    const dependency = dependencies.find((entry) => entry.id === hit.id);
+    const predecessor = items.find((item) => item.id === hit.predecessorId);
+    const successor = items.find((item) => item.id === hit.successorId);
+    if (!dependency || !predecessor || !successor) return [];
+    return [{ dependency, predecessor, successor, ready: hit.ready, actual: hit.actual, from: hit.from, to: hit.to, start: hit.actual }];
+  });
 }
 
 export function fsScheduleConflicts(dependencies: TaskDependency[], items: WorkItem[], sprints: Sprint[]) {
-  const conflicts: { dependency: TaskDependency; predecessor: WorkItem; successor: WorkItem; ready: string; start: string }[] = [];
-  for (const dependency of dependencies) {
-    if (dependency.status !== "ACTIVE" || dependency.dependencyType !== "FS") continue;
-    const predecessor = items.find((item) => item.id === dependency.predecessorId);
-    const successor = items.find((item) => item.id === dependency.successorId);
-    if (!predecessor || !successor) continue;
-    const before = itemPlan(predecessor, sprints);
-    const after = itemPlan(successor, sprints);
-    if (!before || !after) continue;
-    const ready = shiftDay(before.end, dependency.lagDays);
-    if (ready > after.start) conflicts.push({ dependency, predecessor, successor, ready, start: after.start });
-  }
-  return conflicts;
+  return scheduleConflicts(dependencies, items, sprints).filter((conflict) => conflict.dependency.dependencyType === "FS");
 }
 
 /** 完成-开始：后置任务开始或继续时，未完成且未取消的前置任务构成阻塞。 */

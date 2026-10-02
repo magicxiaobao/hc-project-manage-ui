@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { RotateCcw, X } from "lucide-react";
 import type { Notice } from "@/lib/pm/domain";
-import { formatRelative } from "@/lib/pm/domain";
+import { formatRelative, NOTICE_KIND_LABEL } from "@/lib/pm/domain";
 
 export function NoticePanel({
   notices,
@@ -37,7 +37,7 @@ export function NoticePanel({
               }}
             >
               <span className="type-body">{notice.text}</span>
-              <span className="type-caption">{formatRelative(notice.createdAt)}</span>
+              <span className="type-caption">{NOTICE_KIND_LABEL[notice.kind]} · {formatRelative(notice.createdAt)}</span>
             </button>
           </li>
         ))}

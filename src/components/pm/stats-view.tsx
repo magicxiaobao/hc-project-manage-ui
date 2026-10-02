@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { EmptyHint, PageHeading, SeverityChip, SprintStateChip, StatusChip, VersionStatusChip } from "@/components/biz";
+import { EmptyHint, PageHeading, SprintStateChip, StatusChip, VersionStatusChip } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
-import { columnOf, priorityLabel, REQUIREMENT_STATUS_LABEL, type Person, type ReleaseVersion, type Sprint, type WorkItem, type WorkLog } from "@/lib/pm/domain";
+import { columnOf, priorityLabel, REQUIREMENT_STATUS_LABEL, type LifecycleRecord, type Person, type ReleaseVersion, type Sprint, type WorkItem, type WorkLog } from "@/lib/pm/domain";
+import { severityLabel } from "@/components/biz/severity";
 import { usePm } from "@/lib/pm/store";
 
 const REQUIREMENT_ORDER = ["DRAFT", "REVIEW", "APPROVED", "IN_DEVELOPMENT", "COMPLETED", "CANCELLED"] as const;
@@ -10,11 +11,48 @@ const KIND_LABEL = { requirement: "需求", task: "任务", defect: "缺陷" } a
 
 type Count = { total: number; done: number; open: number };
 
+const SEVERITY_ORDER = ["BLOCKER", "CRITICAL", "MAJOR", "NORMAL", "MINOR", "TRIVIAL"];
+
+function mondayOf(iso: string) {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const nextDay = String(date.getUTCDate()).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${nextMonth}-${nextDay}`;
+}
+
+function recentWeeks(items: WorkItem[], histories: LifecycleRecord[], projectId: string) {
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const current = mondayOf(todayIso);
+  const weeks = [0, 1, 2, 3].map((ago) => shiftWeek(current, -ago)).reverse();
+  const byId = new Map(items.filter((item) => item.projectId === projectId).map((item) => [item.id, item]));
+  const seen = new Map(weeks.map((start) => [start, new Set<string>()]));
+  for (const history of histories) {
+    const item = byId.get(history.itemId);
+    const bucket = seen.get(mondayOf(history.createdAt));
+    if (!item || !bucket) continue;
+    if (columnOf(item.kind, history.toStatus) !== "done") continue;
+    if (columnOf(item.kind, history.fromStatus) === "done") continue;
+    bucket.add(item.id);
+  }
+  return weeks.map((start) => ({ start, label: `${Number(start.slice(5, 7))}/${Number(start.slice(8))}`, count: seen.get(start)?.size ?? 0 }));
+}
+
+function shiftWeek(iso: string, weeks: number) {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + weeks * 7));
+  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const nextDay = String(date.getUTCDate()).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${nextMonth}-${nextDay}`;
+}
+
 function emptyCount(): Count {
   return { total: 0, done: 0, open: 0 };
 }
 
-function aggregate(projectId: string, items: WorkItem[], people: Person[], sprints: Sprint[], versions: ReleaseVersion[], workLogs: WorkLog[]) {
+export function aggregate(projectId: string, items: WorkItem[], people: Person[], sprints: Sprint[], versions: ReleaseVersion[], workLogs: WorkLog[], histories: LifecycleRecord[]) {
   const kinds = {
     requirement: emptyCount(),
     task: emptyCount(),
@@ -138,7 +176,9 @@ function aggregate(projectId: string, items: WorkItem[], people: Person[], sprin
     versions: versions
       .filter((version) => version.projectId === projectId)
       .map((version) => ({ ...version, ...(byVersion.get(version.id) ?? emptyCount()) })),
-    severities: [...bySeverity.entries()].map(([severity, count]) => ({ severity, count })),
+    severities: SEVERITY_ORDER.filter((severity) => bySeverity.has(severity)).map((severity) => ({ severity, label: severityLabel(severity), count: bySeverity.get(severity) ?? 0 })),
+    severityMax: Math.max(1, ...SEVERITY_ORDER.map((severity) => bySeverity.get(severity) ?? 0)),
+    weeks: recentWeeks(items, histories, projectId),
     urgent,
   };
 }
@@ -150,10 +190,11 @@ export function StatsView({ projectKey }: { projectKey: string }) {
   const sprints = usePm((state) => state.sprints);
   const versions = usePm((state) => state.versions);
   const workLogs = usePm((state) => state.workLogs);
+  const histories = usePm((state) => state.histories);
   const goToItem = useGoToItem();
   const summary = useMemo(
-    () => (project ? aggregate(project.id, items, people, sprints, versions, workLogs) : null),
-    [project, items, people, sprints, versions, workLogs],
+    () => (project ? aggregate(project.id, items, people, sprints, versions, workLogs, histories) : null),
+    [project, items, people, sprints, versions, workLogs, histories],
   );
 
   if (!project || !summary) return <EmptyHint>没有找到这个项目。</EmptyHint>;
@@ -239,16 +280,22 @@ export function StatsView({ projectKey }: { projectKey: string }) {
       {summary.severities.length > 0 ? (
         <section className="rounded-sm border border-border bg-surface p-4">
           <h2 className="type-section">未关缺陷</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-col gap-2">
             {summary.severities.map((row) => (
-              <span key={row.severity} className="flex items-center gap-2">
-                <SeverityChip severity={row.severity} />
-                <span className="type-caption">{row.count}</span>
-              </span>
+              <Meter key={row.severity} label={row.label} value={row.count} max={summary.severityMax} total={row.count} bare />
             ))}
           </div>
         </section>
       ) : null}
+      <section className="rounded-sm border border-border bg-surface p-4">
+        <h2 className="type-section">近四周完成</h2>
+        <p className="type-meta mt-1">按流转到完成的次数算，同一事项一周内只计一次。</p>
+        <div className="mt-3 flex flex-col gap-2">
+          {summary.weeks.map((week) => (
+            <Meter key={week.start} label={week.label} value={week.count} max={Math.max(1, ...summary.weeks.map((entry) => entry.count))} total={week.count} bare />
+          ))}
+        </div>
+      </section>
       <section className="overflow-hidden rounded-sm border border-border bg-surface">
         <h2 className="type-section border-b border-border px-4 py-3">高优先级未完成</h2>
         {summary.urgent.length === 0 ? <p className="type-meta px-4 py-3">没有高优先级的未完成事项。</p> : null}

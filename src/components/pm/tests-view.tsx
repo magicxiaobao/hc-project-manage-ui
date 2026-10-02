@@ -1,8 +1,8 @@
 import { notifyPmChange } from "@/lib/pm/feedback";
-import { Button, Input, Label, TextField } from "@heroui/react";
+import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { EmptyHint, LabeledField, OptionSelect, PageHeading, PersonAvatar, PriorityMark, StateAction, StateChip, VersionSelect } from "@/components/biz";
+import { AppModal, EmptyHint, LabeledField, OptionSelect, PageHeading, PersonAvatar, PriorityMark, StateAction, StateChip, VersionSelect } from "@/components/biz";
 import type { StateTone } from "@/components/biz/state-tone";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { TEST_CASE_STATUS_LABEL, TEST_RESULT_LABEL, TEST_RUN_STATUS_LABEL, type TestExecution, type TestResult, type TestRun, type TestRunStatus } from "@/lib/pm/domain";
@@ -57,9 +57,9 @@ export function TestsView({ projectKey }: { projectKey: string }) {
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [suiteName, setSuiteName] = useState("");
-  const [openCase, setOpenCase] = useState<string | null>(null);
-  const [stepAction, setStepAction] = useState("");
-  const [stepExpected, setStepExpected] = useState("");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [joinCase, setJoinCase] = useState<Record<string, string>>({});
   const suiteRecords = usePm((state) => state.suites);
   const goToItem = useGoToItem();
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
@@ -78,8 +78,11 @@ export function TestsView({ projectKey }: { projectKey: string }) {
     return run && run.status !== "CANCELLED" && (execution.result === "FAILED" || execution.result === "BLOCKED") && !execution.defectId;
   }).length;
   const failedRows = rows.filter((entry) => entry.result === "FAILED" || entry.result === "BLOCKED");
-  const passed = count("PASSED");
-  const rate = rows.length ? Math.round((passed / rows.length) * 100) : 0;
+  const frozen = activeRun?.report;
+  const passed = frozen?.passed ?? count("PASSED");
+  const skipped = frozen?.skipped ?? count("SKIPPED");
+  const reportedTotal = frozen?.total ?? rows.length;
+  const rate = reportedTotal ? Math.round((passed / reportedTotal) * 100) : 0;
 
   const apply = (result: { ok: true } | { ok: false; message: string }, done?: () => void) => {
     if (!result.ok) {
@@ -343,8 +346,9 @@ export function TestsView({ projectKey }: { projectKey: string }) {
           <section className="rounded-sm border border-border bg-surface p-4">
             <h2 className="type-section">运行报告</h2>
             <p className="type-meta mt-1">
-              通过率 {rate}% · 跳过 {count("SKIPPED")} · {rows.length} 条
+              通过率 {rate}% · 跳过 {skipped} · {reportedTotal} 条
             </p>
+            {frozen ? <p className="type-caption mt-1">这是完成时定格的计数，之后改用例不会改这些数字。</p> : activeRun.status === "COMPLETED" ? <p className="type-caption mt-1">这次完成时没有定格，数字按当前结果计算。</p> : null}
             <p className="type-body mt-2">{verdict(activeRun, rows)}</p>
             {failedRows.length > 0 ? (
               <div className="mt-3 flex flex-col">
@@ -372,7 +376,10 @@ export function TestsView({ projectKey }: { projectKey: string }) {
           </section>
         </>
       ) : null}
-      <h2 className="type-section">用例库</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="type-section">用例库</h2>
+        <Button variant="outline" onPress={() => setShowArchived((value) => !value)}>{showArchived ? "隐藏已归档" : "显示已归档"}</Button>
+      </div>
       <form
         className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4 sm:flex-row sm:items-end"
         onSubmit={(event) => {
@@ -394,66 +401,54 @@ export function TestsView({ projectKey }: { projectKey: string }) {
         </Button>
       </form>
       {suites.length === 0 ? <EmptyHint>这个项目还没有用例。</EmptyHint> : null}
-      {suites.map((suite) => (
-        <section key={suite} className="overflow-hidden rounded-sm border border-border bg-surface">
-          <div className="type-label border-b border-border px-3 py-2">{suite}</div>
-          {projectCases
-            .filter((entry) => entry.suite === suite)
-            .map((testCase) => {
+      {suites.filter(Boolean).map((suite) => {
+        const members = projectCases.filter((entry) => entry.suite === suite && (showArchived || entry.status !== "ARCHIVED"));
+        const candidates = projectCases.filter((entry) => entry.status !== "ARCHIVED" && entry.suite !== suite);
+        return (
+          <section key={suite} className="overflow-hidden rounded-sm border border-border bg-surface">
+            <div className="type-label border-b border-border px-3 py-2">{suite} · {members.length}</div>
+            {members.length === 0 ? <p className="type-caption px-3 py-2">套件里还没有用例。</p> : null}
+            {members.map((testCase) => {
               const requirement = items.find((item) => item.id === testCase.requirementId);
               return (
-                <div key={testCase.id} className="border-b border-border last:border-b-0">
-                  <button type="button" className="flex w-full flex-wrap items-center gap-2 px-3 py-2 text-left" onClick={() => setOpenCase((current) => (current === testCase.id ? null : testCase.id))}>
+                <div key={testCase.id} className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+                  <button type="button" className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-left" onClick={() => setDetailId(testCase.id)}>
                     <span className="type-link">{testCase.key}</span>
                     <span className="type-body min-w-0 flex-1 truncate">{testCase.title}</span>
-                    <span className="type-caption hidden sm:inline">{testCase.testType}</span>
                     <StateChip tone={testCase.status === "ACTIVE" ? "done" : testCase.status === "REVIEW" ? "review" : "neutral"}>{TEST_CASE_STATUS_LABEL[testCase.status]}</StateChip>
                     <span className="type-caption">{testCase.steps?.length ?? 0} 步</span>
+                    {requirement ? <span className="type-caption">{requirement.key}</span> : null}
                   </button>
-                  {requirement ? (
-                    <div className="px-3 pb-2">
-                      <button type="button" className="type-link" onClick={() => goToItem(requirement.id)}>
-                        {requirement.key}
-                      </button>
-                    </div>
-                  ) : null}
-                  {openCase === testCase.id ? (
-                    <div className="flex flex-col gap-2 px-3 pb-3">
-                      {(testCase.steps ?? []).length === 0 ? <p className="type-meta">还没有步骤。</p> : null}
-                      {(testCase.steps ?? []).map((step, index) => (
-                        <p key={`${testCase.id}-${index}`} className="type-body">
-                          {index + 1}. {step.action}
-                          <span className="type-caption"> → {step.expected}</span>
-                        </p>
-                      ))}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-                        <TextField value={stepAction} onChange={setStepAction}>
-                          <Label>操作</Label>
-                          <Input />
-                        </TextField>
-                        <TextField value={stepExpected} onChange={setStepExpected}>
-                          <Label>期望</Label>
-                          <Input />
-                        </TextField>
-                        <Button
-                          variant="primary"
-                          onPress={() => {
-                            if (!stepAction.trim() && !stepExpected.trim()) return;
-                            usePm.getState().saveCaseSteps(testCase.id, [...(testCase.steps ?? []), { action: stepAction, expected: stepExpected }]);
-                            setStepAction("");
-                            setStepExpected("");
-                          }}
-                        >
-                          加一步
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
+                  <Button variant="outline" onPress={() => {
+                    const result = usePm.getState().assignCaseSuite(testCase.id, "");
+                    if (!result.ok) toast.error(result.message);
+                  }}>移出</Button>
                 </div>
               );
             })}
+            <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <OptionSelect label="加入用例" value={joinCase[suite] ?? ""} options={candidates.map((entry) => ({ id: entry.id, label: `${entry.key} ${entry.title}` }))} onChange={(id) => setJoinCase((current) => ({ ...current, [suite]: id }))} />
+              <Button variant="primary" onPress={() => {
+                const result = usePm.getState().assignCaseSuite(joinCase[suite] ?? "", suite);
+                if (!result.ok) toast.error(result.message);
+                else setJoinCase((current) => ({ ...current, [suite]: "" }));
+              }}>加入</Button>
+            </div>
+          </section>
+        );
+      })}
+      {projectCases.some((entry) => !entry.suite && (showArchived || entry.status !== "ARCHIVED")) ? (
+        <section className="overflow-hidden rounded-sm border border-border bg-surface">
+          <div className="type-label border-b border-border px-3 py-2">未分套件</div>
+          {projectCases.filter((entry) => !entry.suite && (showArchived || entry.status !== "ARCHIVED")).map((testCase) => (
+            <button key={testCase.id} type="button" className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left last:border-b-0" onClick={() => setDetailId(testCase.id)}>
+              <span className="type-link">{testCase.key}</span>
+              <span className="type-body min-w-0 flex-1 truncate">{testCase.title}</span>
+            </button>
+          ))}
         </section>
-      ))}
+      ) : null}
+      {detailId ? <CaseDetail key={detailId} caseId={detailId} onClose={() => setDetailId(null)} onOpen={setDetailId} /> : null}
     </div>
   );
 }
@@ -464,5 +459,85 @@ function Stat({ label, value }: { label: string; value: number }) {
       <div className="type-caption">{label}</div>
       <div className="type-section mt-1">{value}</div>
     </div>
+  );
+}
+
+function CaseDetail({ caseId, onClose, onOpen }: { caseId: string; onClose: () => void; onOpen: (id: string) => void }) {
+  const current = usePm((state) => state.testCases.find((entry) => entry.id === caseId));
+  const requirements = usePm((state) => state.items.filter((item) => item.projectId === current?.projectId && item.kind === "requirement"));
+  const suiteNames = usePm((state) => state.suites.filter((entry) => entry.projectId === current?.projectId).map((entry) => entry.name));
+  const [precondition, setPrecondition] = useState(current?.precondition ?? "");
+  const [steps, setSteps] = useState(current?.steps ?? []);
+  const [suite, setSuite] = useState(current?.suite ?? "");
+  const [requirementId, setRequirementId] = useState(current?.requirementId ?? "");
+  const [action, setAction] = useState("");
+  const [expected, setExpected] = useState("");
+  if (!current) return null;
+  return (
+    <AppModal open title={`${current.key} ${current.title}`} onClose={onClose} size="lg">
+      <div className="flex flex-col gap-3">
+        <p className="type-caption">{TEST_CASE_STATUS_LABEL[current.status]}</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <OptionSelect label="套件" value={suite} options={[{ id: "", label: "未分套件" }, ...suiteNames.map((name) => ({ id: name, label: name }))]} onChange={setSuite} />
+          <OptionSelect label="关联需求" value={requirementId} options={[{ id: "", label: "不关联" }, ...requirements.map((item) => ({ id: item.id, label: `${item.key} ${item.title}` }))]} onChange={setRequirementId} />
+        </div>
+        <TextField value={precondition} onChange={setPrecondition}>
+          <Label>前置条件</Label>
+          <TextArea placeholder="执行前要满足什么" />
+        </TextField>
+        <div className="flex flex-col gap-2">
+          <h3 className="type-section">步骤</h3>
+          {steps.length === 0 ? <p className="type-meta">还没有步骤。</p> : null}
+          {steps.map((step, index) => (
+            <div key={`${current.id}-${index}`} className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="type-body">{index + 1}. {step.action}</p>
+                <p className="type-caption">期望：{step.expected || "未写"}</p>
+              </div>
+              <Button variant="outline" onPress={() => setSteps(steps.filter((_, stepIndex) => stepIndex !== index))}>移除</Button>
+            </div>
+          ))}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <TextField value={action} onChange={setAction}>
+              <Label>操作</Label>
+              <Input />
+            </TextField>
+            <TextField value={expected} onChange={setExpected}>
+              <Label>期望</Label>
+              <Input />
+            </TextField>
+          </div>
+          <div>
+            <Button variant="outline" onPress={() => {
+              if (!action.trim() && !expected.trim()) return;
+              setSteps([...steps, { action, expected }]);
+              setAction("");
+              setExpected("");
+            }}>加一步</Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onPress={() => {
+            const result = usePm.getState().updateCase(current.id, { precondition, steps, suite, requirementId: requirementId || null });
+            if (!result.ok) toast.error(result.message);
+            else notifyPmChange("已保存用例");
+          }}>保存</Button>
+          <Button variant="outline" onPress={() => {
+            const result = usePm.getState().copyCase(current.id);
+            if (!result.ok) toast.error(result.message);
+            else {
+              notifyPmChange("已复制为草稿");
+              onOpen(result.id);
+            }
+          }}>复制</Button>
+          <Button variant="outline" onPress={() => {
+            const next = current.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
+            const result = usePm.getState().updateCase(current.id, { status: next });
+            if (!result.ok) toast.error(result.message);
+            else onClose();
+          }}>{current.status === "ARCHIVED" ? "恢复" : "归档"}</Button>
+        </div>
+      </div>
+    </AppModal>
   );
 }

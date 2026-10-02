@@ -1,7 +1,11 @@
 import { useMemo, useState, type PointerEvent } from "react";
+import { Button } from "@heroui/react";
+import { toast } from "sonner";
 import { EmptyHint, IssueTypeIcon, PageHeading } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import type { WorkItem } from "@/lib/pm/domain";
+import { formatDay, scheduleConflicts } from "@/lib/pm/domain";
+import { alignPlans, dependencyAnchor, type PlanRange } from "@/lib/pm/schedule";
 import { cn } from "@/lib/utils";
 import { usePm } from "@/lib/pm/store";
 
@@ -45,13 +49,13 @@ export function GanttView({ projectKey }: { projectKey: string }) {
   const dependencies = usePm((state) => state.dependencies);
   const items = useMemo(() => allItems.filter((entry) => entry.projectId === project?.id), [allItems, project?.id]);
   const goToItem = useGoToItem();
-  const [draft, setDraft] = useState<{ id: string; start: string; end: string } | null>(null);
+  const [draft, setDraft] = useState<Record<string, PlanRange> | null>(null);
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
   const rows = items
     .map((item) => {
       const sprint = sprints.find((entry) => entry.id === item.sprintId);
-      const planned = draft?.id === item.id ? draft : null;
+      const planned = draft?.[item.id];
       const start = planned?.start ?? item.planStart ?? sprint?.start;
       const end = planned?.end ?? item.planEnd ?? sprint?.end;
       if (!start || !end) return null;
@@ -61,8 +65,8 @@ export function GanttView({ projectKey }: { projectKey: string }) {
     .sort((a, b) => a.start.localeCompare(b.start) || a.item.key.localeCompare(b.item.key));
   const unscheduled = items.filter((item) => !rows.some((row) => row.item.id === item.id) && item.kind !== "defect");
 
-  const origin = rows.length ? Math.min(...rows.map((row) => dayNumber(row.start))) : 0;
-  const finish = rows.length ? Math.max(...rows.map((row) => dayNumber(row.end))) : origin + 1;
+  const origin = rows.length ? Math.min(...rows.flatMap((row) => rangeDays(row))) : 0;
+  const finish = rows.length ? Math.max(...rows.flatMap((row) => rangeDays(row))) : origin + 1;
   const span = Math.max(finish - origin, 1);
   const step = span <= 16 ? 2 : span <= 45 ? 7 : 14;
   const ticks: number[] = [];
@@ -79,13 +83,16 @@ export function GanttView({ projectKey }: { projectKey: string }) {
     .map((entry) => {
       const from = rows[indexOf.get(entry.predecessorId) ?? 0];
       const to = rows[indexOf.get(entry.successorId) ?? 0];
-      const fromLeft = ((dayNumber(from.start) - origin) / span) * 100;
-      const fromWidth = Math.max(((dayNumber(from.end) - dayNumber(from.start) + 1) / span) * 100, 2);
-      const toLeft = ((dayNumber(to.start) - origin) / span) * 100;
+      const anchor = dependencyAnchor(entry.dependencyType);
       const y1 = (indexOf.get(entry.predecessorId) ?? 0) * ROW + ROW / 2;
       const y2 = (indexOf.get(entry.successorId) ?? 0) * ROW + ROW / 2;
-      return { id: entry.id, x1: fromLeft + fromWidth, y1, x2: toLeft, y2, muted: entry.dependencyType !== "FS" };
+      return { id: entry.id, x1: edgeX(from, anchor.from, origin, span), y1, x2: edgeX(to, anchor.to, origin, span), y2, type: entry.dependencyType };
     });
+  const conflicts = scheduleConflicts(
+    dependencies.filter((entry) => entry.projectId === project.id),
+    items,
+    sprints,
+  );
 
   const drag = (row: Row, edge: "move" | "end", event: PointerEvent<HTMLElement>) => {
     event.preventDefault();
@@ -96,20 +103,37 @@ export function GanttView({ projectKey }: { projectKey: string }) {
     const originX = event.clientX;
     const start0 = dayNumber(row.start);
     const end0 = dayNumber(row.end);
+    const base = Object.fromEntries(rows.map((entry) => [entry.item.id, { start: entry.start, end: entry.end }]));
     const move = (ev: globalThis.PointerEvent) => {
       const delta = Math.round(((ev.clientX - originX) / Math.max(width, 1)) * span);
       const start = edge === "move" ? start0 + delta : start0;
       const end = Math.max(end0 + delta, start);
-      setDraft({ id: row.item.id, start: isoFromDay(start), end: isoFromDay(end) });
+      setDraft(alignPlans(base, dependencies, row.item.id, { start: isoFromDay(start), end: isoFromDay(end) }));
     };
     const up = (ev: globalThis.PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       const delta = Math.round(((ev.clientX - originX) / Math.max(width, 1)) * span);
+      setDraft(null);
+      if (delta === 0) return;
       const start = edge === "move" ? start0 + delta : start0;
       const end = Math.max(end0 + delta, start);
-      setDraft(null);
-      if (delta !== 0) usePm.getState().updateItem(row.item.id, { planStart: isoFromDay(start), planEnd: isoFromDay(end) });
+      const aligned = alignPlans(base, dependencies, row.item.id, { start: isoFromDay(start), end: isoFromDay(end) });
+      const updates = rows.flatMap((entry) => {
+        const plan = aligned[entry.item.id];
+        if (!plan || (plan.start === entry.start && plan.end === entry.end)) return [];
+        return [{ id: entry.item.id, planStart: plan.start, planEnd: plan.end }];
+      });
+      if (updates.length === 0) {
+        toast("这次拖动违反依赖，计划没有改。");
+        return;
+      }
+      usePm.getState().setItemPlans(updates);
+      const shifted = updates.filter((update) => update.id !== row.item.id);
+      if (shifted.length > 0) {
+        const names = shifted.map((update) => rows.find((entry) => entry.item.id === update.id)?.item.key).filter(Boolean);
+        toast(`已按依赖顺延 ${names.join("、")}`);
+      }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -117,12 +141,27 @@ export function GanttView({ projectKey }: { projectKey: string }) {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="甘特图" hint="拖动条形改计划起止，拖右缘只改结束。连线是有效依赖，完成-开始用实线。" />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <PageHeading title="甘特图" hint="拖动条形改计划，拖右缘只改结束。细条是基线，记下之后再拖计划不会改它。" />
+        <Button
+          variant="outline"
+          onPress={() => {
+            const result = usePm.getState().saveBaseline(project.id);
+            if (!result.ok) toast.error(result.message);
+            else toast(`已记下 ${result.count} 条基线`);
+          }}
+        >
+          记下基线
+        </Button>
+      </div>
       <div className="flex flex-wrap gap-3">
         <Legend swatch="bg-epic" label="史诗" />
         <Legend swatch="bg-story" label="故事" />
         <Legend swatch="bg-task" label="任务" />
         <Legend swatch="bg-defect" label="缺陷" />
+        <span className="type-caption">细条 基线</span>
+        <span className="type-caption">实线 完成-开始</span>
+        <span className="type-caption">虚线 开始-开始 / 完成-完成 / 开始-完成</span>
       </div>
       <div className="overflow-hidden rounded-sm border border-border bg-surface">
         {rows.length === 0 ? <EmptyHint>还没有可画到时间线上的事项。</EmptyHint> : null}
@@ -162,6 +201,15 @@ export function GanttView({ projectKey }: { projectKey: string }) {
                 </button>
                 <span className="relative mr-3">
                   {showToday ? <span className="absolute inset-y-0 w-px bg-danger" style={{ left: `${((today - origin) / span) * 100}%` }} /> : null}
+                  {item.baselineStart && item.baselineEnd ? (
+                    <span
+                      className="absolute top-2 h-1 rounded-sm bg-fg/50"
+                      style={{
+                        left: `${((dayNumber(item.baselineStart) - origin) / span) * 100}%`,
+                        width: `${Math.max(((dayNumber(item.baselineEnd) - dayNumber(item.baselineStart) + 1) / span) * 100, 1.5)}%`,
+                      }}
+                    />
+                  ) : null}
                   <span
                     className="absolute top-1/2 h-6 -translate-y-1/2 cursor-grab"
                     style={{ left: `${left}%`, width: `${width}%` }}
@@ -182,8 +230,9 @@ export function GanttView({ projectKey }: { projectKey: string }) {
                   key={line.id}
                   d={`M ${line.x1} ${line.y1} H ${(line.x1 + line.x2) / 2} V ${line.y2} H ${line.x2}`}
                   fill="none"
-                  stroke={line.muted ? "#8993a4" : "#0052cc"}
+                  stroke={line.type === "FS" ? "#0052cc" : "#44546f"}
                   strokeWidth="1.5"
+                  strokeDasharray={line.type === "SS" ? "4 3" : line.type === "FF" ? "1.5 2" : line.type === "SF" ? "5 2 1 2" : undefined}
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
@@ -192,8 +241,30 @@ export function GanttView({ projectKey }: { projectKey: string }) {
         </div>
       </div>
       {unscheduled.length > 0 ? <p className="type-caption">未排期：{unscheduled.map((item) => item.key).join("、")}</p> : null}
+      {conflicts.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          {conflicts.map((conflict) => (
+            <p key={conflict.dependency.id} className="type-caption text-danger">
+              {conflict.predecessor.key} 的{conflict.from === "end" ? "结束" : "开始"}
+              {conflict.dependency.lagDays > 0 ? `再延后 ${conflict.dependency.lagDays} 天` : ""}要到 {formatDay(conflict.ready)}，晚于 {conflict.successor.key} 的{conflict.to === "end" ? "结束" : "开始"} {formatDay(conflict.actual)}。
+            </p>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function rangeDays(row: Row) {
+  const days = [dayNumber(row.start), dayNumber(row.end)];
+  if (row.item.baselineStart) days.push(dayNumber(row.item.baselineStart));
+  if (row.item.baselineEnd) days.push(dayNumber(row.item.baselineEnd));
+  return days;
+}
+
+function edgeX(row: Row, edge: "start" | "end", origin: number, span: number) {
+  const day = edge === "start" ? dayNumber(row.start) : dayNumber(row.end) + 1;
+  return ((day - origin) / span) * 100;
 }
 
 function Legend({ swatch, label }: { swatch: string; label: string }) {

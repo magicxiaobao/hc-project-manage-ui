@@ -23,16 +23,30 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
   const [workDate, setWorkDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editHours, setEditHours] = useState("1");
+  const [editDate, setEditDate] = useState("");
+  const [editNote, setEditNote] = useState("");
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
-  const total = rows.filter((entry) => workLogStatus(entry) !== "REJECTED").reduce((sum, entry) => sum + entry.hours, 0);
+  const counted = rows.filter((entry) => workLogStatus(entry) !== "REJECTED");
+  const total = counted.reduce((sum, entry) => sum + entry.hours, 0);
   const pending = rows.filter((entry) => workLogStatus(entry) === "PENDING");
   const approvedHours = rows.filter((entry) => workLogStatus(entry) === "APPROVED").reduce((sum, entry) => sum + entry.hours, 0);
   const byPerson = people
-    .map((person) => ({ person, hours: rows.filter((entry) => entry.userId === person.id).reduce((sum, entry) => sum + entry.hours, 0) }))
+    .map((person) => ({ id: person.id, label: person.name, hours: counted.filter((entry) => entry.userId === person.id).reduce((sum, entry) => sum + entry.hours, 0) }))
     .filter((entry) => entry.hours > 0)
     .sort((a, b) => b.hours - a.hours);
-  const peak = byPerson[0]?.hours ?? 1;
+  const byTask = projectItems
+    .map((item) => ({ id: item.id, label: item.key, hours: counted.filter((entry) => entry.itemId === item.id).reduce((sum, entry) => sum + entry.hours, 0) }))
+    .filter((entry) => entry.hours > 0)
+    .sort((a, b) => b.hours - a.hours);
+  const byDate = [...new Set(counted.map((entry) => entry.workDate))].sort((a, b) => b.localeCompare(a)).map((date) => ({
+    id: date,
+    label: formatDay(date),
+    hours: counted.filter((entry) => entry.workDate === date).reduce((sum, entry) => sum + entry.hours, 0),
+  }));
+  const peak = Math.max(1, ...byPerson.map((entry) => entry.hours), ...byTask.map((entry) => entry.hours), ...byDate.map((entry) => entry.hours));
   const me = people.find((person) => person.id === currentUserId);
 
   return (
@@ -40,7 +54,7 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
       <PageHeading title="工时" hint={`有效 ${trimHours(total)} 小时，其中已通过 ${trimHours(approvedHours)}。驳回的不计入。`} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="type-caption">待审批 {pending.length} 条</span>
-        <Button variant="outline" onPress={() => downloadWorklogs(rows, items, people)}>
+        <Button variant="outline" onPress={() => downloadWorklogs(rows, items, people, byPerson, byTask, byDate)}>
           导出
         </Button>
       </div>
@@ -54,22 +68,9 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
           <div className="type-section mt-1">{rows.length} 条</div>
         </div>
       </div>
-      {byPerson.length > 0 ? (
-        <div className="rounded-sm border border-border bg-surface px-3 py-3">
-          <div className="type-label mb-2">按人</div>
-          <div className="flex flex-col gap-2">
-            {byPerson.map(({ person, hours: spent }) => (
-              <div key={person.id} className="grid grid-cols-[88px_minmax(0,1fr)_48px] items-center gap-2">
-                <span className="type-caption truncate">{person.name}</span>
-                <span className="h-2 self-center overflow-hidden rounded-sm bg-line">
-                  <span className="block h-full rounded-sm bg-primary" style={{ width: `${(spent / peak) * 100}%` }} />
-                </span>
-                <span className="type-caption text-right">{trimHours(spent)}h</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      {byPerson.length > 0 ? <Summary title="按人" rows={byPerson} peak={peak} /> : null}
+      {byTask.length > 0 ? <Summary title="按任务" rows={byTask} peak={peak} /> : null}
+      {byDate.length > 0 ? <Summary title="按日期" rows={byDate} peak={peak} /> : null}
       <form
         className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-3"
         onSubmit={(event) => {
@@ -142,9 +143,47 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
                     <StateAction tone="danger" onPress={() => applyReview(entry.id, "REJECTED")}>
                       驳回
                     </StateAction>
+                    <StateAction
+                      tone="neutral"
+                      onPress={() => {
+                        setEditingId(entry.id);
+                        setEditHours(String(entry.hours));
+                        setEditDate(entry.workDate);
+                        setEditNote(entry.note);
+                      }}
+                    >
+                      修改
+                    </StateAction>
                   </>
                 ) : null}
               </span>
+              {editingId === entry.id ? (
+                <form
+                  className="col-span-full flex flex-col gap-2 sm:col-span-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const result = usePm.getState().updateWorkLog(entry.id, { hours: Number(editHours), workDate: editDate, note: editNote });
+                    if (!result.ok) toast.error(result.message);
+                    else setEditingId(null);
+                  }}
+                >
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <DayField label="日期" value={editDate} onChange={setEditDate} />
+                    <TextField value={editHours} onChange={setEditHours}>
+                      <Label>小时</Label>
+                      <Input type="number" min={0.5} max={24} step={0.5} />
+                    </TextField>
+                    <TextField value={editNote} onChange={setEditNote}>
+                      <Label>说明</Label>
+                      <Input />
+                    </TextField>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit" variant="primary">保存</Button>
+                    <Button type="button" variant="outline" onPress={() => setEditingId(null)}>取消</Button>
+                  </div>
+                </form>
+              ) : null}
             </div>
           );
         })}
@@ -168,13 +207,43 @@ function applyReview(id: string, status: "APPROVED" | "REJECTED") {
   if (!result.ok) toast.error(result.message);
 }
 
-function downloadWorklogs(rows: WorkLog[], items: { id: string; key: string }[], people: { id: string; name: string }[]) {
+function Summary({ title, rows, peak }: { title: string; rows: { id: string; label: string; hours: number }[]; peak: number }) {
+  return (
+    <div className="rounded-sm border border-border bg-surface px-3 py-3">
+      <div className="type-label mb-2">{title}</div>
+      <div className="flex flex-col gap-2">
+        {rows.map((entry) => (
+          <div key={entry.id} className="grid grid-cols-[88px_minmax(0,1fr)_48px] items-center gap-2">
+            <span className="type-caption truncate">{entry.label}</span>
+            <span className="h-2 self-center overflow-hidden rounded-sm bg-line">
+              <span className="block h-full rounded-sm bg-primary" style={{ width: `${(entry.hours / peak) * 100}%` }} />
+            </span>
+            <span className="type-caption text-right">{trimHours(entry.hours)}h</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function downloadWorklogs(
+  rows: WorkLog[],
+  items: { id: string; key: string }[],
+  people: { id: string; name: string }[],
+  byPerson: { label: string; hours: number }[],
+  byTask: { label: string; hours: number }[],
+  byDate: { label: string; hours: number }[],
+) {
   const lines = ["日期,人员,事项,小时,说明,状态"];
   for (const entry of rows) {
     const person = people.find((candidate) => candidate.id === entry.userId)?.name ?? "";
     const key = items.find((candidate) => candidate.id === entry.itemId)?.key ?? "";
     lines.push([entry.workDate, person, key, String(entry.hours), entry.note, WORK_LOG_STATUS_LABEL[workLogStatus(entry)]].map(csv).join(","));
   }
+  lines.push("");
+  for (const entry of byPerson) lines.push(["汇总", "按人", entry.label, String(entry.hours)].map(csv).join(","));
+  for (const entry of byTask) lines.push(["汇总", "按任务", entry.label, String(entry.hours)].map(csv).join(","));
+  for (const entry of byDate) lines.push(["汇总", "按日期", entry.label, String(entry.hours)].map(csv).join(","));
   downloadCsv("工时.csv", lines.join("\n"));
 }
 

@@ -851,6 +851,7 @@ export const notices: Notice[] = [
     itemId: "it-128",
     read: false,
     createdAt: "2026-09-30T08:20:00.000Z",
+    kind: "mention",
   },
   {
     id: "n-2",
@@ -858,6 +859,7 @@ export const notices: Notice[] = [
     itemId: "it-91",
     read: false,
     createdAt: "2026-09-30T07:05:00.000Z",
+    kind: "item",
   },
   {
     id: "n-3",
@@ -865,6 +867,7 @@ export const notices: Notice[] = [
     itemId: null,
     read: false,
     createdAt: "2026-09-30T01:00:00.000Z",
+    kind: "sprint",
   },
   {
     id: "n-4",
@@ -872,6 +875,7 @@ export const notices: Notice[] = [
     itemId: "it-70",
     read: true,
     createdAt: "2026-09-17T06:30:00.000Z",
+    kind: "item",
   },
 ];
 
@@ -891,6 +895,17 @@ for (const entry of items) {
   if (range) {
     entry.planStart = range[0];
     entry.planEnd = range[1];
+  }
+}
+const baseline: Record<string, [string, string]> = {
+  "it-142": ["2026-09-26", "2026-10-06"],
+  "it-150": ["2026-09-22", "2026-09-24"],
+};
+for (const entry of items) {
+  const range = baseline[entry.id];
+  if (range) {
+    entry.baselineStart = range[0];
+    entry.baselineEnd = range[1];
   }
 }
 
