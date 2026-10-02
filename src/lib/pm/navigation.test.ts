@@ -106,6 +106,15 @@ it("returns across successive details to the first source history entry", () => 
   assert.equal(returnHistoryDelta(origin, 5), -3);
 });
 
+it("retains native status-select return identity without accepting arbitrary DOM tags", () => {
+  const origin = { href: "/p/HC/issues?query=HC-141", index: 2 };
+  assert.deepEqual(
+    readItemOrigin({ ...origin, focus: { label: "HC-141 状态", tag: "SELECT" } })?.focus,
+    { key: undefined, text: undefined, label: "HC-141 状态", tag: "SELECT" },
+  );
+  assert.equal(readItemOrigin({ ...origin, focus: { tag: "INPUT" } })?.focus.tag, undefined);
+});
+
 it("falls back for deep links, future or equal indices and invalid current indices", () => {
   const origin = readItemOrigin({ href: "/me", index: 2 });
   for (const index of [0, 2, NaN, Infinity, 2.5])

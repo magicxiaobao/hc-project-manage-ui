@@ -241,3 +241,107 @@ test("步骤双文本和字符串集合逐元素检查；必需集合缺失也�
     }
   }
 });
+
+for (const versionStatus of ["FROZEN", "RELEASED", "DEPRECATED"] as const) {
+  test(`clone ${versionStatus} 范围中的三类事项不会扩大实时版本范围或改动快照`, () => {
+    const data = structuredClone(seed);
+    data.versions = data.versions.map((version) =>
+      version.id === "v-17" ? { ...version, status: versionStatus } : version,
+    );
+    data.releases[0].snapshot = {
+      takenAt: "2026-10-01T00:00:00.000Z",
+      items: data.items
+        .filter((item) => item.versionId === "v-17")
+        .map(({ id, key, title, kind, status }) => ({ id, key, title, kind, status })),
+      openRequirements: 0,
+      openTasks: 0,
+      openDefects: 0,
+      failed: 0,
+      waiver: null,
+    };
+    usePm.setState(data);
+    const before = usePm.getState();
+    const scope = structuredClone(before.items.filter((item) => item.versionId === "v-17"));
+    const releases = structuredClone(before.releases);
+    const versions = structuredClone(before.versions);
+    for (const [kind, initialStatus] of [
+      ["requirement", "DRAFT"],
+      ["task", "TODO"],
+      ["defect", "NEW"],
+    ] as const) {
+      const source = before.items.find((item) => item.kind === kind && item.versionId === "v-17")!;
+      const original = structuredClone(source);
+      const result = usePm.getState().cloneItem(source.id);
+      if (!result.ok) assert.fail(result.message);
+      const copy = usePm.getState().items.find((item) => item.id === result.id)!;
+      assert.notEqual(copy.id, source.id);
+      assert.notEqual(copy.key, source.key);
+      assert.equal(copy.key, result.key);
+      assert.equal(copy.status, initialStatus);
+      assert.equal(copy.title, `${source.title} 副本`);
+      assert.equal(copy.progress, 0);
+      assert.equal(copy.versionId, null);
+      for (const field of [
+        "description",
+        "kind",
+        "projectId",
+        "parentId",
+        "assigneeId",
+        "sprintId",
+        "storyPoints",
+        "tags",
+        "priority",
+        "planStart",
+        "planEnd",
+        "baselineStart",
+        "baselineEnd",
+        "dueDate",
+      ] as const) {
+        assert.deepEqual(copy[field], source[field], field);
+      }
+      assert.deepEqual(
+        usePm.getState().items.find((item) => item.id === source.id),
+        original,
+      );
+      assert.deepEqual(
+        usePm.getState().items.filter((item) => item.versionId === "v-17"),
+        scope,
+      );
+      assert.deepEqual(usePm.getState().versions, versions);
+      assert.deepEqual(usePm.getState().releases, releases);
+    }
+  });
+}
+
+for (const versionStatus of ["PLANNING", "DEVELOPMENT", "TESTING"] as const) {
+  test(`clone ${versionStatus} 版本按既有合同保留版本归属`, () => {
+    const data = structuredClone(seed);
+    data.versions = data.versions.map((version) =>
+      version.id === "v-17" ? { ...version, status: versionStatus } : version,
+    );
+    usePm.setState(data);
+    const source = data.items.find((item) => item.versionId === "v-17")!;
+    const scopeSize = data.items.filter((item) => item.versionId === "v-17").length;
+    const result = usePm.getState().cloneItem(source.id);
+    if (!result.ok) assert.fail(result.message);
+    assert.equal(usePm.getState().items.find((item) => item.id === result.id)?.versionId, "v-17");
+    assert.equal(
+      usePm.getState().items.filter((item) => item.versionId === "v-17").length,
+      scopeSize + 1,
+    );
+    assert.deepEqual(
+      usePm.getState().items.find((item) => item.id === source.id),
+      source,
+    );
+  });
+}
+
+test("clone 未分配版本的事项仍不分配版本，不存在的事项不创建副本", () => {
+  const source = usePm.getState().items.find((item) => item.versionId === null)!;
+  const result = usePm.getState().cloneItem(source.id);
+  if (!result.ok) assert.fail(result.message);
+  assert.equal(usePm.getState().items.find((item) => item.id === result.id)?.versionId, null);
+  const before = usePm.getState();
+  assert.equal(before.cloneItem("missing-item").ok, false);
+  assert.equal(usePm.getState().items, before.items);
+});

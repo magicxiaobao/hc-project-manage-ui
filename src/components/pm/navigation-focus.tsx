@@ -35,7 +35,7 @@ export function NavigationFocus({ ready }: { ready: boolean }) {
         document.querySelector('[role="dialog"]')
       )
         return;
-      const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a"));
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a, select"));
       const target =
         candidates.find(
           (element) => origin.focus.key && element.dataset.focusKey === origin.focus.key,

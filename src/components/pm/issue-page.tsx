@@ -1,5 +1,5 @@
-import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { useMemo, useRef } from "react";
+import { useMatch, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { EmptyHint, IssueDialog } from "@/components/biz";
 import { browseAround, useItemNavigationState } from "@/components/pm/use-go-item";
@@ -33,8 +33,25 @@ export function IssuePage({ projectKey, itemKey }: { projectKey: string; itemKey
   const navigate = useNavigate();
   const itemNavigationState = useItemNavigationState();
   const router = useRouter();
-  const location = useRouterState({ select: (state) => state.location });
+  const detailPath = useMatch({
+    from: "/p/$projectKey/items/$itemKey",
+    select: (match) => match.pathname,
+  });
+  const resolvedLocation = useRouterState({
+    select: (state) => state.resolvedLocation ?? state.location,
+  });
+  const detailLocation = useRef(resolvedLocation);
+  // The old detail can still render while its source or a newer detail is pending.
+  if (resolvedLocation.pathname === detailPath) detailLocation.current = resolvedLocation;
+  const location = detailLocation.current;
   const closingEntry = useRef<string | undefined>(undefined);
+  useEffect(
+    () =>
+      router.subscribe("onResolved", () => {
+        closingEntry.current = undefined;
+      }),
+    [router],
+  );
 
   if (!project || !item) return <EmptyHint>没有找到这个事项。</EmptyHint>;
 

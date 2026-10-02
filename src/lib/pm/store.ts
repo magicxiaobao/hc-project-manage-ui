@@ -941,12 +941,18 @@ export const usePm = create<PmState>((set, get) => ({
     const next = Math.max(0, ...numbers) + 1;
     const at = nowIso();
     const copyId = uid("it");
+    const version = data.versions.find((entry) => entry.id === item.versionId);
+    const versionId =
+      version && ["FROZEN", "RELEASED", "DEPRECATED"].includes(version.status)
+        ? null
+        : item.versionId;
     const status = item.kind === "requirement" ? "DRAFT" : item.kind === "task" ? "TODO" : "NEW";
     const created: WorkItem = {
       ...item,
       id: copyId,
       key: `${project.key}-${next}`,
       title: `${item.title} 副本`,
+      versionId,
       status,
       progress: 0,
       reporterId: data.currentUserId,

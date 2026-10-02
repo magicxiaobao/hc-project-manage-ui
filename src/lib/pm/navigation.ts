@@ -41,7 +41,12 @@ export function parseProjectViewSearch(value: Record<string, unknown>): ProjectV
   };
 }
 
-export type ReturnFocus = { key?: string; label?: string; text?: string; tag?: "BUTTON" | "A" };
+export type ReturnFocus = {
+  key?: string;
+  label?: string;
+  text?: string;
+  tag?: "BUTTON" | "A" | "SELECT";
+};
 export type ItemOrigin = {
   href: string;
   index: number;
@@ -102,7 +107,7 @@ export function readItemOrigin(value: unknown): ItemOrigin | undefined {
       key: shortText(f.key),
       label: shortText(f.label),
       text: shortText(f.text),
-      tag: f.tag === "BUTTON" || f.tag === "A" ? f.tag : undefined,
+      tag: f.tag === "BUTTON" || f.tag === "A" || f.tag === "SELECT" ? f.tag : undefined,
     },
     scrollTop:
       typeof v.scrollTop === "number" && Number.isFinite(v.scrollTop) && v.scrollTop >= 0

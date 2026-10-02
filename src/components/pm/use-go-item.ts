@@ -20,7 +20,11 @@ export function useItemNavigationState() {
           label: element?.getAttribute("aria-label") ?? undefined,
           text: element?.textContent?.trim().slice(0, 300),
           tag:
-            element?.tagName === "BUTTON" || element?.tagName === "A" ? element.tagName : undefined,
+            element?.tagName === "BUTTON" ||
+            element?.tagName === "A" ||
+            element?.tagName === "SELECT"
+              ? element.tagName
+              : undefined,
         };
     return {
       pmItemOrigin: {
