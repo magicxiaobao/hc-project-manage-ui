@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import type { ColumnId } from "@/lib/pm/domain";
 import { toneDotClass, type StateTone } from "@/components/biz/state-tone";
 import { cn } from "@/lib/utils";
 
 export function KanbanColumn({
+  id,
   name,
   tone = "neutral",
   count,
@@ -15,6 +17,7 @@ export function KanbanColumn({
   onLimit,
   children,
 }: {
+  id: ColumnId;
   name: string;
   tone?: StateTone;
   count: number;
@@ -30,7 +33,10 @@ export function KanbanColumn({
   const overLimit = limit != null && limit > 0 && count > limit;
   return (
     <section
-      className={cn("flex h-full w-72 shrink-0 flex-col rounded-sm bg-line/70 px-2 pt-2 md:w-auto md:min-w-56 md:flex-1", over && "ring-2 ring-primary")}
+      className={cn(
+        "flex h-full w-72 shrink-0 flex-col rounded-sm bg-line/70 px-2 pt-2 md:w-auto md:min-w-56 md:flex-1",
+        over && "ring-2 ring-primary",
+      )}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -41,7 +47,9 @@ export function KanbanColumn({
           <span className="truncate">{name}</span>
         </h2>
         <span className="flex items-center gap-1">
-          <span className={cn("type-caption", overLimit && "text-danger")}>{limit ? `${count}/${limit}` : count}</span>
+          <span className={cn("type-caption", overLimit && "text-danger")}>
+            {limit ? `${count}/${limit}` : count}
+          </span>
           {onLimit ? (
             <input
               aria-label={`${name}上限`}
@@ -60,7 +68,10 @@ export function KanbanColumn({
           ) : null}
         </span>
       </header>
-      <div className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
+      <div
+        data-pm-column={id}
+        className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2"
+      >
         {empty ? <div className="type-caption px-2 py-6 text-center">这一列还没有事项</div> : null}
         {children}
       </div>

@@ -1,3 +1,5 @@
+import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
+import type { ProjectViewSearch } from "@/lib/pm/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { EmptyHint, ListFilterBar, PageHeading, PersonSelect } from "@/components/biz";
@@ -15,12 +17,29 @@ export function ListView({ projectKey }: { projectKey: string }) {
   const people = usePm((state) => state.people);
   const sprints = usePm((state) => state.sprints);
   const currentUserId = usePm((state) => state.currentUserId);
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState("all");
-  const [mine, setMine] = useState(false);
-  const [hideDone, setHideDone] = useState(true);
-  const [sortKey, setSortKey] = useState<SortKey>("updated");
-  const [ascending, setAscending] = useState(false);
+  const search = useSearch({ from: "/p/$projectKey" });
+  const navigate = useNavigate();
+  const router = useRouter();
+  const [query, setQuery] = useState(search.query ?? "");
+  useEffect(() => {
+    // Do not overwrite immediate typing with an older committed route match.
+    if ((search.query ?? "") === (router.state.location.search.query ?? "")) {
+      setQuery(search.query ?? "");
+    }
+  }, [search.query, router]);
+  const kind = search.kind ?? "all";
+  const mine = search.mine ?? false;
+  const hideDone = search.hideDone ?? true;
+  const sortKey = search.sort ?? "updated";
+  const ascending = search.ascending ?? false;
+  const setFilter = (patch: ProjectViewSearch) => {
+    void navigate({
+      href:
+        router.state.location.pathname +
+        router.options.stringifySearch!({ ...router.state.location.search, ...patch }),
+      replace: true,
+    });
+  };
   const goToItem = useGoToItem();
 
   const rows = useMemo(() => {
@@ -46,10 +65,9 @@ export function ListView({ projectKey }: { projectKey: string }) {
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
   const members = people.filter((person) => project.memberIds.includes(person.id));
   const sort = (key: SortKey) => {
-    if (sortKey === key) setAscending((value) => !value);
+    if (sortKey === key) setFilter({ ascending: !ascending });
     else {
-      setSortKey(key);
-      setAscending(key === "key" || key === "title");
+      setFilter({ sort: key, ascending: key === "key" || key === "title" });
     }
   };
 
@@ -57,7 +75,19 @@ export function ListView({ projectKey }: { projectKey: string }) {
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <PageHeading title="事项" hint="点表头排序。负责人、状态和故事点可以在这一行改。" />
-        <ListFilterBar query={query} kind={kind} mine={mine} hideDone={hideDone} onQuery={setQuery} onKind={setKind} onMine={setMine} onHideDone={setHideDone} />
+        <ListFilterBar
+          query={query}
+          kind={kind}
+          mine={mine}
+          hideDone={hideDone}
+          onQuery={(query) => {
+            setQuery(query);
+            setFilter({ query });
+          }}
+          onKind={(kind) => setFilter({ kind: kind as ProjectViewSearch["kind"] })}
+          onMine={(mine) => setFilter({ mine })}
+          onHideDone={(hideDone) => setFilter({ hideDone })}
+        />
       </div>
       <div className="overflow-x-auto rounded-sm border border-border bg-surface">
         <table className="w-full border-collapse text-left">
@@ -65,7 +95,11 @@ export function ListView({ projectKey }: { projectKey: string }) {
             <tr className="border-b border-border">
               <Header label="编号" active={sortKey === "key"} onClick={() => sort("key")} />
               <Header label="标题" active={sortKey === "title"} onClick={() => sort("title")} />
-              <Header label="优先级" active={sortKey === "priority"} onClick={() => sort("priority")} />
+              <Header
+                label="优先级"
+                active={sortKey === "priority"}
+                onClick={() => sort("priority")}
+              />
               <Header label="状态" active={sortKey === "status"} onClick={() => sort("status")} />
               <th className="type-caption px-3 py-2 font-normal">负责人</th>
               <Header label="点数" active={sortKey === "points"} onClick={() => sort("points")} />
@@ -83,20 +117,35 @@ export function ListView({ projectKey }: { projectKey: string }) {
             ) : null}
             {rows.map((item) => {
               const sprint = sprints.find((entry) => entry.id === item.sprintId);
-              const choices = [item.status, ...nextStatuses(item).filter((status) => status !== item.status)];
+              const choices = [
+                item.status,
+                ...nextStatuses(item).filter((status) => status !== item.status),
+              ];
               return (
                 <tr key={item.id} className="border-b border-border last:border-b-0">
                   <td className="px-3 py-2">
-                    <button type="button" className="type-link" onClick={() => goToItem(item.id)}>
+                    <button
+                      data-focus-key={`item-key:${item.id}`}
+                      type="button"
+                      className="type-link"
+                      onClick={() => goToItem(item.id)}
+                    >
                       {item.key}
                     </button>
                   </td>
                   <td className="max-w-64 px-3 py-2">
-                    <button type="button" className="type-body block max-w-full truncate text-left" onClick={() => goToItem(item.id)}>
+                    <button
+                      data-focus-key={`item-title:${item.id}`}
+                      type="button"
+                      className="type-body block max-w-full truncate text-left"
+                      onClick={() => goToItem(item.id)}
+                    >
                       {item.title}
                     </button>
                   </td>
-                  <td className="type-caption px-3 py-2">{item.priority === "HIGH" ? "高" : item.priority === "LOW" ? "低" : "中"}</td>
+                  <td className="type-caption px-3 py-2">
+                    {item.priority === "HIGH" ? "高" : item.priority === "LOW" ? "低" : "中"}
+                  </td>
                   <td className="px-3 py-2">
                     <select
                       aria-label={`${item.key} 状态`}
@@ -122,7 +171,14 @@ export function ListView({ projectKey }: { projectKey: string }) {
                     </select>
                   </td>
                   <td className="w-40 px-3 py-2">
-                    <PersonSelect showRole={false} people={members} value={item.assigneeId ?? ""} onChange={(assigneeId) => usePm.getState().updateItem(item.id, { assigneeId: assigneeId || null })} />
+                    <PersonSelect
+                      showRole={false}
+                      people={members}
+                      value={item.assigneeId ?? ""}
+                      onChange={(assigneeId) =>
+                        usePm.getState().updateItem(item.id, { assigneeId: assigneeId || null })
+                      }
+                    />
                   </td>
                   <td className="px-3 py-2">
                     {item.kind === "defect" ? (
@@ -134,11 +190,17 @@ export function ListView({ projectKey }: { projectKey: string }) {
                         min={0}
                         value={item.storyPoints ?? 0}
                         className="type-caption h-8 w-16 rounded-sm border border-border bg-surface px-1"
-                        onChange={(event) => usePm.getState().updateItem(item.id, { storyPoints: Number(event.target.value) })}
+                        onChange={(event) =>
+                          usePm
+                            .getState()
+                            .updateItem(item.id, { storyPoints: Number(event.target.value) })
+                        }
                       />
                     )}
                   </td>
-                  <td className="type-caption hidden px-3 py-2 md:table-cell">{sprint?.name ?? "未排期"}</td>
+                  <td className="type-caption hidden px-3 py-2 md:table-cell">
+                    {sprint?.name ?? "未排期"}
+                  </td>
                   <td className="type-caption px-3 py-2">{item.updatedAt.slice(5, 10)}</td>
                 </tr>
               );
@@ -159,7 +221,15 @@ function compareRow(a: WorkItem, b: WorkItem, key: SortKey) {
   return a.updatedAt.localeCompare(b.updatedAt);
 }
 
-function Header({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function Header({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
     <th className="px-3 py-2 font-normal">
       <button type="button" className={active ? "type-emphasis" : "type-caption"} onClick={onClick}>
