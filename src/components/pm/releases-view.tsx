@@ -46,7 +46,7 @@ export function ReleasesView({ projectKey }: { projectKey: string }) {
   return (
     <div ref={panelRoot} className="mx-auto flex max-w-4xl flex-col gap-4 p-4 md:p-6">
       <PageHeading title="版本" hint="先查看当前发布单的门禁、审批与发布动作。版本管理可按需展开。" />
-      <ReleaseDesk projectId={project.id} />
+      <ReleaseDesk key={project.id} projectId={project.id} />
 <details className="rounded-sm border border-border bg-surface">
 <summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">版本管理 · {versions.length} 个版本</summary>
 <div className="flex flex-col gap-3 p-3">
@@ -166,11 +166,18 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
   const [title, setTitle] = useState("");
   const [environmentId, setEnvironmentId] = useState(environments[0]?.id ?? "");
   const [releaseVersionId, setReleaseVersionId] = useState(versions[0]?.id ?? "");
-  const [releaseId, setChoice] = useState(() => selectedObjects.get(projectId) ?? "");
+  const [releaseId, setChoice] = useState(() =>
+    releases.find((entry) => entry.id === selectedObjects.get(projectId))?.id ??
+    releases.find((entry) => entry.status === "SUBMITTED" || entry.status === "APPROVED")?.id ?? releases[0]?.id ?? "",
+  );
   const setReleaseId = (id: string) => { selectedObjects.set(projectId, id); setChoice(id); };
-  const [note, setNote] = useState("");
-  const [waiver, setWaiver] = useState("");
   const selected = releases.find((entry) => entry.id === releaseId) ?? releases.find((entry) => entry.status === "SUBMITTED" || entry.status === "APPROVED") ?? releases[0] ?? null;
+  const selectedId = selected?.id ?? "";
+  useLayoutEffect(() => {
+    if (selectedId) selectedObjects.set(projectId, selectedId);
+    else selectedObjects.delete(projectId);
+    if (releaseId !== selectedId) setChoice(selectedId);
+  }, [selectedId, projectId, releaseId]);
   const scoped = items.filter((item) => item.versionId === versionId);
   const outside = items.filter((item) => item.versionId !== versionId);
   const versionOptions = versions.map((version) => ({ id: version.id, label: `${version.versionNumber} ${version.name}` }));
@@ -180,12 +187,9 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
     <>
         {selected ? (
           <ReleaseDetail
+            key={selected.id}
             release={selected}
             gate={versionReadiness(selected.versionId, items, cases, runs, allExecutions)}
-            note={note}
-            waiver={waiver}
-            onNote={setNote}
-            onWaiver={setWaiver}
           />
         ) : null}
 
@@ -203,7 +207,7 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
               aria-pressed={release.id === selected?.id}
               type="button"
               className={`flex w-full flex-col gap-1 border-b border-border px-2 py-3 text-left last:border-b-0 ${release.id === selected?.id ? "bg-line" : ""}`}
-              onClick={() => { setReleaseId(release.id); setNote(""); setWaiver(""); }}
+              onClick={() => { if (release.id !== selected?.id) setReleaseId(release.id); }}
             >
               <span className="flex flex-wrap items-center gap-2">
                 <span className="type-emphasis">{release.title}</span>
@@ -344,18 +348,13 @@ function ReleaseDesk({ projectId }: { projectId: string }) {
 function ReleaseDetail({
   release,
   gate,
-  note,
-  waiver,
-  onNote,
-  onWaiver,
 }: {
   release: NonNullable<ReturnType<typeof usePm.getState>["releases"][number]>;
   gate: ReturnType<typeof versionReadiness>;
-  note: string;
-  waiver: string;
-  onNote: (value: string) => void;
-  onWaiver: (value: string) => void;
 }) {
+  // Approval/waiver drafts belong to this keyed release, never to a neighboring one.
+  const [note, onNote] = useState("");
+  const [waiver, onWaiver] = useState("");
   const published = release.status === "PUBLISHED" ? release.snapshot : null;
   const checks = published
     ? [

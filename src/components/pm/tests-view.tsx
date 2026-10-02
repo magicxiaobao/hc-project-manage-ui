@@ -43,6 +43,10 @@ const selectedObjects = new Map<string, string>();
 const expandedPanels = new Map<string, Set<string>>();
 
 export function TestsView({ projectKey }: { projectKey: string }) {
+  return <ProjectTestsView key={projectKey} projectKey={projectKey} />;
+}
+
+function ProjectTestsView({ projectKey }: { projectKey: string }) {
   const panelRoot = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const root = panelRoot.current;
@@ -72,7 +76,10 @@ export function TestsView({ projectKey }: { projectKey: string }) {
   const projectRuns = useMemo(() => runs.filter((run) => run.projectId === project?.id), [runs, project?.id]);
   const projectCases = useMemo(() => cases.filter((entry) => entry.projectId === project?.id), [cases, project?.id]);
   const projectVersions = useMemo(() => versions.filter((entry) => entry.projectId === project?.id), [versions, project?.id]);
-  const [runId, setChoice] = useState<string | null>(() => selectedObjects.get(projectKey) ?? null);
+  const [runId, setChoice] = useState<string | null>(() =>
+    projectRuns.find((run) => run.id === selectedObjects.get(projectKey))?.id ??
+    projectRuns.find((run) => run.status === "RUNNING")?.id ?? projectRuns[0]?.id ?? null,
+  );
   const setRunId = (id: string) => { selectedObjects.set(projectKey, id); setChoice(id); };
   const [name, setName] = useState("");
   const [runType, setRunType] = useState("全量回归");
@@ -88,9 +95,19 @@ export function TestsView({ projectKey }: { projectKey: string }) {
   const [joinCase, setJoinCase] = useState<Record<string, string>>({});
   const suiteRecords = usePm((state) => state.suites);
   const goToItem = useGoToItem();
+  const activeRun = projectRuns.find((run) => run.id === runId) ??
+    projectRuns.find((run) => run.status === "RUNNING") ?? projectRuns[0] ?? null;
+  const activeRunId = activeRun?.id ?? null;
+  useLayoutEffect(() => {
+    // Pin the identity when data first arrives or the selected object disappears.
+    // Status changes on an existing run must keep its report/retest context.
+    if (activeRunId) selectedObjects.set(projectKey, activeRunId);
+    else selectedObjects.delete(projectKey);
+    if (runId !== activeRunId) setChoice(activeRunId);
+    setCancelling(false);
+    setCancelReason("");
+  }, [activeRunId, projectKey, runId]);
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
-
-  const activeRun = projectRuns.find((run) => run.id === (runId ?? projectRuns.find((run) => run.status === "RUNNING")?.id ?? projectRuns[0]?.id)) ?? null;
   const rows = executions.filter((execution) => execution.runId === activeRun?.id);
   const version = versions.find((entry) => entry.id === activeRun?.versionId);
   const source = runs.find((entry) => entry.id === activeRun?.sourceRunId);
@@ -143,9 +160,7 @@ export function TestsView({ projectKey }: { projectKey: string }) {
               type="button"
               className={cn("flex w-full flex-col gap-1 border-b border-border px-3 py-3 text-left last:border-b-0", selected && "bg-line")}
               onClick={() => {
-                setRunId(run.id);
-                setCancelling(false);
-                setCancelReason("");
+                if (run.id !== activeRun?.id) setRunId(run.id);
               }}
             >
               <span className="flex items-center gap-2">

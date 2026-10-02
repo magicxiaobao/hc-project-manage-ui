@@ -20,7 +20,14 @@ const TYPE_OPTIONS = (Object.keys(DEPENDENCY_TYPE_LABEL) as DependencyType[]).ma
   hint: id === "FS" ? "会挡住后置开始" : "只记录，不拦截",
 }));
 
+// Remember only this diagram panel; explicit user collapse wins over older navigation.
+const diagramPanels = new Map<string, boolean>();
+
 export function DependenciesView({ projectKey }: { projectKey: string }) {
+  return <ProjectDependenciesView key={projectKey} projectKey={projectKey} />;
+}
+
+function ProjectDependenciesView({ projectKey }: { projectKey: string }) {
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const items = usePm((state) => state.items);
   const dependencies = usePm((state) => state.dependencies);
@@ -35,6 +42,7 @@ export function DependenciesView({ projectKey }: { projectKey: string }) {
   const [activeOnly, setActiveOnly] = useState(false);
   const [error, setError] = useState("");
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [diagramOpen, setDiagramOpen] = useState(() => diagramPanels.get(projectKey) ?? false);
 
   const tasks = useMemo(() => items.filter((item) => item.projectId === project?.id && item.kind === "task"), [items, project?.id]);
   const taskOptions = tasks.map((task) => ({ id: task.id, label: task.key, hint: task.title, icon: <IssueTypeIcon item={task} /> }));
@@ -108,8 +116,13 @@ export function DependenciesView({ projectKey }: { projectKey: string }) {
           );
         })}
       </div>
-<details className="rounded-sm border border-border bg-surface">
-<summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">依赖图 · {activeCount} 条有效依赖</summary>
+<details open={diagramOpen} className="rounded-sm border border-border bg-surface">
+<summary onClick={(event) => {
+  event.preventDefault();
+  const next = !diagramOpen;
+  diagramPanels.set(projectKey, next);
+  setDiagramOpen(next);
+}} className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">依赖图 · {activeCount} 条有效依赖</summary>
 <div className="flex flex-col gap-3 p-3">
       <DependencyCanvas tasks={tasks} dependencies={projectDeps} onOpen={goToItem} />
 {activeCount === 0 ? <EmptyHint>没有有效依赖可显示。</EmptyHint> : null}
