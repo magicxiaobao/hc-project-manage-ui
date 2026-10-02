@@ -183,7 +183,11 @@ function ProjectGanttView({ projectKey }: { projectKey: string }) {
         <section className="rounded-sm border border-border bg-surface p-3" aria-label={`${editing.item.key} 计划日期编辑`}>
           <h2 className="type-section mb-2">{editing.item.key} · 编辑计划日期</h2>
           <p className="type-caption mb-3">保存时按已有有效依赖顺延后置事项。开始和结束可以是同一天。</p>
-          <PlanDateFields key={editing.item.id} start={editing.start} end={editing.end} onCancel={closeEditor} onSave={(start, end) => { commitPlan(editing, { start, end }); closeEditor(); }} />
+          <PlanDateFields key={editing.item.id} start={editing.start} end={editing.end} onCancel={closeEditor} onSave={(start, end) => {
+            const changed = start !== editing.start.slice(0, 10) || end !== editing.end.slice(0, 10);
+            if (!commitPlan(editing, { start, end }) && changed) toast("这次日期调整违反依赖，计划没有改。");
+            closeEditor();
+          }} />
         </section>
       ) : null}
       <div className="overflow-hidden rounded-sm border border-border bg-surface">
