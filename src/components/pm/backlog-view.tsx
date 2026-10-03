@@ -68,7 +68,10 @@ export function BacklogView({ projectKey }: { projectKey: string }) {
                     { date: entry.start, tone: "progress" as const },
                     { date: entry.end, tone: "review" as const },
                   ])}
-                onChange={(start, end) => usePm.getState().updateSprint(sprint.id, { start, end })}
+                onChange={(start, end) => {
+                  const result = usePm.getState().updateSprint(sprint.id, { start, end });
+                  if (!result.ok) toast.error(result.message);
+                }}
               />
             )
           }
@@ -91,9 +94,10 @@ export function BacklogView({ projectKey }: { projectKey: string }) {
               onAskComplete={() => setConfirmId(sprint.id)}
               onCancel={() => setConfirmId(null)}
               onComplete={() => {
-                usePm.getState().completeSprint(sprint.id);
+                const result = usePm.getState().completeSprint(sprint.id);
                 setConfirmId(null);
-                toast(`${sprint.name} 已完成，未完成事项回到未排期`);
+                if (result.ok) toast(`${sprint.name} 已完成，未完成事项回到未排期`);
+                else toast(result.message);
               }}
             />
           }

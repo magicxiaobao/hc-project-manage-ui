@@ -42,8 +42,26 @@ import {
 } from "./domain";
 import { seed } from "./seed";
 import { readStoredJson, writeStoredJson, type StorageResult } from "./persistence";
+import { useAuthStore } from "../api/auth-store";
 
 const STORAGE_KEY = "hc-pm-sample-v1";
+
+/**
+ * 后端模式（已登录）下演示数据只读：演示 store 的一切写入动作直接拒绝，
+ * 返回 { ok: false } 让调用方按既有约定 toast 提示。已登录时项目列表等
+ * 走真实后端，/p/* 等演示路由展示的仍是本地种子数据，写入它们只会静默
+ * 篡改演示数据而不会同步到后端。等 Phase 1 接入后端项目详情后，
+ * 演示路由将被真实数据替换，此门控随之移除。
+ */
+export const BACKEND_READONLY_MESSAGE = "后端模式下演示数据为只读，项目数据将在 Phase 1 接入后端。";
+
+function backendReadOnly(): boolean {
+  try {
+    return useAuthStore.getState().isAuthenticated;
+  } catch {
+    return false;
+  }
+}
 
 export interface PmData {
   people: Person[];
@@ -89,7 +107,7 @@ interface PmActions {
   moveToColumn: (id: string, column: ColumnId, reason?: string, expectedStatus?: string) => PmMoveResult;
   transition: (id: string, to: string, reason?: string) => { ok: true } | { ok: false; message: string };
   updateItem: (id: string, patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "planStart" | "planEnd" | "dueDate" | "tags">>) => PmActionResult;
-  addComment: (itemId: string, body: string) => void;
+  addComment: (itemId: string, body: string) => PmActionResult;
   createItem: (input: {
     projectId: string;
     kind: ItemKind;
@@ -105,12 +123,12 @@ interface PmActions {
     parentId?: string | null;
   }) => string;
   startSprint: (id: string) => { ok: true } | { ok: false; message: string };
-  completeSprint: (id: string) => void;
-  transitionVersion: (id: string, to: VersionStatus) => void;
+  completeSprint: (id: string) => { ok: true } | { ok: false; message: string };
+  transitionVersion: (id: string, to: VersionStatus) => PmActionResult;
   createVersion: (input: { projectId: string; name: string; versionNumber: string; plannedReleaseDate: string; description: string }) => { ok: true } | { ok: false; message: string };
   createProject: (input: { key: string; name: string; summary: string; leadId: string }) => { ok: true; key: string } | { ok: false; message: string };
-  updateSprint: (id: string, patch: Partial<Pick<Sprint, "start" | "end">>) => void;
-  updateVersion: (id: string, patch: Partial<Pick<ReleaseVersion, "plannedReleaseDate">>) => void;
+  updateSprint: (id: string, patch: Partial<Pick<Sprint, "start" | "end">>) => PmActionResult;
+  updateVersion: (id: string, patch: Partial<Pick<ReleaseVersion, "plannedReleaseDate">>) => PmActionResult;
   recordExecution: (id: string, result: TestResult) => { ok: true } | { ok: false; message: string };
   createRun: (input: {
     projectId: string;
@@ -125,7 +143,7 @@ interface PmActions {
   completeRun: (id: string) => { ok: true } | { ok: false; message: string };
   cancelRun: (id: string, reason: string) => { ok: true } | { ok: false; message: string };
   createDefectFromExecution: (id: string) => { ok: true; itemId: string } | { ok: false; message: string };
-  addWorkLog: (input: { projectId: string; itemId: string; hours: number; workDate: string; note: string }) => void;
+  addWorkLog: (input: { projectId: string; itemId: string; hours: number; workDate: string; note: string }) => { ok: boolean; message?: string };
   addDependency: (input: {
     projectId: string;
     predecessorId: string;
@@ -146,7 +164,10 @@ interface PmActions {
   assignCaseSuite: (id: string, suite: string) => { ok: true } | { ok: false; message: string };
   reviewWorkLog: (id: string, status: Exclude<WorkLogStatus, "PENDING">) => { ok: true } | { ok: false; message: string };
   updateWorkLog: (id: string, patch: { hours: number; workDate: string; note: string }) => { ok: true } | { ok: false; message: string };
-  setItemPlans: (updates: { id: string; planStart: string; planEnd: string }[]) => void;
+  setItemPlans: (updates: { id: string; planStart: string; planEnd: string }[]) => {
+    ok: boolean;
+    message?: string;
+  };
   saveBaseline: (projectId: string) => { ok: true; count: number } | { ok: false; message: string };
   placeItem: (id: string, beforeId: string | null, laneIds: string[]) => void;
   cloneItem: (id: string) => { ok: true; id: string; key: string } | { ok: false; message: string };
@@ -237,13 +258,21 @@ export const usePm = create<PmState>((set, get) => ({
   setCreateOpen: (open) => set({ createOpen: open }),
   setNavOpen: (open) => set({ navOpen: open }),
   setNoticeOpen: (open) => set({ noticeOpen: open }),
-  markNoticesRead: () => set({ notices: get().notices.map((notice) => ({ ...notice, read: true })) }),
-  markNoticeRead: (id) => set({ notices: get().notices.map((notice) => (notice.id === id ? { ...notice, read: true } : notice)) }),
+  markNoticesRead: () => {
+    if (backendReadOnly()) return;
+    set({ notices: get().notices.map((notice) => ({ ...notice, read: true })) });
+  },
+  markNoticeRead: (id) => {
+    if (backendReadOnly()) return;
+    set({ notices: get().notices.map((notice) => (notice.id === id ? { ...notice, read: true } : notice)) });
+  },
   setCurrentUser: (id) => {
+    if (backendReadOnly()) return;
     if (!get().people.some((person) => person.id === id)) return;
     set({ currentUserId: id });
   },
   moveToColumn: (id, column, reason, expectedStatus) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const item = get().items.find((entry) => entry.id === id);
     if (!item) return { ok: false, message: "事项不存在" };
     if (expectedStatus !== undefined && item.status !== expectedStatus) {
@@ -268,6 +297,7 @@ export const usePm = create<PmState>((set, get) => ({
     return get().transition(id, target, reason);
   },
   transition: (id, to, reason) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const item = data.items.find((entry) => entry.id === id);
     if (!item) return { ok: false, message: "事项不存在" };
@@ -320,6 +350,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   updateItem: (id, patch) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const item = data.items.find((entry) => entry.id === id);
     if (!item) return { ok: false, message: "事项不存在。" };
@@ -378,16 +409,19 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   addComment: (itemId, body) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const text = body.trim();
-    if (!text) return;
+    if (!text) return { ok: false, message: "评论内容不能为空" };
     const at = nowIso();
     const comment: Comment = { id: uid("c"), itemId, authorId: get().currentUserId, body: text, createdAt: at };
     set({
       comments: [...get().comments, comment],
       items: get().items.map((entry) => (entry.id === itemId ? { ...entry, updatedAt: at } : entry)),
     });
+    return { ok: true };
   },
   createItem: (input) => {
+    if (backendReadOnly()) return "";
     const data = get();
     const project = data.projects.find((entry) => entry.id === input.projectId);
     if (!project) return "";
@@ -441,6 +475,7 @@ export const usePm = create<PmState>((set, get) => ({
     return id;
   },
   startSprint: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const sprint = data.sprints.find((entry) => entry.id === id);
     if (!sprint) return { ok: false, message: "迭代不存在" };
@@ -453,9 +488,10 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   completeSprint: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const sprint = data.sprints.find((entry) => entry.id === id);
-    if (!sprint || sprint.state !== "active") return;
+    if (!sprint || sprint.state !== "active") return { ok: false, message: "只有进行中的迭代可以完成。" };
     const at = nowIso();
     set({
       sprints: data.sprints.map((entry) => (entry.id === id ? { ...entry, state: "closed" as SprintState } : entry)),
@@ -466,13 +502,17 @@ export const usePm = create<PmState>((set, get) => ({
         return { ...entry, sprintId: null, updatedAt: at };
       }),
     });
+    return { ok: true };
   },
   transitionVersion: (id, to) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     set({
       versions: get().versions.map((entry) => (entry.id === id ? { ...entry, status: to } : entry)),
     });
+    return { ok: true };
   },
   createVersion: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const name = input.name.trim();
     const versionNumber = input.versionNumber.trim();
     if (!name || !versionNumber) return { ok: false, message: "版本号和名称都不能为空。" };
@@ -494,6 +534,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   createProject: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const key = input.key.trim().toUpperCase();
     const name = input.name.trim();
     if (!/^[A-Z][A-Z0-9]{1,7}$/.test(key)) return { ok: false, message: "项目键用 2 到 8 位大写字母或数字，并以字母开头。" };
@@ -512,16 +553,21 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, key };
   },
   updateSprint: (id, patch) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     set({
       sprints: get().sprints.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
     });
+    return { ok: true };
   },
   updateVersion: (id, patch) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     set({
       versions: get().versions.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
     });
+    return { ok: true };
   },
   recordExecution: (id, result) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const execution = data.testExecutions.find((entry) => entry.id === id);
     if (!execution) return { ok: false, message: "执行不存在。" };
@@ -533,6 +579,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   createRun: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const name = input.name.trim();
     if (!name) return { ok: false, message: "请填写运行名称。" };
@@ -586,6 +633,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, id };
   },
   startRun: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const run = get().testRuns.find((entry) => entry.id === id);
     if (!run) return { ok: false, message: "运行不存在。" };
     if (run.status !== "CREATED") return { ok: false, message: "只有未开始的运行可以开始。" };
@@ -593,6 +641,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   completeRun: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const run = data.testRuns.find((entry) => entry.id === id);
     if (!run) return { ok: false, message: "运行不存在。" };
@@ -614,6 +663,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   cancelRun: (id, reason) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const text = reason.trim();
     if (!text) return { ok: false, message: "取消需要填写原因。" };
     const run = get().testRuns.find((entry) => entry.id === id);
@@ -626,6 +676,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   createDefectFromExecution: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const execution = data.testExecutions.find((entry) => entry.id === id);
     if (!execution) return { ok: false, message: "执行不存在。" };
@@ -690,6 +741,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, itemId };
   },
   addWorkLog: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const entry: WorkLog = {
       id: uid("wl"),
       projectId: input.projectId,
@@ -701,8 +753,10 @@ export const usePm = create<PmState>((set, get) => ({
       status: "PENDING",
     };
     set({ workLogs: [entry, ...get().workLogs] });
+    return { ok: true };
   },
   addDependency: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     if (!input.predecessorId || !input.successorId) return { ok: false, message: "请选择前置任务和后置任务。" };
     const predecessor = data.items.find((item) => item.id === input.predecessorId);
@@ -740,6 +794,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   setDependencyStatus: (id, status) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const current = data.dependencies.find((entry) => entry.id === id);
     if (!current) return { ok: false, message: "依赖不存在。" };
@@ -755,6 +810,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   updateProject: (id, patch) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const project = get().projects.find((entry) => entry.id === id);
     if (!project) return { ok: false, message: "项目不存在。" };
     const name = patch.name?.trim() ?? project.name;
@@ -770,6 +826,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   createSprint: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const name = input.name.trim();
     if (!name) return { ok: false, message: "迭代名称不能为空。" };
     if (!input.start || !input.end || input.end < input.start) return { ok: false, message: "结束日期不能早于开始日期。" };
@@ -786,6 +843,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   createBoard: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const name = input.name.trim();
     if (!name) return { ok: false, message: "看板名称不能为空。" };
     const entry: Board = { id: uid("bd"), projectId: input.projectId, name, sprintId: input.sprintId };
@@ -793,6 +851,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   renameBoard: (id, name) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const next = name.trim();
     if (!next) return { ok: false, message: "看板名称不能为空。" };
     const board = get().boards.find((entry) => entry.id === id);
@@ -802,6 +861,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   createSuite: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const name = input.name.trim();
     if (!name) return { ok: false, message: "套件名称不能为空。" };
     if (get().suites.some((entry) => entry.projectId === input.projectId && entry.name === name)) {
@@ -811,6 +871,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   saveCaseSteps: (id, steps) => {
+    if (backendReadOnly()) return;
     set({
       testCases: get().testCases.map((entry) =>
         entry.id === id ? { ...entry, steps: steps.map((step) => ({ action: step.action.trim(), expected: step.expected.trim() })).filter((step) => step.action || step.expected) } : entry,
@@ -818,6 +879,7 @@ export const usePm = create<PmState>((set, get) => ({
     });
   },
   updateCase: (id, patch) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const current = get().testCases.find((entry) => entry.id === id);
     if (!current) return { ok: false, message: "用例不存在。" };
     const steps = patch.steps?.map((step) => ({ action: step.action.trim(), expected: step.expected.trim() })).filter((step) => step.action || step.expected);
@@ -847,6 +909,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   copyCase: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const current = data.testCases.find((entry) => entry.id === id);
     if (!current) return { ok: false, message: "用例不存在。" };
@@ -867,6 +930,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, id: created.id };
   },
   assignCaseSuite: (id, suite) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const name = suite.trim();
     const current = get().testCases.find((entry) => entry.id === id);
     if (!current) return { ok: false, message: "用例不存在。" };
@@ -877,6 +941,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   reviewWorkLog: (id, status) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const log = get().workLogs.find((entry) => entry.id === id);
     if (!log) return { ok: false, message: "工时不存在。" };
     if ((log.status ?? "APPROVED") !== "PENDING") return { ok: false, message: "只有待审批的工时可以处理。" };
@@ -884,6 +949,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   updateWorkLog: (id, patch) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const log = get().workLogs.find((entry) => entry.id === id);
     if (!log) return { ok: false, message: "工时不存在。" };
     if ((log.status ?? "APPROVED") !== "PENDING") return { ok: false, message: "已通过或已驳回的工时不能改，请另记一条。" };
@@ -897,6 +963,9 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   setItemPlans: (updates) => {
+    // 后端模式返回失败结果而非静默丢弃：调用方（甘特图 commitPlan）会据此
+    // 弹提示并返回 false，避免“编辑器关闭+已顺延 toast”的虚假成功。
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const at = nowIso();
     let items = data.items;
@@ -915,8 +984,10 @@ export const usePm = create<PmState>((set, get) => ({
       items = items.map((entry) => (entry.id === update.id ? { ...entry, planStart: update.planStart, planEnd: update.planEnd, updatedAt: at } : entry));
     }
     if (items !== data.items) set({ items, feeds });
+    return { ok: true };
   },
   saveBaseline: (projectId) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     let count = 0;
     const items = data.items.map((item) => {
@@ -933,6 +1004,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, count };
   },
   placeItem: (id, beforeId, laneIds) => {
+    if (backendReadOnly()) return;
     const data = get();
     if (!data.items.some((entry) => entry.id === id)) return;
     const lane = data.items.filter((entry) => laneIds.includes(entry.id) || entry.id === id);
@@ -940,6 +1012,7 @@ export const usePm = create<PmState>((set, get) => ({
     set({ items: data.items.map((entry) => (entry.id === id ? { ...entry, rank } : entry)) });
   },
   cloneItem: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const item = data.items.find((entry) => entry.id === id);
     const project = data.projects.find((entry) => entry.id === item?.projectId);
@@ -977,6 +1050,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, id: copyId, key: created.key };
   },
   createEnvironment: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const name = input.name.trim();
     if (!name) return { ok: false, message: "环境名称不能为空。" };
     const entry: ReleaseEnvironment = { id: uid("env"), projectId: input.projectId, name, kind: input.kind };
@@ -985,6 +1059,7 @@ export const usePm = create<PmState>((set, get) => ({
   },
   setItemVersion: (itemId, versionId) => get().updateItem(itemId, { versionId }),
   createRelease: (input) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const title = input.title.trim();
     if (!title) return { ok: false, message: "发布单标题不能为空。" };
     const version = get().versions.find((entry) => entry.id === input.versionId && entry.projectId === input.projectId);
@@ -1003,6 +1078,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, id: entry.id };
   },
   submitRelease: (id) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const release = get().releases.find((entry) => entry.id === id);
     if (!release) return { ok: false, message: "发布单不存在。" };
     if (release.status !== "DRAFT") return { ok: false, message: "只有草稿可以提交审批。" };
@@ -1010,6 +1086,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   decideRelease: (id, decision, note) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const release = get().releases.find((entry) => entry.id === id);
     if (!release) return { ok: false, message: "发布单不存在。" };
     if (release.status !== "SUBMITTED") return { ok: false, message: "只有待审批的发布单可以审批。" };
@@ -1021,6 +1098,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   publishRelease: (id, waiver) => {
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const release = data.releases.find((entry) => entry.id === id);
     if (!release) return { ok: false, message: "发布单不存在。" };
@@ -1046,8 +1124,14 @@ export const usePm = create<PmState>((set, get) => ({
     });
     return { ok: true };
   },
-  reset: () => set({ ...cloneSeed(), createOpen: false }),
-  replaceData: (data) => set({ ...data }),
+  reset: () => {
+    if (backendReadOnly()) return;
+    set({ ...cloneSeed(), createOpen: false });
+  },
+  replaceData: (data) => {
+    if (backendReadOnly()) return;
+    set({ ...data });
+  },
 }));
 
 function mergeById<T extends { id: string }>(saved: T[] | undefined, fresh: T[]) {

@@ -125,7 +125,11 @@ export function IssueProperties({
             toast.error("请填写日期");
             return;
           }
-          usePm.getState().addWorkLog({ projectId: item.projectId, itemId: item.id, hours: amount, workDate, note });
+          const result = usePm.getState().addWorkLog({ projectId: item.projectId, itemId: item.id, hours: amount, workDate, note });
+          if (!result.ok) {
+            toast.error(result.message ?? "提交失败");
+            return;
+          }
           setNote("");
           toast("已记下工时，待审批");
         }}

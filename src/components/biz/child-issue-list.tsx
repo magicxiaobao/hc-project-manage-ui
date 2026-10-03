@@ -4,7 +4,8 @@ import { Link } from "@tanstack/react-router";
 import type { WorkItem } from "@/lib/pm/domain";
 import { columnOf } from "@/lib/pm/domain";
 import { StatusChip } from "@/components/biz/status-chip";
-import { usePm } from "@/lib/pm/store";
+import { usePm, BACKEND_READONLY_MESSAGE } from "@/lib/pm/store";
+import { toast } from "sonner";
 
 export function ChildIssueList({ projectKey, items, parent }: { projectKey: string; items: WorkItem[]; parent?: WorkItem }) {
   const itemNavigationState = useItemNavigationState();
@@ -40,7 +41,7 @@ export function ChildIssueList({ projectKey, items, parent }: { projectKey: stri
             event.preventDefault();
             const next = title.trim();
             if (!next) return;
-            usePm.getState().createItem({
+            const id = usePm.getState().createItem({
               projectId: project.id,
               kind: "task",
               title: next,
@@ -50,6 +51,11 @@ export function ChildIssueList({ projectKey, items, parent }: { projectKey: stri
               sprintId: parent.sprintId,
               parentId: parent.id,
             });
+            // 后端模式只读拒绝时保留用户草稿并提示，不清空输入框
+            if (!id) {
+              toast(BACKEND_READONLY_MESSAGE);
+              return;
+            }
             setTitle("");
           }}
         >

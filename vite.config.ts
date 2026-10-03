@@ -150,6 +150,22 @@ export default defineConfig(({ command, isPreview }) => ({
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    // Phase 0: /api 反代到本机后端（与 hc-project-manage 老前端一致），避免浏览器直连跨域
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8089",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api/, ""),
+        // 本应用自己的 Better Auth 挂在 /api/auth/*（如 /api/auth/get-session、
+        // /api/auth/oauth2/*），必须走本地由 Better Auth 处理，不能反代到 Spring。
+        // Spring 自身的认证命名空间是 /api/auth/v1（AuthController），继续反代。
+        bypass: (req) => {
+          const url = req.url ?? "";
+          if (/^\/api\/auth\//.test(url) && !/^\/api\/auth\/v1(\/|$)/.test(url)) return url;
+          return undefined;
+        },
+      },
+    },
   },
   preview: {
     host: "127.0.0.1",

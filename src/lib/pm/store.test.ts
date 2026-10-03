@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { usePm, readPersistedPm, persistPm, bindPmPersistence } from "./store.ts";
+import { useAuthStore } from "../api/auth-store.ts";
 import { seed } from "./seed.ts";
 
 let cleanup: (() => void) | undefined;
@@ -344,4 +345,46 @@ test("clone 未分配版本的事项仍不分配版本，不存在的事项不�
   const before = usePm.getState();
   assert.equal(before.cloneItem("missing-item").ok, false);
   assert.equal(usePm.getState().items, before.items);
+});
+
+test("后端模式（已登录）下演示数据只读：写入动作被拒绝且状态不变", () => {
+  const pm = usePm.getState();
+  const item = pm.items[0];
+  const beforeItems = structuredClone(pm.items);
+  const beforeComments = pm.comments.length;
+  useAuthStore.setState({
+    isAuthenticated: true,
+    user: { userId: "u-1", userName: "tester", cnName: null, extraInfo: {}, roles: [], authorities: [] },
+    token: "token",
+  });
+  try {
+    const updateResult = usePm.getState().updateItem(item.id, { title: "hacked" });
+    assert.equal(updateResult.ok, false);
+    assert.deepEqual(usePm.getState().items, beforeItems);
+
+    usePm.getState().addComment(item.id, "hacked comment");
+    assert.equal(usePm.getState().comments.length, beforeComments);
+
+    const createdId = usePm.getState().createItem({
+      projectId: item.projectId,
+      kind: "task",
+      title: "hacked",
+      description: "",
+      priority: "MEDIUM",
+      assigneeId: null,
+      sprintId: null,
+    });
+    assert.equal(createdId, "");
+    assert.equal(usePm.getState().items.length, beforeItems.length);
+
+    const moveResult = usePm.getState().moveToColumn(item.id, "done");
+    assert.equal(moveResult.ok, false);
+    assert.deepEqual(usePm.getState().items, beforeItems);
+  } finally {
+    useAuthStore.setState({ isAuthenticated: false, user: null, token: null });
+  }
+  // 登出后恢复可写
+  const afterLogout = usePm.getState().updateItem(item.id, { title: "ok" });
+  assert.equal(afterLogout.ok, true);
+  assert.equal(usePm.getState().items[0].title, "ok");
 });

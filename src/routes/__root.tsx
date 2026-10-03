@@ -1,6 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { I18nProvider } from "@heroui/react";
 import { AuthProvider } from "@/lib/auth/provider";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
@@ -25,7 +27,20 @@ export const Route = createRootRoute({
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
     ],
   }),
-  component: () => (
+  component: RootComponent,
+});
+
+/**
+ * 根组件：挂载时从 localStorage 恢复登录态（hydrate 幂等），
+ * 使 / /inbox /me /p/* 等路由直刷/深链也能拿到登录态，
+ * 而不依赖 /login 或 /projects 的各自调用。
+ */
+function RootComponent() {
+  useEffect(() => {
+    useAuthStore.getState().hydrate();
+  }, []);
+
+  return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <HeadContent />
@@ -40,5 +55,5 @@ export const Route = createRootRoute({
         <Scripts />
       </body>
     </html>
-  ),
-});
+  );
+}
