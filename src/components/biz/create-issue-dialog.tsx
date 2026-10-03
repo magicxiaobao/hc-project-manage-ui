@@ -41,6 +41,7 @@ export function CreateIssueDialog() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   const itemNavigationState = useItemNavigationState();
+  const currentUserId = usePm((state) => state.currentUserId);
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
   const titleErrorId = useId();
@@ -55,7 +56,7 @@ export function CreateIssueDialog() {
       const matched = projects.find(
         (project) => pathname === `/p/${project.key}` || pathname.startsWith(`/p/${project.key}/`),
       );
-      const draft = readCreateDraft();
+      const draft = readCreateDraft(currentUserId);
       const next = draft
         ? { ...draft, sprintId: keptSprintId(draft.sprintId, sprints, draft.projectId) }
         : { ...empty, projectId: matched?.id ?? projects[0]?.id ?? "pr-hc" };
@@ -64,10 +65,10 @@ export function CreateIssueDialog() {
       openedRef.current = next;
       setError("");
     } else if (!open && wasOpen.current) {
-      writeCreateDraft(createDraftOnClose(formRef.current, openedRef.current, restoredRef.current));
+      writeCreateDraft(currentUserId, createDraftOnClose(formRef.current, openedRef.current, restoredRef.current));
     }
     wasOpen.current = open;
-  }, [open, pathname, projects, sprints]);
+  }, [open, pathname, projects, sprints, currentUserId]);
 
   if (!open) return null;
   const projectSprints = sprints.filter(
@@ -104,7 +105,7 @@ export function CreateIssueDialog() {
             sprintId: form.sprintId || null,
           });
           if (!id) return;
-          writeCreateDraft(null);
+          writeCreateDraft(currentUserId, null);
           restoredRef.current = false;
           openedRef.current = form;
           const created = usePm.getState().items.find((entry) => entry.id === id);
