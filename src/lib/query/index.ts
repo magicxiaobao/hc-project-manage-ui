@@ -13,6 +13,8 @@ export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey,
 export type { ProjectListParams } from './hooks/useProjects';
 export { useRequirementList, useRequirementOptions } from './hooks/useRequirements';
 export type { RequirementListParams, RequirementOptions } from './hooks/useRequirements';
+export { useTaskList } from './hooks/useTasks';
+export type { TaskListParams } from './hooks/useTasks';
 export {
   useAllowedTransitions,
   useCreateRequirementComment,
