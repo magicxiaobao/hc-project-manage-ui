@@ -38,7 +38,9 @@ function getPersistedUser(): AuthenticatedUser | null {
   if (!raw) return null;
   try {
     const user = JSON.parse(raw) as AuthenticatedUser;
-    return user && typeof user.userId === 'string' ? user : null;
+    // 完整性校验：AppShell 在登录态下会直接求值 authUser.roles.join(...) 等字段，
+    // 只校验 userId 字符串不足以防范 userInfo 被部分篡改/损坏后的渲染期崩溃。
+    return user && typeof user.userId === 'string' && Array.isArray(user.roles) ? user : null;
   } catch {
     return null;
   }

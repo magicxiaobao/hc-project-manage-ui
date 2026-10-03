@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button } from "@heroui/react";
+import { useEffect } from "react";
 import { FeedPreview, MineList, PageHeading, SprintSummary } from "@/components/biz";
 import { AppShell } from "@/components/pm/shell";
 import { columnOf, greeting } from "@/lib/pm/domain";
@@ -10,6 +11,16 @@ import { useGoToItem } from "@/components/pm/use-go-item";
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (isAuthenticated) {
+      void navigate({ to: "/projects" });
+    }
+  }, [isAuthenticated, navigate]);
+  // Phase 0：后端模式的落地页是 /projects（真实后端数据）；首页只保留未登录
+  // 的演示视图，避免展示演示身份的问候与“我的事项”而误导为真实登录人的工作。
+  if (isAuthenticated) return null;
   return (
     <AppShell>
       <HomeBody />

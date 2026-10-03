@@ -136,7 +136,11 @@ function ProjectGanttView({ projectKey }: { projectKey: string }) {
       return [{ id: entry.item.id, planStart: plan.start, planEnd: plan.end }];
     });
     if (updates.length === 0) return false;
-    usePm.getState().setItemPlans(updates);
+    const result = usePm.getState().setItemPlans(updates);
+    if (!result.ok) {
+      toast(result.message ?? "后端模式下演示数据为只读。");
+      return false;
+    }
     const shifted = updates.filter((update) => update.id !== row.item.id);
     if (shifted.length > 0) {
       const names = shifted.map((update) => rows.find((entry) => entry.item.id === update.id)?.item.key).filter(Boolean);

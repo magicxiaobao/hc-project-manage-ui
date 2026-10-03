@@ -26,6 +26,7 @@ function ProjectsPage() {
 function LiveProjectList() {
   const [projects, setProjects] = useState<ProjectResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +43,24 @@ function LiveProjectList() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   if (error) {
-    return <p className="text-sm text-danger">加载失败：{error}</p>;
+    return (
+      <div className="flex items-center gap-3 py-8 text-sm text-danger">
+        <span>加载失败：{error}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          onPress={() => {
+            setError(null);
+            setReloadKey((key) => key + 1);
+          }}
+        >
+          重试
+        </Button>
+      </div>
+    );
   }
   if (!projects) {
     return (

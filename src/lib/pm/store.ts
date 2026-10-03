@@ -164,7 +164,10 @@ interface PmActions {
   assignCaseSuite: (id: string, suite: string) => { ok: true } | { ok: false; message: string };
   reviewWorkLog: (id: string, status: Exclude<WorkLogStatus, "PENDING">) => { ok: true } | { ok: false; message: string };
   updateWorkLog: (id: string, patch: { hours: number; workDate: string; note: string }) => { ok: true } | { ok: false; message: string };
-  setItemPlans: (updates: { id: string; planStart: string; planEnd: string }[]) => void;
+  setItemPlans: (updates: { id: string; planStart: string; planEnd: string }[]) => {
+    ok: boolean;
+    message?: string;
+  };
   saveBaseline: (projectId: string) => { ok: true; count: number } | { ok: false; message: string };
   placeItem: (id: string, beforeId: string | null, laneIds: string[]) => void;
   cloneItem: (id: string) => { ok: true; id: string; key: string } | { ok: false; message: string };
@@ -957,7 +960,9 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   setItemPlans: (updates) => {
-    if (backendReadOnly()) return;
+    // 后端模式返回失败结果而非静默丢弃：调用方（甘特图 commitPlan）会据此
+    // 弹提示并返回 false，避免“编辑器关闭+已顺延 toast”的虚假成功。
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const at = nowIso();
     let items = data.items;
@@ -976,6 +981,7 @@ export const usePm = create<PmState>((set, get) => ({
       items = items.map((entry) => (entry.id === update.id ? { ...entry, planStart: update.planStart, planEnd: update.planEnd, updatedAt: at } : entry));
     }
     if (items !== data.items) set({ items, feeds });
+    return { ok: true };
   },
   saveBaseline: (projectId) => {
     if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
