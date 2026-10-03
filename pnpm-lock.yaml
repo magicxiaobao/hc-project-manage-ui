@@ -32,6 +32,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.7.0
         version: 5.9.1(@standard-schema/spec@1.1.0)(react-hook-form@7.89.0(@types/react@19.3.0)(react@19.3.0))(zod@4.6.5)
+      '@internationalized/date':
+        specifier: ^3.12.4
+        version: 3.12.4
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
         version: 1.2.20(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
