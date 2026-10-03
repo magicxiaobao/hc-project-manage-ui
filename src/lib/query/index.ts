@@ -16,10 +16,15 @@ export type { RequirementListParams, RequirementOptions } from './hooks/useRequi
 export {
   useAllowedTransitions,
   useCreateRequirementComment,
+  useRequirementChildren,
   useRequirementComments,
   useRequirementDetail,
+  useRequirementHierarchy,
+  useRequirementImpact,
+  useRequirementTrace,
+  useTraceMatrix,
   useTransitionHistory,
   useTransitionRequirement,
   transitionFieldRequirements,
 } from './hooks/useRequirements';
-export type { TransitionFieldRequirements } from './hooks/useRequirements';
+export type { TraceMatrixParams, TransitionFieldRequirements } from './hooks/useRequirements';

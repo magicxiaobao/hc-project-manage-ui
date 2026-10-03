@@ -19,6 +19,16 @@ function domainKeys(domain: 'project' | 'requirement' | 'task') {
     allowed: (id: number | string, status: string) => [...all, 'allowed', id, status] as const,
     /** 状态流转历史 */
     history: (id: number | string) => [...all, 'history', id] as const,
+    /** 需求追溯图：GET /requirement/v1/trace/{id} */
+    trace: (id: number | string) => [...all, 'trace', id] as const,
+    /** 需求影响范围：GET /requirement/v1/trace/{id}/impact */
+    impact: (id: number | string) => [...all, 'impact', id] as const,
+    /** 追溯矩阵分页：params 为矩阵查询参数对象 */
+    matrix: (params: Record<string, unknown> = {}) => [...all, 'matrix', params] as const,
+    /** 子需求列表：GET /requirement/v1/{id}/children */
+    children: (id: number | string) => [...all, 'children', id] as const,
+    /** 需求层级树：projectId 为空时查全部 */
+    hierarchy: (projectId: number | null = null) => [...all, 'hierarchy', projectId] as const,
     /** 评论查询：params 为分页参数对象（如 { page, pageSize }） */
     comments: (id: number | string, params: Record<string, unknown> = {}) => [...all, 'comments', id, params] as const,
     /** 按业务 key（项目 key 等）解析 id 的查询 */

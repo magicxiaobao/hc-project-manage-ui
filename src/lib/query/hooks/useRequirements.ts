@@ -12,8 +12,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requirementApi } from '../../api/requirement';
 import type {
   CommentCreatePayload,
+  RequirementImpact,
+  RequirementMatrixQuery,
   RequirementOption,
   RequirementQueryRequest,
+  RequirementResponse,
+  RequirementTrace,
   RequirementTransitionPayload,
 } from '../../api/requirement-types';
 import { useAuthStore } from '../../api/auth-store';
@@ -182,5 +186,76 @@ export function useRequirementOptions() {
       return { types, priorities, statuses };
     },
     enabled: isAuthenticated,
+  });
+}
+
+/**
+ * 需求追溯图：走 GET /requirement/v1/trace/{id}。
+ * 返回追溯分桶（tasks/testCases/testRuns/testExecutions/defects/versions，各带 total/list/truncated）
+ * + edges（追溯边）+ generatedAt。id 无效时 disabled。
+ */
+export function useRequirementTrace(requirementId: number | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.requirement.trace(requirementId ?? 0),
+    queryFn: () => requirementApi.getTrace(requirementId as number),
+    enabled: typeof requirementId === 'number' && Number.isFinite(requirementId) && requirementId > 0,
+  });
+}
+
+/**
+ * 需求影响范围：走 GET /requirement/v1/trace/{id}/impact。
+ * 返回 root/nodes/edges 的影响图。id 无效时 disabled。
+ */
+export function useRequirementImpact(requirementId: number | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.requirement.impact(requirementId ?? 0),
+    queryFn: () => requirementApi.getImpact(requirementId as number),
+    enabled: typeof requirementId === 'number' && Number.isFinite(requirementId) && requirementId > 0,
+  });
+}
+
+export interface TraceMatrixParams {
+  page?: number;
+  pageSize?: number;
+  bean?: RequirementMatrixQuery;
+  /** 所属项目 id；null/undefined 时不发起请求（调用方等待 projectKey→id 解析） */
+  projectId?: number | null;
+}
+
+/**
+ * 追溯矩阵分页：走 POST /requirement/v1/trace/matrix/findByPage。
+ * bean 默认带 projectId（矩阵始终按项目过滤）；projectId 无效时 disabled。
+ */
+export function useTraceMatrix(params: TraceMatrixParams = {}) {
+  const { projectId, page = 1, pageSize = 20, bean } = params;
+  // 不加显式类型注解：让 normalized 保持对象字面量推断类型，
+  // 才能获得隐式索引签名，满足 queryKeys.requirement.matrix 的 Record<string, unknown> 参数。
+  const normalized = {
+    page,
+    pageSize,
+    bean: { ...bean, projectId: projectId ?? 0 },
+  };
+  return useQuery({
+    queryKey: queryKeys.requirement.matrix(normalized),
+    queryFn: () => requirementApi.findMatrixByPage(normalized),
+    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+  });
+}
+
+/** 子需求列表：走 GET /requirement/v1/{id}/children；id 无效时 disabled */
+export function useRequirementChildren(requirementId: number | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.requirement.children(requirementId ?? 0),
+    queryFn: () => requirementApi.getChildRequirements(requirementId as number),
+    enabled: typeof requirementId === 'number' && Number.isFinite(requirementId) && requirementId > 0,
+  });
+}
+
+/** 需求层级树：走 GET /requirement/v1/hierarchy?projectId=；projectId 无效时 disabled */
+export function useRequirementHierarchy(projectId: number | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.requirement.hierarchy(projectId ?? null),
+    queryFn: () => requirementApi.getRequirementHierarchy(projectId ?? undefined),
+    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
   });
 }
