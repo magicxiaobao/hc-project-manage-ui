@@ -229,8 +229,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       if (data.code === 1) return data.result;
       if (AUTH_EXPIRED_CODES.includes(data.code)) {
         // 旧会话请求的迟到“登录失效”信号：代际已变化则不清除新会话凭证、不跳转；
+        // 同一请求在途期间令牌已被轮转（如并发请求的刷新先成功）：该信号来自旧令牌，
+        // 直接丢弃，不清除新凭证、不跳转。
         // 确认失效时递增代际，使在途的刷新完成后被丢弃，不复活已失效的会话。
-        if (authStillCurrent()) {
+        const tokenRotated = readToken() !== token;
+        if (authStillCurrent() && !tokenRotated) {
           invalidateSession();
           notifyUnauthorized();
         }

@@ -53,7 +53,7 @@ const STORAGE_KEY = "hc-pm-sample-v1";
  * 篡改演示数据而不会同步到后端。等 Phase 1 接入后端项目详情后，
  * 演示路由将被真实数据替换，此门控随之移除。
  */
-const BACKEND_READONLY_MESSAGE = "后端模式下演示数据为只读，项目数据将在 Phase 1 接入后端。";
+export const BACKEND_READONLY_MESSAGE = "后端模式下演示数据为只读，项目数据将在 Phase 1 接入后端。";
 
 function backendReadOnly(): boolean {
   try {

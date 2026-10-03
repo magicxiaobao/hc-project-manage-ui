@@ -13,6 +13,8 @@
  * - 刷新接口返回 HTTP 401 但响应体畸形/非信封：仍判定 refresh token 失效并清凭证
  * - 旧会话请求的迟到登录失效信号：代际已变化时不清除新会话凭证、不通知（会话代际守卫）
  * - 旧会话请求的迟到 401：代际已变化时不触发刷新、不重放旧请求
+ * - 同一请求在途期间令牌被轮转：迟到到达的旧令牌登录失效信号直接丢弃，
+ *   不清除新凭证、不通知
  * - 登录失效确认（业务码/重放后仍 401）：调用 sessionInvalidator 递增代际，
  *   使在途刷新完成后被丢弃，不复活已失效的会话
  * - hydrate：三键齐全才恢复登录态；缺 refreshToken 的会话拒绝恢复并清理残留凭证
@@ -378,6 +380,37 @@ describe('会话代际', () => {
     expect(invalidated).toBe(1);
     expect(memStore.get('token')).toBeUndefined();
     expect(unauthorized).toBe(1);
+  });
+
+  it('请求在途期间令牌被轮转：旧令牌的迟到登录失效信号直接丢弃', async () => {
+    // 请求带着旧 token 发出；在途期间并发请求的刷新先成功，存储已轮转为新 token
+    memStore.set('token', 'old-token');
+    memStore.set('refreshToken', 'refresh-1');
+    let unauthorized = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => 1);
+
+    let resolveFetch!: (res: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise<Response>((r) => { resolveFetch = r; })),
+    );
+    const pending = client.get('/auth/v1/me').catch((e) => e);
+    // 响应到达前，并发请求的刷新先成功并落盘新凭证
+    memStore.set('token', 'new-token');
+    resolveFetch(
+      new Response(JSON.stringify({ code: 10106, msg: '登录失效', result: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const err = await pending;
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    // 该信号来自旧令牌：新凭证不受影响，不跳转登录页
+    expect(memStore.get('token')).toBe('new-token');
+    expect(memStore.get('refreshToken')).toBe('refresh-1');
+    expect(unauthorized).toBe(0);
   });
 });
 
