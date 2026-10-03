@@ -70,7 +70,15 @@ export function validateTaskCreateInput(input: TaskCreateFormInput): string | nu
     ['执行人用户 ID', input.assigneeIdText],
     ['报告人用户 ID', input.reporterIdText],
   ] as const) {
-    if (text.trim() && !/^\d+$/.test(text.trim())) return `${label}必须为数字`;
+    if (!text.trim()) continue;
+    // Codex review 4175265685：id 字段必须用与载荷组装相同的规则校验
+    // （正整数 + 安全整数范围），不能只用 /^\d+$/——"0" 或超大数字会通过
+    // 校验，却在 buildTaskCreatePayload 里被静默丢弃，用户以为关联成功了。
+    const isIdField = label !== '故事点';
+    const valid = isIdField
+      ? parseOptionalPositiveInt(text) !== null
+      : parseOptionalNonNegativeInt(text) !== null;
+    if (!valid) return `${label}必须为${isIdField ? '正整数' : '非负整数'}`;
   }
   if (input.estimatedHoursText.trim() && parseOptionalNonNegativeNumber(input.estimatedHoursText) === null) {
     return '预估工时必须为非负数字';

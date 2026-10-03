@@ -134,11 +134,18 @@ function RequirementPicker({
           ))}
         </div>
       ) : null}
-      <form
+      {/*
+        注意：此处不能再套一层 <form>。嵌套表单的 submit 事件会冒泡到外层
+        任务表单，在任务字段已填好时按回车会误触发整单创建（Codex 4175265679）。
+        因此用 div + 回车键显式触发搜索。
+      */}
+      <div
         className="flex gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          applySearch();
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            applySearch();
+          }
         }}
       >
         <div className="flex-1">
@@ -146,10 +153,10 @@ function RequirementPicker({
             <Input placeholder="按标题搜索需求，回车确认" />
           </TextField>
         </div>
-        <Button type="submit" variant="ghost" size="sm">
+        <Button type="button" variant="ghost" size="sm" onPress={applySearch}>
           搜索
         </Button>
-      </form>
+      </div>
       {listQuery.isPending ? (
         <div className="flex items-center gap-2 py-3 text-sm text-default-500">
           <Spinner size="sm" />

@@ -5,6 +5,7 @@ import { I18nProvider } from "@heroui/react";
 import { AuthProvider } from "@/lib/auth/provider";
 import { useAuthStore } from "@/lib/api/auth-store";
 import { createQueryClient } from "@/lib/query/client";
+import { setQueryCacheClearer } from "@/lib/query/session";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
@@ -44,7 +45,13 @@ function RootComponent() {
   const [queryClient] = useState(() => createQueryClient());
   useEffect(() => {
     useAuthStore.getState().hydrate();
-  }, []);
+    // 登录用户变更时清空查询缓存：防止账号 B 读到账号 A 的缓存数据。
+    setQueryCacheClearer(() => {
+      void queryClient.cancelQueries();
+      queryClient.clear();
+    });
+    return () => setQueryCacheClearer(null);
+  }, [queryClient]);
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>

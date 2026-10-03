@@ -15,6 +15,7 @@ import {
   clearStoredAuth,
 } from './client';
 import { authApi, isCanonicalUserId } from './auth';
+import { clearQueryCache } from '../query/session';
 import type { AuthenticatedUser } from './types';
 
 function readStorage(key: string): string | null {
@@ -133,6 +134,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const res = await authApi.login({ username, password });
     sessionGeneration += 1;
     persistLogin(res.token, res.refreshToken, res.userInfo);
+    // 换账号/重新登录：旧用户的查询缓存必须作废，避免 B 看到 A 的数据。
+    clearQueryCache();
     set({ user: res.userInfo, token: res.token, isAuthenticated: true });
   },
 
@@ -143,6 +146,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // 先清本地、再调后端：即使用户在吊销请求返回前关闭标签页，会话也不会残留。
     // 后端吊销凭请求体中的 refreshToken（持有即吊销，不依赖访问令牌头），顺序调换安全。
     clearStoredAuth();
+    // 登出即作废全部查询缓存：同一标签页后续登录的账号不再复用旧数据。
+    clearQueryCache();
     set({ user: null, token: null, isAuthenticated: false });
     if (refreshToken) {
       try {
@@ -182,6 +187,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // 先递增代际：在途的刷新完成时核对到代际已变化，丢弃刷新结果，不复活已失效的会话
     sessionGeneration += 1;
     clearStoredAuth();
+    // 会话失效同样作废查询缓存：后续登录的账号从干净状态开始。
+    clearQueryCache();
     set({ user: null, token: null, isAuthenticated: false });
   },
 }));

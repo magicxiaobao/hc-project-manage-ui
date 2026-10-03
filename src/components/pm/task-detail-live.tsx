@@ -38,6 +38,7 @@ import {
   toUserMessage,
   useAssignTask,
   useCreateTaskComment,
+  useProjectIdByKey,
   useTaskComments,
   useTaskDetail,
   useUpdateTaskStatus,
@@ -76,6 +77,10 @@ export function TaskDetailLive({
 }) {
   const detailQuery = useTaskDetail(taskId);
   const task = detailQuery.data ?? null;
+  // Codex review 4175265694：路由里的 projectKey 必须解析出项目并与记录的
+  // projectId 一致，否则 /p/A/issues/<B 的任务 id> 会在项目 A 的上下文里
+  // 展示并允许操作 B 的任务。解析中/解析失败时不误判，只在两侧都明确时校验。
+  const routeProjectQuery = useProjectIdByKey(projectKey);
 
   const commentsQuery = useTaskComments(taskId, 1, COMMENT_PAGE_SIZE);
 
@@ -208,6 +213,16 @@ export function TaskDetailLive({
   }
 
   const detail: TaskResponse = task;
+  const routeProjectId = routeProjectQuery.data;
+  if (
+    typeof routeProjectId === "number" &&
+    detail.projectId != null &&
+    detail.projectId !== routeProjectId
+  ) {
+    return (
+      <EmptyHint>{`任务 #${taskId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
+    );
+  }
   const targets = taskTransitionTargets(detail.status);
   const comments: CommentView[] = commentsQuery.data?.list ?? [];
 

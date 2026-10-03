@@ -72,11 +72,22 @@ describe('validateTaskCreateInput 表单校验', () => {
     expect(validateTaskCreateInput(validInput({ priority: 'URGENT' }))).toBe('请选择优先级');
   });
 
-  it('id 类字段非数字时阻断提交', () => {
+  it('id 类字段非法时阻断提交（校验规则与载荷解析一致）', () => {
     expect(validateTaskCreateInput(validInput({ assigneeIdText: 'a1' }))).toBe(
-      '执行人用户 ID必须为数字',
+      '执行人用户 ID必须为正整数',
     );
-    expect(validateTaskCreateInput(validInput({ parentIdText: 'x' }))).toBe('父任务 ID必须为数字');
+    expect(validateTaskCreateInput(validInput({ parentIdText: 'x' }))).toBe('父任务 ID必须为正整数');
+    // Codex review 4175265685："0" / 超过安全整数范围的输入此前会通过校验，
+    // 却在组装载荷时被静默丢弃。现在校验直接阻断。
+    expect(validateTaskCreateInput(validInput({ assigneeIdText: '0' }))).toBe(
+      '执行人用户 ID必须为正整数',
+    );
+    expect(
+      validateTaskCreateInput(validInput({ reporterIdText: `${Number.MAX_SAFE_INTEGER + 1}` })),
+    ).toBe('报告人用户 ID必须为正整数');
+    expect(validateTaskCreateInput(validInput({ storyPointsText: '-1' }))).toBe(
+      '故事点必须为非负整数',
+    );
     expect(validateTaskCreateInput(validInput({ estimatedHoursText: '很多' }))).toBe(
       '预估工时必须为非负数字',
     );

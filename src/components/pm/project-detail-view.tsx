@@ -77,13 +77,12 @@ export function ProjectDetailView({ project }: { project: ProjectResponse }) {
       </Card>
       <Card className="w-full">
         <CardContent className="flex flex-wrap gap-2">
-          <Link
-            to="/p/$projectKey/dashboard"
-            params={{ projectKey: project.projectKey }}
-            className="type-body rounded-sm border border-border bg-surface px-3 py-2"
-          >
-            仪表盘
-          </Link>
+          {/*
+            仪表盘入口暂不展示（Codex review 4175265688）：dashboard 路由目前只
+            会经 usePm 演示数据解析 projectKey，真实后端项目的 projectKey 在那
+            里一定落空（"没有找到这个项目"）。仪表盘接真实后端是 P4 范围，
+            在迁移完成前不在 live 详情页暴露该入口，避免死链。
+          */}
           <Link
             to="/p/$projectKey/requirements"
             params={{ projectKey: project.projectKey }}

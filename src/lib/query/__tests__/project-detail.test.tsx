@@ -59,7 +59,7 @@ describe('resolveProjectIdByKey 解析策略', () => {
     expect(id).toBe(7);
     expect(postSpy).toHaveBeenCalledWith('/project/v1/findByPage', {
       page: 1,
-      pageSize: 20,
+      pageSize: 100,
       bean: { projectKey: 'ACME' },
     });
   });
@@ -90,6 +90,62 @@ describe('resolveProjectIdByKey 解析策略', () => {
       queryFn: () => resolveProjectIdByKey('NOPE'),
     });
     expect(id).toBeNull();
+  });
+
+  it('Codex 4175265682：精确记录落在第二页时继续翻页，直到命中', async () => {
+    const fuzzy = Array.from({ length: 100 }, (_, i) =>
+      project({ id: 1000 + i, projectKey: `XACME-${i}` }),
+    );
+    const postSpy = vi
+      .spyOn(api, 'post')
+      .mockImplementation(async (_url: string, body?: unknown) => {
+        const params = body as { page: number };
+        if (params.page === 1) {
+          return { list: fuzzy, total: 150, pageNumber: 1, pageSize: 100 };
+        }
+        return {
+          list: [...fuzzy.slice(0, 50), project({ id: 7, projectKey: 'ACME' })],
+          total: 150,
+          pageNumber: 2,
+          pageSize: 100,
+        };
+      });
+    const client = createQueryClient();
+    const id = await client.fetchQuery({
+      queryKey: queryKeys.project.byKey('ACME'),
+      queryFn: () => resolveProjectIdByKey('ACME'),
+    });
+    expect(id).toBe(7);
+    expect(postSpy).toHaveBeenCalledTimes(2);
+    expect(postSpy).toHaveBeenNthCalledWith(2, '/project/v1/findByPage', {
+      page: 2,
+      pageSize: 100,
+      bean: { projectKey: 'ACME' },
+    });
+  });
+
+  it('Codex 4175265682：所有页翻完仍无精确命中 → null', async () => {
+    const fuzzy = Array.from({ length: 100 }, (_, i) =>
+      project({ id: 1000 + i, projectKey: `XACME-${i}` }),
+    );
+    const postSpy = vi
+      .spyOn(api, 'post')
+      .mockImplementation(async (_url: string, body?: unknown) => {
+        const params = body as { page: number };
+        return {
+          list: params.page === 1 ? fuzzy : fuzzy.slice(0, 50),
+          total: 150,
+          pageNumber: params.page,
+          pageSize: 100,
+        };
+      });
+    const client = createQueryClient();
+    const id = await client.fetchQuery({
+      queryKey: queryKeys.project.byKey('NOPE-KEY'),
+      queryFn: () => resolveProjectIdByKey('NOPE-KEY'),
+    });
+    expect(id).toBeNull();
+    expect(postSpy).toHaveBeenCalledTimes(2);
   });
 
   it('queryKey 形状为 [hc, project, byKey, key]', () => {

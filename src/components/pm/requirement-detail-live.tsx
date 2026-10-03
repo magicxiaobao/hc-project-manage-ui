@@ -28,6 +28,7 @@ import {
   transitionFieldRequirements,
   useAllowedTransitions,
   useCreateRequirementComment,
+  useProjectIdByKey,
   useRequirementComments,
   useRequirementDetail,
   useRequirementOptions,
@@ -67,6 +68,10 @@ export function RequirementDetailLive({
   const detailQuery = useRequirementDetail(requirementId);
   const optionsQuery = useRequirementOptions();
   const requirement = detailQuery.data ?? null;
+  // Codex review 4175265694：路由里的 projectKey 必须解析出项目并与记录的
+  // projectId 一致，否则跨项目 URL 会在错误的项目上下文里展示并允许操作。
+  // 解析中/解析失败时不误判，只在两侧都明确时校验。
+  const routeProjectQuery = useProjectIdByKey(projectKey);
 
   const allowedQuery = useAllowedTransitions(requirementId, requirement?.status);
   const historyQuery = useTransitionHistory(requirementId);
@@ -167,6 +172,16 @@ export function RequirementDetailLive({
   const allowed: string[] = allowedQuery.data ?? [];
   const comments: CommentView[] = commentsQuery.data?.list ?? [];
   const detail: RequirementResponse = requirement;
+  const routeProjectId = routeProjectQuery.data;
+  if (
+    typeof routeProjectId === "number" &&
+    detail.projectId != null &&
+    detail.projectId !== routeProjectId
+  ) {
+    return (
+      <EmptyHint>{`需求 #${requirementId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">

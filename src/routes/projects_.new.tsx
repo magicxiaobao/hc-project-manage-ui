@@ -6,7 +6,7 @@ import {
   TextArea,
   TextField,
 } from "@heroui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { OptionSelect, PageHeading } from "@/components/biz";
 import { AppShell } from "@/components/pm/shell";
@@ -78,6 +78,9 @@ function LiveCreateProject() {
   const [keyExists, setKeyExists] = useState<boolean | null>(null);
   const [checkingKey, setCheckingKey] = useState(false);
   const [formError, setFormError] = useState("");
+  // Codex review 4175265689：可用性检查是异步的，过期的响应不能覆盖新输入
+  // 的状态。每次检查递增代际，只有最新一次请求的响应才允许写回。
+  const keyCheckGeneration = useRef(0);
 
   const typeOptions =
     enums && enums.projectTypes.length > 0
@@ -90,14 +93,17 @@ function LiveCreateProject() {
       setKeyExists(null);
       return;
     }
+    const generation = (keyCheckGeneration.current += 1);
     setCheckingKey(true);
     try {
-      setKeyExists(await projectApi.checkKeyExists(key));
+      const exists = await projectApi.checkKeyExists(key);
+      // 响应返回时若用户已触发更新的检查，本次结果过期，直接丢弃。
+      if (keyCheckGeneration.current === generation) setKeyExists(exists);
     } catch {
       // 网络错误不阻断输入；提交时后端会再校验一次
-      setKeyExists(null);
+      if (keyCheckGeneration.current === generation) setKeyExists(null);
     } finally {
-      setCheckingKey(false);
+      if (keyCheckGeneration.current === generation) setCheckingKey(false);
     }
   };
 

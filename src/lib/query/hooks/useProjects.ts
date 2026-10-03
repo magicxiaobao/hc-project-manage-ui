@@ -62,17 +62,29 @@ export function useProjectDetail(id: number | null | undefined) {
  *
  * 后端 findByPage 对 projectKey 是 like 模糊匹配（ProjectServiceImpl.findByPage），
  * 这里传 bean.projectKey 做服务端预过滤后，再在前端做精确相等筛选
- * （projectKey 全局唯一）。无精确命中返回 null。
+ * （projectKey 全局唯一）。
+ *
+ * Codex review 4175265682：不能只看第一页——模糊命中的记录数超过一页时，
+ * 精确记录可能落在后面。逐页翻页直到精确命中或分页耗尽（最多 10 页 × 100 条）。
+ * 无精确命中返回 null。
  */
 export async function resolveProjectIdByKey(projectKey: string): Promise<number | null> {
   const key = (projectKey ?? '').trim();
-  const page = await projectApi.findByPage({
-    page: 1,
-    pageSize: 20,
-    bean: { projectKey: key },
-  });
-  const exact = page.list.find((record) => record.projectKey === key);
-  return exact ? exact.id : null;
+  if (!key) return null;
+  const pageSize = 100;
+  for (let page = 1; page <= 10; page += 1) {
+    const result = await projectApi.findByPage({
+      page,
+      pageSize,
+      bean: { projectKey: key },
+    });
+    const exact = result.list.find((record) => record.projectKey === key);
+    if (exact) return exact.id;
+    // 分页耗尽：当前页已是最后一页（返回条数不足一页，或累计已覆盖 total）。
+    const fetched = result.pageNumber * result.pageSize;
+    if (result.list.length < result.pageSize || fetched >= result.total) break;
+  }
+  return null;
 }
 
 export function useProjectIdByKey(projectKey: string) {

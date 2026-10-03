@@ -7,6 +7,7 @@
  * - 错误展示用 toUserMessage(err) 转中文文案；登录失效用 isAuthExpiredError 识别。
  */
 export { createQueryClient, isRetryableQueryError } from './client';
+export { clearQueryCache, setQueryCacheClearer } from './session';
 export { queryKeys } from './keys';
 export { isAuthExpiredError, toUserMessage } from './error';
 export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey, useProjectList, resolveProjectIdByKey } from './hooks/useProjects';
