@@ -127,6 +127,8 @@ export function useTaskDetail(id: number | null | undefined) {
 /**
  * 变更任务状态：走 POST /task/v1/updateStatus（{ taskId, status, reason?, deliverables?, assigneeId? }）。
  * 成功后失效任务域全部缓存（详情/列表全部变脏）。非法流转由后端状态机拒绝并经 toUserMessage 展示。
+ * Codex review 4175337096：需求追溯图/影响范围/矩阵里嵌了任务关联与状态，任务变更后
+ * 需求域缓存也要失效，否则 30 秒 stale 窗口内会展示旧图。
  */
 export function useUpdateTaskStatus() {
   const queryClient = useQueryClient();
@@ -137,13 +139,15 @@ export function useUpdateTaskStatus() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
     },
   });
 }
 
 /**
  * 改派任务：走 POST /task/v1/assign（{ taskId, assigneeId, reason }，reason 必填）。
- * 成功后失效任务域全部缓存。
+ * 成功后失效任务域全部缓存。Codex review 4175337096：同上，需求追溯里含执行人，
+ * 一并失效需求域。
  */
 export function useAssignTask() {
   const queryClient = useQueryClient();
@@ -151,6 +155,7 @@ export function useAssignTask() {
     mutationFn: (data: TaskAssignPayload) => taskApi.assignTask(data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
     },
   });
 }
@@ -158,6 +163,7 @@ export function useAssignTask() {
 /**
  * 创建任务：走 POST /task/v1/createTask（后端返回新建任务 id，创建后状态为待开始）。
  * 成功后失效任务域全部缓存（详情/列表全部变脏），列表下次读取即出现新任务。
+ * Codex review 4175337096：新建并关联需求后，需求追溯图要看到新任务，一并失效需求域。
  */
 export function useCreateTask() {
   const queryClient = useQueryClient();
@@ -165,6 +171,7 @@ export function useCreateTask() {
     mutationFn: (data: TaskCreatePayload) => taskApi.createTask(data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
     },
   });
 }

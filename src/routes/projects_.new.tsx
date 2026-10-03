@@ -167,6 +167,10 @@ function LiveCreateProject() {
           onChange={(value) => {
             setProjectKey(value.toUpperCase());
             setKeyExists(null);
+            // Codex review 4175337057：输入变化即宣告在途检查过期——代际递增并
+            // 清除 checkingKey，否则键 A 的待定响应会在用户改成键 B 后写回 B 的状态。
+            keyCheckGeneration.current += 1;
+            setCheckingKey(false);
           }}
           onBlur={() => void checkKeyUniqueness(projectKey)}
         >

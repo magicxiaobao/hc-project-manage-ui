@@ -446,7 +446,10 @@ export function TaskDetailLive({
             }
             assigneeInput={assigneeInput}
             onAssigneeInput={setAssigneeInput}
-            showAssignee={transitionTarget === "IN_PROGRESS"}
+            // Codex review 4175337103：只有未分配 TODO 开始时执行人输入才会被提交
+            //（submitTransition 仅 taskNeedsAssigneeConfirm 时读值）；其余流转隐藏该
+            // 字段，避免“填了却被静默忽略”的误导。
+            showAssignee={taskNeedsAssigneeConfirm(detail.status, transitionTarget, detail.assigneeId)}
             assigneeRequired={taskNeedsAssigneeConfirm(detail.status, transitionTarget, detail.assigneeId)}
             showDeliverables={transitionTarget === "COMPLETED"}
             deliverables={deliverables}

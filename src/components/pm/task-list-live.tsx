@@ -19,6 +19,7 @@ import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, StatusChip } from "@/components/biz";
 import { priorityLabel, statusLabel } from "@/lib/pm/domain";
 import { toUserMessage, useTaskList } from "@/lib/query";
+import { parseOptionalPositiveInt } from "@/lib/task-create";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/api/task-types";
 import type { TaskPriority, TaskQueryRequest, TaskStatus } from "@/lib/api/task-types";
 
@@ -38,6 +39,7 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
   const [assigneeInput, setAssigneeInput] = useState("");
   const [appliedAssignee, setAppliedAssignee] = useState("");
   const [page, setPage] = useState(1);
+  const [filterError, setFilterError] = useState<string | null>(null);
 
   const bean = useMemo<TaskQueryRequest>(() => {
     const value: TaskQueryRequest = { projectId };
@@ -48,14 +50,23 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
     if (priority) value.priority = priority as TaskPriority;
     if (status) value.status = status as TaskStatus;
     const assignee = appliedAssignee.trim();
-    // 执行人筛选：只接受纯数字的用户 ID，非数字输入直接忽略，避免误送后端
-    if (/^\d+$/.test(assignee)) value.assigneeId = Number(assignee);
+    // 执行人筛选：applyFilters 已校验正整数，此为防御性二次校验，避免误送后端
+    const assigneeId = parseOptionalPositiveInt(assignee);
+    if (assigneeId !== null) value.assigneeId = assigneeId;
     return value;
   }, [projectId, appliedTitle, appliedTaskType, priority, status, appliedAssignee]);
 
   const listQuery = useTaskList({ page, pageSize: PAGE_SIZE, bean, projectId });
 
   const applyFilters = () => {
+    // Codex review 4175337116：执行人筛选必须为正整数用户 ID；非法输入直接报错，
+    // 不能静默忽略——否则用户会误以为结果集已被该 ID 过滤。
+    const assigneeText = assigneeInput.trim();
+    if (assigneeText && parseOptionalPositiveInt(assigneeText) === null) {
+      setFilterError("执行人筛选必须为正整数用户 ID。");
+      return;
+    }
+    setFilterError(null);
     setAppliedTitle(titleInput);
     setAppliedTaskType(taskTypeInput);
     setAppliedAssignee(assigneeInput);
@@ -71,6 +82,7 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
     setStatus("");
     setAssigneeInput("");
     setAppliedAssignee("");
+    setFilterError(null);
     setPage(1);
   };
 
@@ -126,6 +138,8 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
           重置
         </Button>
       </form>
+
+      {filterError ? <p className="text-xs text-danger">{filterError}</p> : null}
 
       {listQuery.isPending ? (
         <div className="flex items-center gap-2 py-8 text-sm text-default-500">

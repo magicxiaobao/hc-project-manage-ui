@@ -65,14 +65,17 @@ export function useProjectDetail(id: number | null | undefined) {
  * （projectKey 全局唯一）。
  *
  * Codex review 4175265682：不能只看第一页——模糊命中的记录数超过一页时，
- * 精确记录可能落在后面。逐页翻页直到精确命中或分页耗尽（最多 10 页 × 100 条）。
+ * 精确记录可能落在后面。逐页翻页直到精确命中或分页耗尽。
+ * Codex review 4175337068：不设硬性页数上限——按分页元数据
+ *（返回条数不足一页，或累计已覆盖 total）判断耗尽，避免短键的精确
+ * 记录落在第 11 页之后时被误判为“项目不存在”。
  * 无精确命中返回 null。
  */
 export async function resolveProjectIdByKey(projectKey: string): Promise<number | null> {
   const key = (projectKey ?? '').trim();
   if (!key) return null;
   const pageSize = 100;
-  for (let page = 1; page <= 10; page += 1) {
+  for (let page = 1; ; page += 1) {
     const result = await projectApi.findByPage({
       page,
       pageSize,

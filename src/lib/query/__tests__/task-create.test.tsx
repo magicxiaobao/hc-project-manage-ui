@@ -99,6 +99,21 @@ describe('validateTaskCreateInput 表单校验', () => {
     ).toBe('开始日期不能晚于结束日期');
   });
 
+  it('关联需求超过 200 个时阻断提交，而不是静默截断（Codex review 4175337091）', () => {
+    const over = Array.from({ length: 201 }, (_, i) => i + 1);
+    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: over }))).toBe(
+      '关联需求不能超过200个（后端约束）',
+    );
+    // 去重前超限同样阻断
+    const withDupes = [...over, ...over.slice(0, 50)];
+    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: withDupes }))).toBe(
+      '关联需求不能超过200个（后端约束）',
+    );
+    // 恰好 200 个（去重后）可以通过
+    const ok = Array.from({ length: 200 }, (_, i) => i + 1);
+    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: ok }))).toBeNull();
+  });
+
   it('完整合法输入 → null', () => {
     expect(
       validateTaskCreateInput(

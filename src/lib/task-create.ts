@@ -86,6 +86,12 @@ export function validateTaskCreateInput(input: TaskCreateFormInput): string | nu
   if (input.startIso && input.endIso && input.startIso > input.endIso) {
     return '开始日期不能晚于结束日期';
   }
+  // Codex review 4175337091：后端 TaskCreateRequest 对 implementsRequirementIds 有
+  // @Size(max=200)（"关联需求不能超过200个"）；超过时必须在提交前报错，而不是
+  // 在 buildTaskCreatePayload 里静默截断——用户会误以为全部关联成功。
+  if (new Set(input.implementsRequirementIds).size > MAX_REQUIREMENT_LINKS) {
+    return `关联需求不能超过${MAX_REQUIREMENT_LINKS}个（后端约束）`;
+  }
   return null;
 }
 
