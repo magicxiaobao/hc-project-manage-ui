@@ -107,7 +107,7 @@ interface PmActions {
   moveToColumn: (id: string, column: ColumnId, reason?: string, expectedStatus?: string) => PmMoveResult;
   transition: (id: string, to: string, reason?: string) => { ok: true } | { ok: false; message: string };
   updateItem: (id: string, patch: Partial<Pick<WorkItem, "title" | "description" | "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "planStart" | "planEnd" | "dueDate" | "tags">>) => PmActionResult;
-  addComment: (itemId: string, body: string) => void;
+  addComment: (itemId: string, body: string) => PmActionResult;
   createItem: (input: {
     projectId: string;
     kind: ItemKind;
@@ -406,15 +406,16 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   addComment: (itemId, body) => {
-    if (backendReadOnly()) return;
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const text = body.trim();
-    if (!text) return;
+    if (!text) return { ok: false, message: "评论内容不能为空" };
     const at = nowIso();
     const comment: Comment = { id: uid("c"), itemId, authorId: get().currentUserId, body: text, createdAt: at };
     set({
       comments: [...get().comments, comment],
       items: get().items.map((entry) => (entry.id === itemId ? { ...entry, updatedAt: at } : entry)),
     });
+    return { ok: true };
   },
   createItem: (input) => {
     if (backendReadOnly()) return "";

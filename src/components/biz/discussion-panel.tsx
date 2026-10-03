@@ -1,8 +1,10 @@
 import { Tabs } from "@heroui/react";
 import { useState } from "react";
+import { toast } from "sonner";
 import type { Comment, FeedEntry, ItemKind, LifecycleRecord, Person } from "@/lib/pm/domain";
 import { ActivityList, HistoryList } from "@/components/biz/activity-list";
 import { CommentThread } from "@/components/biz/comment-thread";
+import type { PmActionResult } from "@/lib/pm/store";
 
 type Tab = "comment" | "feed" | "history";
 
@@ -19,7 +21,7 @@ export function DiscussionPanel({
   histories: LifecycleRecord[];
   people: Person[];
   kind: ItemKind;
-  onComment: (body: string) => void;
+  onComment: (body: string) => PmActionResult;
 }) {
   const [tab, setTab] = useState<Tab>("comment");
   const [draft, setDraft] = useState("");
@@ -49,7 +51,11 @@ export function DiscussionPanel({
           onDraft={setDraft}
           onSubmit={() => {
             if (!draft.trim()) return;
-            onComment(draft);
+            const result = onComment(draft);
+            if (!result.ok) {
+              toast.error(result.message ?? "评论提交失败");
+              return;
+            }
             setDraft("");
           }}
         />

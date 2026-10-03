@@ -22,6 +22,7 @@ import type {
 } from "@/lib/pm/domain";
 import { formatRelative, kindLabel, needsReason } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
+import type { PmActionResult } from "@/lib/pm/store";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 export function IssueDialog({
@@ -72,7 +73,7 @@ export function IssueDialog({
     >,
   ) => void;
   onTransition: (to: string, reason?: string) => { ok: true } | { ok: false; message: string };
-  onComment: (body: string) => void;
+  onComment: (body: string) => PmActionResult;
   onClone: () => void;
   previous?: WorkItem;
   next?: WorkItem;
