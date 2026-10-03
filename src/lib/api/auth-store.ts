@@ -5,6 +5,8 @@
  */
 import { create } from 'zustand';
 import {
+  AUTH_EXPIRED_CODES,
+  ApiBusinessError,
   REFRESH_TOKEN_STORAGE_KEY,
   TOKEN_STORAGE_KEY,
   USER_INFO_STORAGE_KEY,
@@ -45,6 +47,18 @@ function persistLogin(token: string, refreshToken: string, user: AuthenticatedUs
   writeStorage(TOKEN_STORAGE_KEY, token);
   writeStorage(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
   writeStorage(USER_INFO_STORAGE_KEY, JSON.stringify(user));
+}
+
+/**
+ * 刷新失败是否确认 refresh token 已失效（登录失效类业务码 / HTTP 401）：
+ * 是 → 清除登录态；否（超时、网络中断、5xx、网关畸形响应等瞬时故障）
+ * → 保留会话，返回 false 让调用方按可重试错误处理，避免一次后端抖动就把用户踢下线。
+ */
+function isRefreshTokenInvalid(err: unknown): boolean {
+  if (err instanceof ApiBusinessError) {
+    return err.httpStatus === 401 || AUTH_EXPIRED_CODES.includes(err.code);
+  }
+  return false;
 }
 
 interface AuthState {
@@ -101,9 +115,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       persistLogin(res.token, res.refreshToken, nextUser);
       set({ user: nextUser, token: res.token, isAuthenticated: true });
       return true;
-    } catch {
-      clearStoredAuth();
-      set({ user: null, token: null, isAuthenticated: false });
+    } catch (err) {
+      // 仅在确认 refresh token 失效时清除登录态；瞬时故障保留会话
+      if (isRefreshTokenInvalid(err)) {
+        clearStoredAuth();
+        set({ user: null, token: null, isAuthenticated: false });
+      }
       return false;
     }
   },

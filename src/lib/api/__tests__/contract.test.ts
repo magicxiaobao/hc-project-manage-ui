@@ -8,6 +8,8 @@
  * - 登录失效类业务码清本地凭证
  * - HTTP 401 时刷新一次（POST /auth/v1/refreshToken { refreshToken, userId: number }）
  *   并用新 token 重放原请求
+ * - 重放后依然 401：清本地凭证并通知登录失效（不再触发刷新）
+ * - 刷新瞬时失败且凭证仍在：不清凭证、不通知，抛可重试错误（会话保留）
  * - POST /project/v1/findByPage，请求体 { page, pageSize, bean }
  *
  * 运行：npm run test:contract（需先 npm install）
@@ -152,6 +154,55 @@ describe('401 自动刷新', () => {
     const [retryUrl, retryInit] = fetchMock.mock.calls[2] as [string, RequestInit];
     expect(retryUrl).toBe('http://test/auth/v1/me');
     expect((retryInit.headers as Headers).get('token')).toBe('new-token');
+  });
+
+  it('重放后依然 401：清本地凭证并通知登录失效，不再触发刷新', async () => {
+    memStore.set('token', 'expired');
+    memStore.set('refreshToken', 'refresh-1');
+    memStore.set(
+      'userInfo',
+      JSON.stringify({ userId: '1', userName: 'admin', cnName: null, extraInfo: {}, roles: [], authorities: [] }),
+    );
+    let unauthorized = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setTokenRefresher(async () => {
+      // 刷新“成功”落盘新 token，但新 token 依然被后端拒绝
+      memStore.set('token', 'new-token');
+      return true;
+    });
+    const fetchMock = mockFetchSequence([
+      { status: 401, body: { code: 10109, msg: 'expired', result: null } },
+      { status: 401, body: { code: 10109, msg: 'still expired', result: null } },
+    ]);
+
+    const err = await client.get('/auth/v1/me').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    expect((err as ApiBusinessError).code).toBe(10109);
+    // 只发了两次请求（原请求 + 一次重放），没有陷入刷新循环
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(memStore.get('token')).toBeUndefined();
+    expect(memStore.get('refreshToken')).toBeUndefined();
+    expect(unauthorized).toBe(1);
+  });
+
+  it('刷新瞬时失败且凭证仍在：不清凭证、不通知，抛可重试错误', async () => {
+    memStore.set('token', 'expired');
+    memStore.set('refreshToken', 'refresh-1');
+    memStore.set('userInfo', '{}');
+    let unauthorized = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    // 模拟刷新遇到瞬时故障：返回 false 但不清除凭证
+    //（与 auth-store.refreshAccessToken 的新行为一致：仅确认失效时才清）
+    client.setTokenRefresher(async () => false);
+    mockFetchSequence([{ status: 401, body: { code: 10109, msg: 'expired', result: null } }]);
+
+    const err = await client.get('/auth/v1/me').catch((e) => e);
+    expect(err).not.toBeInstanceOf(ApiBusinessError);
+    expect((err as Error).message).toContain('刷新访问令牌失败');
+    // 会话保留：不踢回登录，页面可展示重试
+    expect(memStore.get('token')).toBe('expired');
+    expect(memStore.get('refreshToken')).toBe('refresh-1');
+    expect(unauthorized).toBe(0);
   });
 });
 

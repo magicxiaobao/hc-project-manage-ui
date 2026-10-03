@@ -118,9 +118,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
     }
   }
 
+  /** 本次请求实际使用的取 token 方式（与请求头携带保持一致） */
+  const readToken = () => (options.getToken ? options.getToken() : getStoredToken());
+
   async function request<T>(path: string, init: RequestInit & { _retry?: boolean } = {}): Promise<T> {
     const headers = new Headers(init.headers);
-    const token = options.getToken ? options.getToken() : getStoredToken();
+    const token = readToken();
     if (token) headers.set(TOKEN_HEADER, token);
     const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
     if (!isFormData && !headers.has('Content-Type')) {
@@ -135,12 +138,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
       const res = await fetch(joinUrl(baseUrl, path), { ...init, headers, signal: controller.signal });
 
       // 401 自动刷新 + 重放一次（登录/刷新接口自身除外；并发 401 共用一次刷新）
-      if (res.status === 401 && !isOwnErrorEndpoint(path) && !init._retry) {
-        const refreshed = await refreshOnce();
-        if (refreshed) {
-          return request<T>(path, { ...init, _retry: true });
+      if (res.status === 401 && !isOwnErrorEndpoint(path)) {
+        if (!init._retry) {
+          const refreshed = await refreshOnce();
+          if (refreshed) {
+            return request<T>(path, { ...init, _retry: true });
+          }
+          // 刷新失败：auth-store 仅在确认 refresh token 失效时才清除凭证。
+          // 凭证仍在 → 瞬时故障（超时/网络/5xx），不踢回登录，
+          // 抛错让页面展示可重试的错误状态，会话得以保留。
+          if (readToken()) {
+            throw new Error(`刷新访问令牌失败: ${path}`);
+          }
+        } else {
+          // 重放后依然 401：新令牌也被拒绝，登录态确实失效，不再尝试刷新
+          clearStoredAuth();
         }
-        clearStoredAuth();
         notifyUnauthorized();
         throw new ApiBusinessError({ code: 10109, msg: '登录已过期，请重新登录', result: null }, 401);
       }
