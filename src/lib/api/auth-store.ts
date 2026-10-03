@@ -98,9 +98,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   hydrate: () => {
     const token = readStorage(TOKEN_STORAGE_KEY);
+    const refreshToken = readStorage(REFRESH_TOKEN_STORAGE_KEY);
     const user = getPersistedUser();
-    if (token && user) {
+    if (token && refreshToken && user) {
       set({ user, token, isAuthenticated: true });
+      return;
+    }
+    // 会话残缺：缺 refreshToken 的会话无法刷新。直接恢复它只会得到一个
+    // “已登录但永远刷不出新令牌”的僵尸会话——access token 过期后每次请求
+    // 失败，而客户端会把“凭证仍在”判为瞬时故障、保留会话永不跳转登录页。
+    // 因此缺 refreshToken 时拒绝恢复并清理残留凭证。
+    if (token || refreshToken || user) {
+      clearStoredAuth();
     }
   },
 

@@ -15,12 +15,14 @@
  * - 旧会话请求的迟到 401：代际已变化时不触发刷新、不重放旧请求
  * - 登录失效确认（业务码/重放后仍 401）：调用 sessionInvalidator 递增代际，
  *   使在途刷新完成后被丢弃，不复活已失效的会话
+ * - hydrate：三键齐全才恢复登录态；缺 refreshToken 的会话拒绝恢复并清理残留凭证
  * - POST /project/v1/findByPage，请求体 { page, pageSize, bean }
  *
  * 运行：npm run test:contract（需先 npm install）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiBusinessError, createApiClient } from '../client';
+import { useAuthStore } from '../auth-store';
 import { authApi } from '../auth';
 import { projectApi } from '../project';
 
@@ -419,5 +421,49 @@ describe('项目列表契约', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/project/v1/findByPage');
     expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 100, bean: {} });
+  });
+});
+
+describe('hydrate 会话恢复', () => {
+  const userJson = JSON.stringify({
+    userId: '1',
+    userName: 'demo',
+    cnName: null,
+    extraInfo: {},
+    roles: [],
+    authorities: [],
+  });
+
+  beforeEach(() => {
+    useAuthStore.setState({ user: null, token: null, isAuthenticated: false });
+  });
+
+  it('三键（token/refreshToken/userInfo）齐全时恢复登录态', () => {
+    memStore.set('token', 'access-token');
+    memStore.set('refreshToken', 'refresh-token');
+    memStore.set('userInfo', userJson);
+    useAuthStore.getState().hydrate();
+    const state = useAuthStore.getState();
+    expect(state.isAuthenticated).toBe(true);
+    expect(state.token).toBe('access-token');
+    expect(state.user?.userId).toBe('1');
+  });
+
+  it('缺 refreshToken 时拒绝恢复并清理残留凭证（不可刷新的会话不得复活）', () => {
+    memStore.set('token', 'access-token');
+    memStore.set('userInfo', userJson);
+    useAuthStore.getState().hydrate();
+    const state = useAuthStore.getState();
+    expect(state.isAuthenticated).toBe(false);
+    expect(state.user).toBeNull();
+    expect(state.token).toBeNull();
+    // 残留凭证已清理：避免 access token 过期后陷入“刷新失败但永不跳转登录页”的死循环
+    expect(memStore.get('token')).toBeUndefined();
+    expect(memStore.get('userInfo')).toBeUndefined();
+  });
+
+  it('空存储时保持未登录且不抛错', () => {
+    expect(() => useAuthStore.getState().hydrate()).not.toThrow();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 });

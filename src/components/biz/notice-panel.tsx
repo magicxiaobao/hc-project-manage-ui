@@ -22,7 +22,8 @@ export function NoticePanel({
   notices: Notice[];
   onClose: () => void;
   onOpen: (itemId: string) => void;
-  onReset: () => void;
+  /** 后端模式下不提供：演示数据只读，恢复示例数据无意义 */
+  onReset?: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -87,10 +88,12 @@ export function NoticePanel({
           </li>
         ))}
       </ul>
-      <button type="button" className="type-caption flex w-full shrink-0 items-center gap-2 border-t border-border px-3 py-2 text-left hover:bg-line" onClick={onReset}>
-        <RotateCcw className="size-3.5" />
-        恢复示例数据
-      </button>
+      {onReset ? (
+        <button type="button" className="type-caption flex w-full shrink-0 items-center gap-2 border-t border-border px-3 py-2 text-left hover:bg-line" onClick={onReset}>
+          <RotateCcw className="size-3.5" />
+          恢复示例数据
+        </button>
+      ) : null}
     </div>
   );
 }

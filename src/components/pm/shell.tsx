@@ -170,11 +170,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           notices={notices}
           onClose={() => usePm.getState().setNoticeOpen(false)}
           onOpen={goToItem}
-          onReset={() => {
-            if (!window.confirm("恢复示例数据将替换当前数据，并写入本机持久化存储。确定恢复吗？")) return;
-            usePm.getState().reset();
-            notifyPmChange("已恢复示例数据");
-          }}
+          onReset={
+            isAuthenticated
+              ? undefined
+              : () => {
+                  if (!window.confirm("恢复示例数据将替换当前数据，并写入本机持久化存储。确定恢复吗？")) return;
+                  usePm.getState().reset();
+                  notifyPmChange("已恢复示例数据");
+                }
+          }
         />
       ) : null}
       {searchOpen ? (
