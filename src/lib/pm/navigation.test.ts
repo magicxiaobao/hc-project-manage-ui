@@ -1,12 +1,27 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import {
+  clearListFiltersPatch,
+  deriveListScope,
+  headerSortState,
   isItemPath,
   parseProjectViewSearch,
   readItemOrigin,
   returnHistoryDelta,
+  scopeSearchPatch,
   validReturnHref,
 } from "./navigation.ts";
+
+function expectListContext(patch: Record<string, unknown>) {
+  return {
+    ...parseProjectViewSearch({}),
+    scope: undefined,
+    priority: undefined,
+    grouped: undefined,
+    closedGroups: undefined,
+    ...patch,
+  };
+}
 
 it("keeps only finite nonnegative positions of the four actual board columns", () => {
   const origin = readItemOrigin({
@@ -149,6 +164,10 @@ it("preserves explicit false filters and an empty sprint without truthy coercion
       tag: "测试",
       sort: "points",
       ascending: false,
+      scope: undefined,
+      priority: undefined,
+      grouped: undefined,
+      closedGroups: undefined,
     },
   );
 });
@@ -180,6 +199,10 @@ it("does not trust arrays, objects or string booleans as filter values", () => {
       tag: undefined,
       sort: undefined,
       ascending: undefined,
+      scope: undefined,
+      priority: undefined,
+      grouped: undefined,
+      closedGroups: undefined,
     },
   );
 });
@@ -196,4 +219,57 @@ it("retains a source browse-order snapshot and rejects malformed IDs", () => {
       undefined,
     );
   }
+});
+
+it("derives list scope the same way the list does today", () => {
+  assert.equal(deriveListScope({}), "open");
+  assert.equal(deriveListScope({ mine: true, hideDone: false }), "mine");
+  assert.equal(deriveListScope({ hideDone: false }), "all");
+  assert.equal(deriveListScope({ scope: "done", mine: true }), "done");
+  assert.equal(deriveListScope({ scope: "nope" as never }), "open");
+});
+
+it("omits a scope that only repeats the derived value", () => {
+  assert.deepEqual(scopeSearchPatch("open", { mine: false, hideDone: true }), { scope: undefined });
+  assert.deepEqual(scopeSearchPatch("mine", { mine: true }), { scope: undefined });
+  assert.deepEqual(scopeSearchPatch("done", {}), { scope: "done" });
+});
+
+it("clears filters without writing the default priority or touching grouping", () => {
+  assert.deepEqual(clearListFiltersPatch(), {
+    query: undefined,
+    kind: "all",
+    scope: "all",
+    priority: undefined,
+  });
+});
+
+it("drops invalid list context and does not treat cancelled as absent", () => {
+  assert.deepEqual(
+    parseProjectViewSearch({
+      scope: "cancelled",
+      priority: "HIGH",
+      grouped: false,
+      closedGroups: ["done", "cancelled", "done", "nope"],
+    }),
+    expectListContext({
+      scope: "cancelled",
+      priority: "HIGH",
+      grouped: false,
+      closedGroups: ["done", "cancelled"],
+    }),
+  );
+  assert.equal(parseProjectViewSearch({ priority: "all", grouped: true, closedGroups: [] }).priority, undefined);
+  assert.equal(parseProjectViewSearch({ grouped: true }).grouped, undefined);
+  assert.equal(parseProjectViewSearch({ closedGroups: [] }).closedGroups, undefined);
+  assert.equal(parseProjectViewSearch({ scope: "board", priority: "urgent", grouped: "false" }).scope, undefined);
+});
+
+it("names the current sort direction and leaves other columns unsorted", () => {
+  assert.deepEqual(headerSortState("updated", undefined, undefined), {
+    ariaSort: "descending",
+    direction: "降序",
+  });
+  assert.deepEqual(headerSortState("key", "key", true), { ariaSort: "ascending", direction: "升序" });
+  assert.deepEqual(headerSortState("title", "key", true), { ariaSort: "none", direction: null });
 });

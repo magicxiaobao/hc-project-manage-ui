@@ -1,5 +1,14 @@
 import { COLUMNS, type ColumnId, type ItemKind } from "./domain";
 
+export type ListScope = "all" | "open" | "mine" | "doing" | "done" | "cancelled";
+export type ListPriorityFilter = "HIGH" | "MEDIUM" | "LOW";
+export type ListGroupId = "todo" | "doing" | "check" | "done" | "cancelled";
+export type ListSortColumn = "key" | "title" | "priority" | "status" | "points" | "due" | "updated";
+
+const LIST_SCOPES: readonly ListScope[] = ["all", "open", "mine", "doing", "done", "cancelled"];
+const LIST_PRIORITIES: readonly ListPriorityFilter[] = ["HIGH", "MEDIUM", "LOW"];
+const LIST_GROUPS: readonly ListGroupId[] = ["todo", "doing", "check", "done", "cancelled"];
+
 export type ProjectViewSearch = {
   query?: string;
   kind?: "all" | ItemKind;
@@ -10,9 +19,17 @@ export type ProjectViewSearch = {
   cancelled?: boolean;
   assignees?: string[];
   tag?: string;
-  sort?: "key" | "title" | "priority" | "status" | "points" | "due" | "updated";
+  sort?: ListSortColumn;
   ascending?: boolean;
+  scope?: ListScope;
+  priority?: ListPriorityFilter;
+  grouped?: boolean;
+  closedGroups?: ListGroupId[];
 };
+
+function isListScope(value: unknown): value is ListScope {
+  return typeof value === "string" && (LIST_SCOPES as readonly string[]).includes(value);
+}
 
 export function parseProjectViewSearch(value: Record<string, unknown>): ProjectViewSearch {
   return {
@@ -38,7 +55,54 @@ export function parseProjectViewSearch(value: Record<string, unknown>): ProjectV
         ? (value.sort as ProjectViewSearch["sort"])
         : undefined,
     ascending: typeof value.ascending === "boolean" ? value.ascending : undefined,
+    scope: isListScope(value.scope) ? value.scope : undefined,
+    priority: (LIST_PRIORITIES as readonly string[]).includes(value.priority as string)
+      ? (value.priority as ListPriorityFilter)
+      : undefined,
+    grouped: value.grouped === false ? false : undefined,
+    closedGroups: parseClosedGroups(value.closedGroups),
   };
+}
+
+function parseClosedGroups(value: unknown): ListGroupId[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const groups: ListGroupId[] = [];
+  for (const id of value) {
+    if ((LIST_GROUPS as readonly string[]).includes(id) && !groups.includes(id as ListGroupId)) {
+      groups.push(id as ListGroupId);
+    }
+  }
+  return groups.length ? groups : undefined;
+}
+
+export function deriveListScope(search: Pick<ProjectViewSearch, "scope" | "mine" | "hideDone">): ListScope {
+  if (isListScope(search.scope)) return search.scope;
+  if (search.mine) return "mine";
+  if (search.hideDone === false) return "all";
+  return "open";
+}
+
+export function scopeSearchPatch(chosen: ListScope, current: ProjectViewSearch): { scope?: ListScope } {
+  return chosen === deriveListScope({ ...current, scope: undefined }) ? { scope: undefined } : { scope: chosen };
+}
+
+export function clearListFiltersPatch(): {
+  query: undefined;
+  kind: "all";
+  scope: "all";
+  priority: undefined;
+} {
+  return { query: undefined, kind: "all", scope: "all", priority: undefined };
+}
+
+export function headerSortState(
+  column: ListSortColumn,
+  sort: ProjectViewSearch["sort"] | undefined,
+  ascending: boolean | undefined,
+): { ariaSort: "ascending" | "descending" | "none"; direction: "升序" | "降序" | null } {
+  const current = sort ?? "updated";
+  if (column !== current) return { ariaSort: "none", direction: null };
+  return ascending ? { ariaSort: "ascending", direction: "升序" } : { ariaSort: "descending", direction: "降序" };
 }
 
 export type ReturnFocus = {
