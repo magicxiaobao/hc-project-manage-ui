@@ -33,16 +33,28 @@ function writeStorage(key: string, value: string): void {
   }
 }
 
+/** 展示名字段的运行时类型守卫：userName 必须为字符串，cnName 允许字符串或 null。 */
+function isDisplayName(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === 'string';
+}
+
 function getPersistedUser(): AuthenticatedUser | null {
   const raw = readStorage(USER_INFO_STORAGE_KEY);
   if (!raw) return null;
   try {
     const user = JSON.parse(raw) as AuthenticatedUser;
-    // 完整性校验：AppShell 在登录态下会直接求值 authUser.roles.join(...) 等字段，
-    // 只校验 userId 字符串不足以防范 userInfo 被部分篡改/损坏后的渲染期崩溃。
+    // 完整性校验：AppShell 在登录态下会直接求值 authUser.roles.join(...) 与
+    // authUser.cnName || authUser.userName 等字段，只校验 userId/roles 不足以
+    // 防范 userInfo 被部分篡改/损坏后的渲染期崩溃（如 cnName 为对象时 React 抛错）。
     // 另要求 userId 为规范十进制（与 toWireUserId 同约束）：非法持久化 ID 会让
     // 刷新接口在请求前抛出普通 Error、被误判为瞬时故障而保留僵尸会话。
-    return user && isCanonicalUserId(user.userId) && Array.isArray(user.roles) ? user : null;
+    return user &&
+      isCanonicalUserId(user.userId) &&
+      typeof user.userName === 'string' &&
+      isDisplayName(user.cnName) &&
+      Array.isArray(user.roles)
+      ? user
+      : null;
   } catch {
     return null;
   }

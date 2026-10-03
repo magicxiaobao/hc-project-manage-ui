@@ -54,12 +54,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // 后端模式不读写本地演示数据：跳过演示持久化绑定，避免本机演示数据
     // 损坏（hc-pm-sample-v1 解析失败）时把合法后端用户拦在错误页外——
     // 后端项目数据本就不依赖演示存储。
-    if (useAuthStore.getState().isAuthenticated) {
+    // 依赖 isAuthenticated：登录 / 登出 / 根组件 hydrate 恢复时都重新配置持久化。
+    // - false→true（登录、持久会话恢复）：cleanup 先解绑演示持久化，再直接置
+    //   ready——修复“持久会话首屏在 hydrate 前已绑定损坏的演示存储、hydrate 后
+    //   ready 仍为 false、已认证页永远停在骨架屏”的竞态（__root.tsx 的 hydrate
+    //   是被动 effect，晚于本 layout effect）。
+    // - true→false（登出）：重新绑定演示持久化，演示模式的编辑继续落盘。
+    if (isAuthenticated) {
       usePm.setState({ ready: true });
       return;
     }
     return bindPmPersistence();
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

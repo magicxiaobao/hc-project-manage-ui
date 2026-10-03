@@ -18,6 +18,8 @@
  * - 登录失效确认（业务码/重放后仍 401）：调用 sessionInvalidator 递增代际，
  *   使在途刷新完成后被丢弃，不复活已失效的会话
  * - hydrate：三键齐全才恢复登录态；缺 refreshToken 的会话拒绝恢复并清理残留凭证
+ * - hydrate：userId 非规范十进制时拒绝恢复并清理残留凭证（避免刷新前抛错的僵尸会话）
+ * - hydrate：cnName/userName 类型畸形（非字符串）时拒绝恢复并清理残留凭证（避免渲染期崩溃）
  * - POST /project/v1/findByPage，请求体 { page, pageSize, bean }
  *
  * 运行：npm run test:contract（需先 npm install）
@@ -571,5 +573,35 @@ describe('hydrate 会话恢复', () => {
   it('空存储时保持未登录且不抛错', () => {
     expect(() => useAuthStore.getState().hydrate()).not.toThrow();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it('userInfo.cnName/userName 类型畸形（非字符串）时拒绝恢复并清理残留凭证', () => {
+    const badUsers = [
+      { cnName: { first: '张' }, userName: 'demo' }, // cnName 为对象：渲染 cnName || userName 时 React 抛错
+      { cnName: null, userName: { nick: 'demo' } }, // userName 为对象
+      { cnName: 123, userName: 'demo' }, // cnName 为数字
+    ];
+    for (const extra of badUsers) {
+      memStore.set('token', 'access-token');
+      memStore.set('refreshToken', 'refresh-token');
+      memStore.set(
+        'userInfo',
+        JSON.stringify({
+          userId: '1',
+          extraInfo: {},
+          roles: [],
+          authorities: [],
+          ...extra,
+        }),
+      );
+      useAuthStore.getState().hydrate();
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.user).toBeNull();
+      expect(state.token).toBeNull();
+      // 残留凭证已清理：畸形 userInfo 恢复为登录态会在 /me、AppRail 等处渲染期崩溃
+      expect(memStore.get('token')).toBeUndefined();
+      expect(memStore.get('userInfo')).toBeUndefined();
+    }
   });
 });
