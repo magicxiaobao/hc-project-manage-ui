@@ -9,6 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { EmptyHint } from "@/components/biz";
 import { TaskDetailLive } from "@/components/pm/task-detail-live";
 import { useAuthStore } from "@/lib/api/auth-store";
+import { parseRequiredPositiveInt } from "@/lib/task-create";
 
 export const Route = createFileRoute("/p/$projectKey/issues/$taskId")({
   component: Page,
@@ -23,8 +24,10 @@ function Page() {
     return <EmptyHint>{"登录后查看任务详情。"}</EmptyHint>;
   }
 
-  const id = /^\d+$/.test(taskId) ? Number(taskId) : NaN;
-  if (!Number.isInteger(id) || id <= 0) {
+  // 十进制严格解析 + 回绕校验：拒绝超安全整数的静默舍入
+  //（"9007199254740993" 会被 Number 舍入为 9007199254740992，渲染前必须阻断）
+  const id = parseRequiredPositiveInt(taskId);
+  if (id === null) {
     return <EmptyHint>{`任务 ID 不合法（${taskId}）。`}</EmptyHint>;
   }
 

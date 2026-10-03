@@ -38,6 +38,24 @@ export function parseOptionalPositiveInt(text: string): number | null {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
+/**
+ * 解析必填的正整数（路由 ID / 必填的用户 ID 输入）：非纯数字 → null。
+ *
+ * 与 parseOptionalPositiveInt 的区别：多一轮 String 回绕校验，拦截超安全整数
+ * 范围的静默舍入——Number("9007199254740993") 会舍入为 9007199254740992，
+ * 而 Number.isSafeInteger(9007199254740992) 仍为 true，直接校验会静默取到
+ * 另一个 ID 的记录。回绕校验同时拒绝前导零（"007" 非规范十进制表示）。
+ */
+export function parseRequiredPositiveInt(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value) || value <= 0 || String(value) !== trimmed) {
+    return null;
+  }
+  return value;
+}
+
 /** 解析可选的非负整数（故事点）：空 → null；非纯数字 → null */
 export function parseOptionalNonNegativeInt(text: string): number | null {
   const trimmed = text.trim();

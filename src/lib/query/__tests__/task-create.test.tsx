@@ -22,6 +22,7 @@ import {
   parseOptionalNonNegativeInt,
   parseOptionalNonNegativeNumber,
   parseOptionalPositiveInt,
+  parseRequiredPositiveInt,
   validateTaskCreateInput,
 } from '../../task-create';
 import type { TaskCreateFormInput } from '../../task-create';
@@ -61,6 +62,24 @@ describe('解析可选数字字段', () => {
     expect(parseOptionalNonNegativeNumber('0')).toBe(0);
     expect(parseOptionalNonNegativeNumber('-3')).toBeNull();
     expect(parseOptionalNonNegativeNumber('xx')).toBeNull();
+  });
+
+  it('parseRequiredPositiveInt：十进制严格解析，拦截 JS 数字语法与超安全整数舍入', () => {
+    expect(parseRequiredPositiveInt('42')).toBe(42);
+    expect(parseRequiredPositiveInt(' 42 ')).toBe(42);
+    expect(parseRequiredPositiveInt(String(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER);
+    expect(parseRequiredPositiveInt('')).toBeNull();
+    expect(parseRequiredPositiveInt('0')).toBeNull();
+    expect(parseRequiredPositiveInt('-5')).toBeNull();
+    expect(parseRequiredPositiveInt('1.5')).toBeNull();
+    expect(parseRequiredPositiveInt('abc')).toBeNull();
+    // JS 数字语法：Number() 会接受但用户 ID 字段必须拒绝
+    expect(parseRequiredPositiveInt('1e3')).toBeNull();
+    expect(parseRequiredPositiveInt('0x10')).toBeNull();
+    // 超安全整数：Number 舍入为 9007199254740992，isSafeInteger 仍为 true，必须拦截
+    expect(parseRequiredPositiveInt('9007199254740993')).toBeNull();
+    // 前导零非规范十进制表示
+    expect(parseRequiredPositiveInt('007')).toBeNull();
   });
 });
 

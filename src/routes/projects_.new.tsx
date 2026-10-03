@@ -14,6 +14,7 @@ import { DemoCreateProject } from "@/components/pm/demo-create-project";
 import { useAuthStore } from "@/lib/api/auth-store";
 import { isCanonicalUserId } from "@/lib/api/auth";
 import { projectApi } from "@/lib/api/project";
+import { parseRequiredPositiveInt } from "@/lib/task-create";
 import { PROJECT_CREATE_TYPES, type ProjectCreatePayload } from "@/lib/api/types";
 import { toUserMessage, useCreateProject, useProjectEnums } from "@/lib/query";
 
@@ -119,8 +120,9 @@ function LiveCreateProject() {
       setFormError("请填写项目键");
       return;
     }
-    const managerId = Number(managerIdText.trim());
-    if (!Number.isSafeInteger(managerId) || managerId <= 0) {
+    // 十进制严格解析：拒绝 1e3/0x10 等 JS 数字语法与超安全整数舍入
+    const managerId = parseRequiredPositiveInt(managerIdText);
+    if (managerId === null) {
       setFormError("项目经理用户 ID 必须为正整数");
       return;
     }

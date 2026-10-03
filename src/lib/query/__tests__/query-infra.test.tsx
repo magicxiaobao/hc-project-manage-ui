@@ -21,8 +21,8 @@ import { api, ApiBusinessError, HttpResponseError } from '../../api/client';
 import { projectApi } from '../../api/project';
 import type { PageResult, ProjectCreatePayload, ProjectResponse } from '../../api/types';
 
-const businessError = (code: number, msg = '业务错误') =>
-  new ApiBusinessError({ code, msg, result: null }, 200);
+const businessError = (code: number, msg = '业务错误', httpStatus = 200) =>
+  new ApiBusinessError({ code, msg, result: null }, httpStatus);
 
 describe('createQueryClient 默认策略', () => {
   it('staleTime 30s，refetchOnWindowFocus 关闭', () => {
@@ -57,8 +57,13 @@ describe('createQueryClient 默认策略', () => {
 });
 
 describe('isRetryableQueryError', () => {
-  it('业务错误永不重试', () => {
+  it('HTTP 200/4xx 的信封业务错误不重试', () => {
     expect(isRetryableQueryError(businessError(10115))).toBe(false);
+    expect(isRetryableQueryError(businessError(10001, '参数错误', 400))).toBe(false);
+  });
+  it('信封响应的 HTTP 500/429 视为瞬时故障可重试', () => {
+    expect(isRetryableQueryError(businessError(10001, '网关异常', 500))).toBe(true);
+    expect(isRetryableQueryError(businessError(10001, '限流', 429))).toBe(true);
   });
   it('未知错误按可重试处理', () => {
     expect(isRetryableQueryError(new Error('boom'))).toBe(true);
