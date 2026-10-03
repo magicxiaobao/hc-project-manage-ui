@@ -13,3 +13,13 @@ export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey,
 export type { ProjectListParams } from './hooks/useProjects';
 export { useRequirementList, useRequirementOptions } from './hooks/useRequirements';
 export type { RequirementListParams, RequirementOptions } from './hooks/useRequirements';
+export {
+  useAllowedTransitions,
+  useCreateRequirementComment,
+  useRequirementComments,
+  useRequirementDetail,
+  useTransitionHistory,
+  useTransitionRequirement,
+  transitionFieldRequirements,
+} from './hooks/useRequirements';
+export type { TransitionFieldRequirements } from './hooks/useRequirements';

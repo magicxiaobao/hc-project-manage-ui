@@ -9,6 +9,7 @@
  * 未登录走演示需求树（RequirementsView）时不使用本组件。
  */
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, StatusChip } from "@/components/biz";
 import { toUserMessage, useRequirementList, useRequirementOptions } from "@/lib/query";
@@ -23,7 +24,7 @@ function toSelectOptions(options: RequirementOption[] | undefined) {
   ];
 }
 
-export function RequirementListLive({ projectId }: { projectId: number }) {
+export function RequirementListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
   const [titleInput, setTitleInput] = useState("");
   const [appliedTitle, setAppliedTitle] = useState("");
   const [requirementType, setRequirementType] = useState("");
@@ -129,7 +130,13 @@ export function RequirementListLive({ projectId }: { projectId: number }) {
         <div className="overflow-hidden rounded-sm border border-border bg-surface">
           {listQuery.data!.list.map((item) => (
             <div key={item.id} className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0">
-              <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>
+              <Link
+                to="/p/$projectKey/requirements/$requirementId"
+                params={{ projectKey, requirementId: String(item.id) }}
+                className="type-body min-w-0 flex-1 truncate underline-offset-2 hover:underline"
+              >
+                {item.title}
+              </Link>
               <span className="type-caption hidden shrink-0 sm:inline">{typeLabelOf(item.requirementType)}</span>
               <span className="hidden shrink-0 sm:inline-flex">
                 <PriorityMark priority={item.priority} />

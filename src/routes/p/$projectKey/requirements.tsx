@@ -50,5 +50,5 @@ function LiveRequirementList({ projectKey }: { projectKey: string }) {
     );
   }
 
-  return <RequirementListLive projectId={resolution.data} />;
+  return <RequirementListLive projectId={resolution.data} projectKey={projectKey} />;
 }
