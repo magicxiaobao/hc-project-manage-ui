@@ -56,3 +56,23 @@ export function storyPointsWrite(value: number): number {
 export function commentSubmitted(body: string): boolean {
   return body.trim().length > 0;
 }
+
+let savedCreate: CreateForm | null = null;
+
+export function readCreateDraft() {
+  return savedCreate;
+}
+
+export function writeCreateDraft(value: CreateForm | null) {
+  savedCreate = value;
+}
+
+export function clearCreateDraft() {
+  savedCreate = null;
+}
+
+export const commentDrafts = new Map<string, string>();
+
+export function clearCommentDrafts() {
+  commentDrafts.clear();
+}

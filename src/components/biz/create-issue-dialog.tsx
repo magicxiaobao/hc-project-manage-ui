@@ -1,7 +1,7 @@
 import { useItemNavigationState } from "@/components/pm/use-go-item";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AppModal } from "@/components/biz/app-modal";
 import {
   DefectTypeSelect,
@@ -16,9 +16,10 @@ import {
 } from "@/components/biz/field-selects";
 import { LabeledField } from "@/components/biz/labeled-field";
 import type { ItemKind, Priority } from "@/lib/pm/domain";
+import { keptSprintId, readCreateDraft, sameCreateForm, writeCreateDraft, type CreateForm } from "@/lib/pm/edit-rules";
 import { usePm } from "@/lib/pm/store";
 
-const empty = {
+const empty: CreateForm = {
   kind: "requirement" as ItemKind,
   requirementType: "Story" as "Epic" | "Story" | "Task",
   taskType: "开发任务",
@@ -42,15 +43,30 @@ export function CreateIssueDialog() {
   const itemNavigationState = useItemNavigationState();
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
+  const titleErrorId = useId();
+  const openedRef = useRef(empty);
+  const wasOpen = useRef(false);
+  const formRef = useRef(form);
+  formRef.current = form;
 
   useEffect(() => {
-    if (!open) return;
-    const matched = projects.find(
-      (project) => pathname === `/p/${project.key}` || pathname.startsWith(`/p/${project.key}/`),
-    );
-    setForm({ ...empty, projectId: matched?.id ?? projects[0]?.id ?? "pr-hc" });
-    setError("");
-  }, [open, pathname, projects]);
+    if (open && !wasOpen.current) {
+      const matched = projects.find(
+        (project) => pathname === `/p/${project.key}` || pathname.startsWith(`/p/${project.key}/`),
+      );
+      const draft = readCreateDraft();
+      const next = draft
+        ? { ...draft, sprintId: keptSprintId(draft.sprintId, sprints, draft.projectId) }
+        : { ...empty, projectId: matched?.id ?? projects[0]?.id ?? "pr-hc" };
+      setForm(next);
+      openedRef.current = next;
+      setError("");
+    } else if (!open && wasOpen.current) {
+      const current = formRef.current;
+      writeCreateDraft(sameCreateForm(current, openedRef.current) ? null : current);
+    }
+    wasOpen.current = open;
+  }, [open, pathname, projects, sprints]);
 
   if (!open) return null;
   const projectSprints = sprints.filter(
@@ -65,6 +81,7 @@ export function CreateIssueDialog() {
       onClose={() => usePm.getState().setCreateOpen(false)}
     >
       <form
+        noValidate
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
@@ -85,6 +102,9 @@ export function CreateIssueDialog() {
             assigneeId: form.assigneeId || null,
             sprintId: form.sprintId || null,
           });
+          if (!id) return;
+          writeCreateDraft(null);
+          openedRef.current = form;
           const created = usePm.getState().items.find((entry) => entry.id === id);
           const project = projects.find((entry) => entry.id === created?.projectId);
           if (created && project) {
@@ -168,9 +188,21 @@ export function CreateIssueDialog() {
             />
           </LabeledField>
         </div>
-        <TextField value={form.title} onChange={(title) => setForm({ ...form, title })} isRequired>
+        <TextField
+          value={form.title}
+          onChange={(title) => {
+            setForm({ ...form, title });
+            if (error) setError("");
+          }}
+          isRequired
+          isInvalid={Boolean(error)}
+        >
           <Label>标题</Label>
-          <Input placeholder="一句话说清要完成什么" />
+          <Input
+            placeholder="一句话说清要完成什么"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? titleErrorId : undefined}
+          />
         </TextField>
         <TextField
           value={form.description}
@@ -179,7 +211,11 @@ export function CreateIssueDialog() {
           <Label>描述</Label>
           <TextArea rows={4} />
         </TextField>
-        {error ? <p className="type-body text-danger">{error}</p> : null}
+        {error ? (
+          <p id={titleErrorId} role="alert" className="type-body text-danger">
+            {error}
+          </p>
+        ) : null}
         <div className="flex justify-end gap-2">
           <Button
             type="button"
