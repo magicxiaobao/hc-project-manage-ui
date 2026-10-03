@@ -143,7 +143,7 @@ interface PmActions {
   completeRun: (id: string) => { ok: true } | { ok: false; message: string };
   cancelRun: (id: string, reason: string) => { ok: true } | { ok: false; message: string };
   createDefectFromExecution: (id: string) => { ok: true; itemId: string } | { ok: false; message: string };
-  addWorkLog: (input: { projectId: string; itemId: string; hours: number; workDate: string; note: string }) => void;
+  addWorkLog: (input: { projectId: string; itemId: string; hours: number; workDate: string; note: string }) => { ok: boolean; message?: string };
   addDependency: (input: {
     projectId: string;
     predecessorId: string;
@@ -733,7 +733,7 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, itemId };
   },
   addWorkLog: (input) => {
-    if (backendReadOnly()) return;
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const entry: WorkLog = {
       id: uid("wl"),
       projectId: input.projectId,
@@ -745,6 +745,7 @@ export const usePm = create<PmState>((set, get) => ({
       status: "PENDING",
     };
     set({ workLogs: [entry, ...get().workLogs] });
+    return { ok: true };
   },
   addDependency: (input) => {
     if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
