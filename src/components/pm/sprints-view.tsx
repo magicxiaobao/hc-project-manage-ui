@@ -6,6 +6,30 @@ import { DayField, EmptyHint, OptionSelect, PageHeading, SprintStateChip, StateA
 import { formatDay } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 
+function BoardNameRow({ id, name, sprint }: { id: string; name: string; sprint: string }) {
+  const [value, setValue] = useState(name);
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const result = usePm.getState().renameBoard(id, value);
+        if (!result.ok) toast.error(result.message);
+        else notifyPmChange("已保存看板名称");
+      }}
+    >
+      <TextField className="min-w-48 flex-1" value={value} onChange={setValue}>
+        <Label>看板名称</Label>
+        <Input aria-label={`${name}的名称`} />
+      </TextField>
+      <span className="type-caption pb-2">{sprint}</span>
+      <Button type="submit" variant="primary" isDisabled={value.trim() === name}>
+        保存
+      </Button>
+    </form>
+  );
+}
+
 export function SprintsView({ projectKey }: { projectKey: string }) {
   const project = usePm((state) => state.projects.find((entry) => entry.key === projectKey));
   const sprints = usePm((state) => state.sprints);
@@ -132,10 +156,12 @@ export function SprintsView({ projectKey }: { projectKey: string }) {
       <section className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-4">
         <h2 className="type-section">看板</h2>
         {projectBoards.map((board) => (
-          <p key={board.id} className="type-body">
-            {board.name}
-            <span className="type-caption"> · {projectSprints.find((sprint) => sprint.id === board.sprintId)?.name ?? "全部事项"}</span>
-          </p>
+          <BoardNameRow
+            key={board.id}
+            id={board.id}
+            name={board.name}
+            sprint={projectSprints.find((sprint) => sprint.id === board.sprintId)?.name ?? "全部事项"}
+          />
         ))}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <TextField value={boardName} onChange={setBoardName}>

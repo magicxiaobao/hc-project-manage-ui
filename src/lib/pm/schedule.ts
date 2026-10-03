@@ -117,3 +117,25 @@ export function alignPlans(plans: Record<string, PlanRange>, links: ScheduleLink
   }
   return next;
 }
+
+/** 完成-开始链上，结束日决定整段计划结束、且与后置紧挨的任务。 */
+export function criticalTaskIds(plans: Record<string, PlanRange>, links: ScheduleLink[]) {
+  const ids = Object.keys(plans);
+  if (ids.length === 0) return [];
+  const finish = Math.max(...ids.map((id) => dayNumber(plans[id].end)));
+  const critical = new Set(ids.filter((id) => dayNumber(plans[id].end) === finish));
+  const fs = links.filter((link) => link.status === "ACTIVE" && link.dependencyType === "FS" && plans[link.predecessorId] && plans[link.successorId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const link of fs) {
+      if (!critical.has(link.successorId) || critical.has(link.predecessorId)) continue;
+      const ready = dayNumber(plans[link.predecessorId].end) + link.lagDays;
+      if (dayNumber(plans[link.successorId].start) === ready) {
+        critical.add(link.predecessorId);
+        grew = true;
+      }
+    }
+  }
+  return [...critical];
+}

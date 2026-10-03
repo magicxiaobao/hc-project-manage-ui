@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import type { ColumnId } from "@/lib/pm/domain";
 import { toneDotClass, type StateTone } from "@/components/biz/state-tone";
 import { cn } from "@/lib/utils";
@@ -12,10 +13,8 @@ export function KanbanColumn({
   limit,
   over,
   empty,
-  onDragOver,
-  onDragLeave,
-  onDrop,
   onLimit,
+  footer,
   children,
 }: {
   id: ColumnId;
@@ -26,12 +25,11 @@ export function KanbanColumn({
   limit?: number;
   over: boolean;
   empty: boolean;
-  onDragOver: (event: React.DragEvent) => void;
-  onDragLeave: () => void;
-  onDrop: (event: React.DragEvent) => void;
   onLimit?: (limit: number | null) => void;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
+  const { setNodeRef } = useDroppable({ id });
   const overLimit = limit != null && limit > 0 && count > limit;
   return (
     <section
@@ -41,9 +39,6 @@ export function KanbanColumn({
         "flex h-full w-72 max-w-full shrink-0 flex-col rounded-sm bg-line/70 px-2 pt-2 md:w-auto md:min-w-56 md:flex-1",
         over && "ring-2 ring-primary",
       )}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
     >
       <header className="flex items-center justify-between gap-2 px-1 py-1">
         <h2 tabIndex={-1} className="type-overline flex min-w-0 items-center gap-1.5">
@@ -72,13 +67,11 @@ export function KanbanColumn({
           ) : null}
         </span>
       </header>
-      <div
-        data-pm-column={id}
-        className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2"
-      >
+      <div ref={setNodeRef} data-pm-column={id} className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
         {empty ? <div className="type-caption px-2 py-6 text-center">这一列还没有事项</div> : null}
         {children}
       </div>
+      {footer ? <div className="shrink-0 px-1 pb-2">{footer}</div> : null}
     </section>
   );
 }

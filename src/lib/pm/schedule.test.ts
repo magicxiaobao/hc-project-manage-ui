@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { alignPlans, findScheduleHits, pushPlan, type PlanRange, type ScheduleLink } from "./schedule.ts";
+import { alignPlans, criticalTaskIds, findScheduleHits, pushPlan, type PlanRange, type ScheduleLink } from "./schedule.ts";
 
 const link = (patch: Partial<ScheduleLink> & Pick<ScheduleLink, "dependencyType">): ScheduleLink => ({
   id: patch.id ?? "d",
@@ -40,4 +40,15 @@ test("拖动前置会把后置链顺延，作废依赖不参与", () => {
   assert.equal(next.b.start, "2026-10-06");
   assert.equal(next.c.start, "2026-10-07");
   assert.equal(findScheduleHits(links, next).length, 0);
+});
+
+test("关键路径只沿紧挨的完成-开始链回溯", () => {
+  const plans = {
+    a: { start: "2026-10-01", end: "2026-10-03" },
+    b: { start: "2026-10-03", end: "2026-10-08" },
+    slack: { start: "2026-10-01", end: "2026-10-02" },
+  };
+  const links = [link({ dependencyType: "FS" }), link({ id: "slack", predecessorId: "slack", successorId: "b", dependencyType: "FS" })];
+  const critical = criticalTaskIds(plans, links).sort();
+  assert.deepEqual(critical, ["a", "b"]);
 });

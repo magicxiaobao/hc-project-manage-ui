@@ -1,6 +1,7 @@
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { Button, Input, Label, TextField } from "@heroui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { AppModal, BoardFilterBar, EmptyHint, KanbanBoard, PageHeading } from "@/components/biz";
 import { rememberBrowse, useGoToItem } from "@/components/pm/use-go-item";
 import {
@@ -36,6 +37,7 @@ export function BoardView({
     [allSprints, project?.id],
   );
   const items = usePm((state) => state.items);
+  const comments = usePm((state) => state.comments);
   const people = usePm((state) => state.people);
   const boards = usePm((state) => state.boards);
   const currentUserId = usePm((state) => state.currentUserId);
@@ -195,7 +197,7 @@ export function BoardView({
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
           <PageHeading
             title={lockedKind === "defect" ? "缺陷看板" : (board?.name ?? "看板")}
-            hint="跨列拖动走状态流转。同一列上下拖是排序。列头可以填在制品上限，超出只提示。"
+            hint="拖动要先移动一点才会带走卡片，点按仍然打开事项。卡片上可以改到允许的列。待办列可以直接添加。"
           />
           <select
             aria-label="看板"
@@ -240,10 +242,36 @@ export function BoardView({
         cancelledItems={visible.cancelledItems}
         showCancelled={showCancelled}
         catalog={projectItems}
+        comments={comments}
         people={people}
         limits={project.wip}
+        lockedKind={lockedKind}
         onOpen={goToItem}
         onMove={moveItem}
+        onCreate={(column, kind, title) => {
+          const id = usePm.getState().createItem({
+            projectId: project.id,
+            kind,
+            title,
+            description: "",
+            priority: "MEDIUM",
+            assigneeId: currentUserId,
+            sprintId: selectedSprint || null,
+          });
+          if (!id) return;
+          if (column === "doing") {
+            const moved = usePm.getState().moveToColumn(id, "doing");
+            if (!moved.ok) {
+              toast(moved.message);
+              return;
+            }
+          }
+          const lane = usePm
+            .getState()
+            .items.filter((entry) => entry.projectId === project.id && columnOf(entry.kind, entry.status) === column)
+            .map((entry) => entry.id);
+          usePm.getState().placeItem(id, null, lane);
+        }}
         onLimit={(column, limit) => {
           const wip = { ...project.wip };
           if (limit == null || limit <= 0) delete wip[column];

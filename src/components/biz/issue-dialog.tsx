@@ -198,7 +198,7 @@ export function IssueDialog({
           />
         </div>
         <div className="lg:col-start-1 lg:row-start-2">
-          <ChildIssueList projectKey={projectKey} items={children} />
+          <ChildIssueList projectKey={projectKey} items={children} parent={item} />
           <div className="mt-6">
             <DiscussionPanel
               key={item.id}

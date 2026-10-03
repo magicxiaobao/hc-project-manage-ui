@@ -1,10 +1,10 @@
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import type { ProjectViewSearch } from "@/lib/pm/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { EmptyHint, ListFilterBar, PageHeading, PersonSelect } from "@/components/biz";
 import { rememberBrowse, useGoToItem } from "@/components/pm/use-go-item";
-import { columnOf, kindLabel, needsReason, nextStatuses, statusLabel, type WorkItem } from "@/lib/pm/domain";
+import { columnOf, kindLabel, needsReason, nextStatuses, statusLabel, COLUMNS, type ColumnId, type WorkItem } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
@@ -44,6 +44,8 @@ export function ListView({ projectKey }: { projectKey: string }) {
       replace: true,
     });
   };
+  const [grouped, setGrouped] = useState(true);
+  const [closedGroups, setClosedGroups] = useState<ColumnId[]>([]);
   const goToItem = useGoToItem();
 
   const rows = useMemo(() => {
@@ -73,6 +75,73 @@ export function ListView({ projectKey }: { projectKey: string }) {
     if (!result.ok) toast(result.message);
   };
   const members = people.filter((person) => project.memberIds.includes(person.id));
+  const renderIssueRow = (item: WorkItem) => {
+    const sprint = sprints.find((entry) => entry.id === item.sprintId);
+    const choices = [item.status, ...nextStatuses(item).filter((status) => status !== item.status)];
+    return (
+      <tr key={item.id} className="border-b border-border last:border-b-0">
+        <td className="px-3 py-2">
+          <button data-focus-key={`item-key:${item.id}`} type="button" className="type-link whitespace-nowrap" onClick={() => goToItem(item.id)}>
+            {item.key}
+          </button>
+          <span className="type-caption block">{kindLabel(item)}</span>
+        </td>
+        <td className="max-w-64 px-3 py-2">
+          <button data-focus-key={`item-title:${item.id}`} type="button" className="type-body block max-w-full truncate text-left" title={item.title} onClick={() => goToItem(item.id)}>
+            {item.title}
+          </button>
+          {edited?.id === item.id ? (
+            <div className="mt-2">
+              <PersistenceStatus ready={ready} error={persistenceError} saved={edited.accepted} automatic onRetry={() => usePm.getState().retryPersistence()} />
+            </div>
+          ) : null}
+        </td>
+        <td className="type-caption px-3 py-2">{item.priority === "HIGH" ? "高" : item.priority === "LOW" ? "低" : "中"}</td>
+        <td className="px-3 py-2">
+          <select
+            aria-label={`${item.key} 状态`}
+            className="type-body h-8 max-w-36 rounded-sm border border-border bg-surface px-1"
+            value={item.status}
+            onChange={(event) => {
+              const to = event.target.value;
+              if (to === item.status) return;
+              if (needsReason(to)) {
+                toast("这次流转要填原因，请打开事项。");
+                goToItem(item.id);
+                return;
+              }
+              showEdit(item.id, usePm.getState().transition(item.id, to));
+            }}
+          >
+            {choices.map((status) => (
+              <option key={status} value={status}>
+                {statusLabel(item.kind, status)}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td className="w-40 px-3 py-2">
+          <PersonSelect showRole={false} people={members} value={item.assigneeId ?? ""} onChange={(assigneeId) => showEdit(item.id, usePm.getState().updateItem(item.id, { assigneeId: assigneeId || null }))} />
+        </td>
+        <td className="px-3 py-2">
+          {item.kind === "defect" ? (
+            <span className="type-caption">—</span>
+          ) : (
+            <input
+              aria-label={`${item.key} 故事点`}
+              type="number"
+              min={0}
+              value={item.storyPoints ?? 0}
+              className="type-caption h-8 w-16 rounded-sm border border-border bg-surface px-1"
+              onChange={(event) => showEdit(item.id, usePm.getState().updateItem(item.id, { storyPoints: Number(event.target.value) }))}
+            />
+          )}
+        </td>
+        <td className="type-caption hidden px-3 py-2 md:table-cell">{sprint?.name ?? "未排期"}</td>
+        <td className="type-caption px-3 py-2">{item.updatedAt.slice(5, 10)}</td>
+      </tr>
+    );
+  };
   const sort = (key: SortKey) => {
     if (sortKey === key) setFilter({ ascending: !ascending });
     else {
@@ -98,7 +167,12 @@ export function ListView({ projectKey }: { projectKey: string }) {
           onHideDone={(hideDone) => setFilter({ hideDone })}
         />
       </div>
-      <p className="type-meta">{rows.length} 项 · {hideDone ? "未完成范围" : "全部状态范围"}</p>
+      <p className="type-meta flex flex-wrap items-center gap-3">
+        <span>{rows.length} 项 · {hideDone ? "未完成范围" : "全部状态范围"}</span>
+        <button type="button" className="type-link" aria-pressed={grouped} onClick={() => setGrouped((value) => !value)}>
+          {grouped ? "取消按状态分组" : "按状态分组"}
+        </button>
+      </p>
       <div className="flex flex-wrap items-center gap-2 sm:hidden">
         <label className="type-label" htmlFor="mobile-issue-sort">排序</label>
         <select id="mobile-issue-sort" className="rounded-sm border border-border bg-surface px-2" value={sortKey} onChange={(event) => sort(event.target.value as SortKey)}>
@@ -134,98 +208,58 @@ export function ListView({ projectKey }: { projectKey: string }) {
                   </div>
                 </td>
               </tr>
-            ) : null}
-            {rows.map((item) => {
-              const sprint = sprints.find((entry) => entry.id === item.sprintId);
-              const choices = [
-                item.status,
-                ...nextStatuses(item).filter((status) => status !== item.status),
-              ];
-              return (
-                <tr key={item.id} className="border-b border-border last:border-b-0">
-                  <td className="px-3 py-2">
-                    <button
-                      data-focus-key={`item-key:${item.id}`}
-                      type="button"
-                      className="type-link whitespace-nowrap"
-                      onClick={() => goToItem(item.id)}
-                    >
-                      {item.key}
-                    </button>
-                    <span className="type-caption block">{kindLabel(item)}</span>
-                  </td>
-                  <td className="max-w-64 px-3 py-2">
-                    <button
-                      data-focus-key={`item-title:${item.id}`}
-                      type="button"
-                      className="type-body block max-w-full truncate text-left"
-                      title={item.title}
-                      onClick={() => goToItem(item.id)}
-                    >
-                      {item.title}
-                    </button>
-                    {edited?.id === item.id ? <div className="mt-2"><PersistenceStatus ready={ready} error={persistenceError} saved={edited.accepted} automatic onRetry={() => usePm.getState().retryPersistence()} /></div> : null}
-                  </td>
-                  <td className="type-caption px-3 py-2">
-                    {item.priority === "HIGH" ? "高" : item.priority === "LOW" ? "低" : "中"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <select
-                      aria-label={`${item.key} 状态`}
-                      className="type-body h-8 max-w-36 rounded-sm border border-border bg-surface px-1"
-                      value={item.status}
-                      onChange={(event) => {
-                        const to = event.target.value;
-                        if (to === item.status) return;
-                        if (needsReason(to)) {
-                          toast("这次流转要填原因，请打开事项。");
-                          goToItem(item.id);
-                          return;
-                        }
-                        const result = usePm.getState().transition(item.id, to);
-                        showEdit(item.id, result);
-                      }}
-                    >
-                      {choices.map((status) => (
-                        <option key={status} value={status}>
-                          {statusLabel(item.kind, status)}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="w-40 px-3 py-2">
-                    <PersonSelect
-                      showRole={false}
-                      people={members}
-                      value={item.assigneeId ?? ""}
-                      onChange={(assigneeId) => showEdit(item.id, usePm.getState().updateItem(item.id, { assigneeId: assigneeId || null }))}
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    {item.kind === "defect" ? (
-                      <span className="type-caption">—</span>
-                    ) : (
-                      <input
-                        aria-label={`${item.key} 故事点`}
-                        type="number"
-                        min={0}
-                        value={item.storyPoints ?? 0}
-                        className="type-caption h-8 w-16 rounded-sm border border-border bg-surface px-1"
-                        onChange={(event) => showEdit(item.id, usePm.getState().updateItem(item.id, { storyPoints: Number(event.target.value) }))}
-                      />
-                    )}
-                  </td>
-                  <td className="type-caption hidden px-3 py-2 md:table-cell">
-                    {sprint?.name ?? "未排期"}
-                  </td>
-                  <td className="type-caption px-3 py-2">{item.updatedAt.slice(5, 10)}</td>
-                </tr>
-              );
-            })}
+            ) : grouped ? (
+              (["todo", "doing", "check", "done", "cancelled"] as ColumnId[]).map((column) => {
+                const group = rows.filter((item) => columnOf(item.kind, item.status) === column);
+                if (group.length === 0) return null;
+                const name = COLUMNS.find((entry) => entry.id === column)?.name ?? "已取消";
+                const collapsed = closedGroups.includes(column);
+                return (
+                  <GroupRows
+                    key={column}
+                    name={name}
+                    count={group.length}
+                    collapsed={collapsed}
+                    onToggle={() => setClosedGroups((current) => (current.includes(column) ? current.filter((entry) => entry !== column) : [...current, column]))}
+                  >
+                    {group.map((item) => renderIssueRow(item))}
+                  </GroupRows>
+                );
+              })
+            ) : (
+              rows.map((item) => renderIssueRow(item))
+            )}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+function GroupRows({
+  name,
+  count,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  name: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <tr className="bg-line/70">
+        <td colSpan={8} className="px-3 py-2">
+          <button type="button" className="type-emphasis" onClick={onToggle}>
+            {collapsed ? "展开" : "收起"} {name} · {count}
+          </button>
+        </td>
+      </tr>
+      {collapsed ? null : children}
+    </>
   );
 }
 

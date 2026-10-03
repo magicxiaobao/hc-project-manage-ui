@@ -138,6 +138,7 @@ interface PmActions {
   updateProject: (id: string, patch: Partial<Pick<Project, "name" | "summary" | "memberIds" | "leadId" | "wip">>) => { ok: true } | { ok: false; message: string };
   createSprint: (input: { projectId: string; name: string; goal: string; start: string; end: string }) => { ok: true } | { ok: false; message: string };
   createBoard: (input: { projectId: string; name: string; sprintId: string | null }) => { ok: true } | { ok: false; message: string };
+  renameBoard: (id: string, name: string) => { ok: true } | { ok: false; message: string };
   createSuite: (input: { projectId: string; name: string }) => { ok: true } | { ok: false; message: string };
   saveCaseSteps: (id: string, steps: TestStep[]) => void;
   updateCase: (id: string, patch: { precondition?: string; steps?: TestStep[]; status?: TestCase["status"]; suite?: string; requirementId?: string | null }) => { ok: true } | { ok: false; message: string };
@@ -789,6 +790,15 @@ export const usePm = create<PmState>((set, get) => ({
     if (!name) return { ok: false, message: "看板名称不能为空。" };
     const entry: Board = { id: uid("bd"), projectId: input.projectId, name, sprintId: input.sprintId };
     set({ boards: [...get().boards, entry] });
+    return { ok: true };
+  },
+  renameBoard: (id, name) => {
+    const next = name.trim();
+    if (!next) return { ok: false, message: "看板名称不能为空。" };
+    const board = get().boards.find((entry) => entry.id === id);
+    if (!board) return { ok: false, message: "看板不存在。" };
+    if (next === board.name) return { ok: true };
+    set({ boards: get().boards.map((entry) => (entry.id === id ? { ...entry, name: next } : entry)) });
     return { ok: true };
   },
   createSuite: (input) => {
