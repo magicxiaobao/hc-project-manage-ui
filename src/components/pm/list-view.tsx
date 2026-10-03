@@ -2,6 +2,7 @@ import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import {
   clearListFiltersPatch,
   deriveListScope,
+  headerSortState,
   scopeSearchPatch,
   type ListGroupId,
   type ListScope,
@@ -328,19 +329,15 @@ export function ListView({ projectKey }: { projectKey: string }) {
                   onChange={() => setSelected(allChecked ? [] : visibleIds)}
                 />
               </th>
-              <Header label="编号" active={sortKey === "key"} onClick={() => sort("key")} />
-              <Header label="标题" active={sortKey === "title"} onClick={() => sort("title")} />
-              <Header
-                label="优先级"
-                active={sortKey === "priority"}
-                onClick={() => sort("priority")}
-              />
-              <Header label="状态" active={sortKey === "status"} onClick={() => sort("status")} />
+              <Header label="编号" column="key" sortKey={sortKey} ascending={ascending} onClick={() => sort("key")} />
+              <Header label="标题" column="title" sortKey={sortKey} ascending={ascending} onClick={() => sort("title")} />
+              <Header label="优先级" column="priority" sortKey={sortKey} ascending={ascending} onClick={() => sort("priority")} />
+              <Header label="状态" column="status" sortKey={sortKey} ascending={ascending} onClick={() => sort("status")} />
               <th className="type-caption px-3 py-2 font-normal">负责人</th>
-              <Header label="点数" active={sortKey === "points"} onClick={() => sort("points")} />
-              <Header label="截止" active={sortKey === "due"} onClick={() => sort("due")} />
+              <Header label="点数" column="points" sortKey={sortKey} ascending={ascending} onClick={() => sort("points")} />
+              <Header label="截止" column="due" sortKey={sortKey} ascending={ascending} onClick={() => sort("due")} />
               <th className="type-caption hidden px-3 py-2 font-normal md:table-cell">迭代</th>
-              <Header label="更新" active={sortKey === "updated"} onClick={() => sort("updated")} />
+              <Header label="更新" column="updated" sortKey={sortKey} ascending={ascending} onClick={() => sort("updated")} />
             </tr>
           </thead>
           <tbody>
@@ -444,17 +441,23 @@ function compareRow(a: WorkItem, b: WorkItem, key: SortKey) {
 
 function Header({
   label,
-  active,
+  column,
+  sortKey,
+  ascending,
   onClick,
 }: {
   label: string;
-  active: boolean;
+  column: SortKey;
+  sortKey: SortKey;
+  ascending: boolean;
   onClick: () => void;
 }) {
+  const sortState = headerSortState(column, sortKey, ascending);
   return (
-    <th className="px-3 py-2 font-normal">
-      <button type="button" className={active ? "type-emphasis" : "type-caption"} onClick={onClick}>
+    <th className="px-3 py-2 font-normal" aria-sort={sortState.ariaSort}>
+      <button type="button" className={sortState.direction ? "type-emphasis" : "type-caption"} onClick={onClick}>
         {label}
+        {sortState.direction ? ` ${sortState.direction}` : ""}
       </button>
     </th>
   );
