@@ -86,6 +86,23 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const baseUrl = options.baseUrl ?? defaultBaseUrl();
   const timeoutMs = options.timeoutMs ?? 10000;
   let tokenRefresher: TokenRefresher | null = null;
+  /** 正在进行中的刷新：并发 401 共用一次，避免重复刷新触发 refresh token 轮换竞态 */
+  let inflightRefresh: Promise<boolean> | null = null;
+
+  function refreshOnce(): Promise<boolean> {
+    if (inflightRefresh) return inflightRefresh;
+    const p = (async () => {
+      try {
+        return tokenRefresher ? await tokenRefresher() : false;
+      } catch {
+        return false;
+      } finally {
+        inflightRefresh = null;
+      }
+    })();
+    inflightRefresh = p;
+    return p;
+  }
 
   function notifyUnauthorized(): void {
     if (options.onUnauthorized) {
@@ -111,49 +128,45 @@ export function createApiClient(options: ApiClientOptions = {}) {
     }
 
     const controller = new AbortController();
+    // 超时覆盖整个请求（含响应体读取）：fetch 在收到响应头后即 resolve，
+    // 若此时清 timer，后续 body stall 会无限等待。放到 finally 保证解析完成后才清。
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let res: Response;
     try {
-      res = await fetch(joinUrl(baseUrl, path), { ...init, headers, signal: controller.signal });
+      const res = await fetch(joinUrl(baseUrl, path), { ...init, headers, signal: controller.signal });
+
+      // 401 自动刷新 + 重放一次（登录/刷新接口自身除外；并发 401 共用一次刷新）
+      if (res.status === 401 && !isOwnErrorEndpoint(path) && !init._retry) {
+        const refreshed = await refreshOnce();
+        if (refreshed) {
+          return request<T>(path, { ...init, _retry: true });
+        }
+        clearStoredAuth();
+        notifyUnauthorized();
+        throw new ApiBusinessError({ code: 10109, msg: '登录已过期，请重新登录', result: null }, 401);
+      }
+
+      const text = await res.text();
+      let data: ApiEnvelope<T> | null = null;
+      if (text) {
+        try {
+          data = JSON.parse(text) as ApiEnvelope<T>;
+        } catch {
+          data = null;
+        }
+      }
+      if (!data || typeof data.code !== 'number') {
+        if (res.ok && !text) return undefined as T;
+        throw new Error(`接口返回格式异常: ${path}`);
+      }
+      if (data.code === 1) return data.result;
+      if (AUTH_EXPIRED_CODES.includes(data.code)) {
+        clearStoredAuth();
+        notifyUnauthorized();
+      }
+      throw new ApiBusinessError<T>(data, res.status);
     } finally {
       clearTimeout(timer);
     }
-
-    // 401 自动刷新 + 重放一次（登录/刷新接口自身除外）
-    if (res.status === 401 && !isOwnErrorEndpoint(path) && !init._retry) {
-      let refreshed = false;
-      try {
-        refreshed = tokenRefresher ? await tokenRefresher() : false;
-      } catch {
-        refreshed = false;
-      }
-      if (refreshed) {
-        return request<T>(path, { ...init, _retry: true });
-      }
-      clearStoredAuth();
-      notifyUnauthorized();
-      throw new ApiBusinessError({ code: 10109, msg: '登录已过期，请重新登录', result: null }, 401);
-    }
-
-    const text = await res.text();
-    let data: ApiEnvelope<T> | null = null;
-    if (text) {
-      try {
-        data = JSON.parse(text) as ApiEnvelope<T>;
-      } catch {
-        data = null;
-      }
-    }
-    if (!data || typeof data.code !== 'number') {
-      if (res.ok && !text) return undefined as T;
-      throw new Error(`接口返回格式异常: ${path}`);
-    }
-    if (data.code === 1) return data.result;
-    if (AUTH_EXPIRED_CODES.includes(data.code)) {
-      clearStoredAuth();
-      notifyUnauthorized();
-    }
-    throw new ApiBusinessError<T>(data, res.status);
   }
 
   return {
