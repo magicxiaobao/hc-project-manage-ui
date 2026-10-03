@@ -11,3 +11,5 @@ export { queryKeys } from './keys';
 export { isAuthExpiredError, toUserMessage } from './error';
 export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey, useProjectList, resolveProjectIdByKey } from './hooks/useProjects';
 export type { ProjectListParams } from './hooks/useProjects';
+export { useRequirementList, useRequirementOptions } from './hooks/useRequirements';
+export type { RequirementListParams, RequirementOptions } from './hooks/useRequirements';
