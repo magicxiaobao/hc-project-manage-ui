@@ -1,32 +1,55 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { RotateCcw, X } from "lucide-react";
 import type { Notice } from "@/lib/pm/domain";
 import { formatRelative, NOTICE_KIND_LABEL } from "@/lib/pm/domain";
 
+function canRestoreFocus(element: HTMLElement | null): element is HTMLElement {
+  if (!element || element === document.body || !element.isConnected) return false;
+  if (element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true") return false;
+  if (element.closest('[aria-hidden="true"]')) return false;
+  const style = getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden") return false;
+  return element.getClientRects().length > 0;
+}
+
 export function NoticePanel({
   notices,
-  triggerRef,
   onClose,
   onOpen,
   onReset,
 }: {
   notices: Notice[];
-  triggerRef: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onOpen: (itemId: string) => void;
   onReset: () => void;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useLayoutEffect(() => {
-    const trigger = triggerRef.current;
+    const root = rootRef.current;
+    const activeBeforeOpen = document.activeElement;
+    const previous =
+      activeBeforeOpen instanceof HTMLElement && activeBeforeOpen !== document.body
+        ? activeBeforeOpen
+        : null;
     closeButtonRef.current?.focus();
-    return () => trigger?.focus();
-  }, [triggerRef]);
+    return () => {
+      const active = document.activeElement;
+      // body or null is not inside the panel: leave focus where it is, never steal it back to the bell.
+      if (active == null || active === document.body) return;
+      if (!root || !root.contains(active)) return;
+      // Do not pull focus out of a real modal (aria-modal absent or not "false").
+      if (active instanceof Element && active.closest('[role="dialog"]:not([aria-modal="false"])')) return;
+      if (!canRestoreFocus(previous)) return;
+      previous.focus({ preventScroll: true });
+    };
+  }, []);
 
   return (
     <div
+      ref={rootRef}
       role="dialog"
       aria-modal="false"
       aria-label="通知"

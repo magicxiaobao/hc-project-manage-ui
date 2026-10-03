@@ -311,14 +311,17 @@ input::placeholder, textarea::placeholder { color: var(--color-muted); opacity: 
   .pm-issue-table td { min-width: 0; max-width: none; width: auto; padding: 0; }
   .pm-issue-table td:nth-child(1) { order: 1; align-self: center; }
   .pm-issue-table td:nth-child(4) { order: 2; text-align: right; }
-  .pm-issue-table td:nth-child(2) { order: 3; align-self: center; }
+  .pm-issue-table td:nth-child(2) { order: 3; align-self: center; grid-column: 1 / -1; }
   .pm-issue-table td:nth-child(3) button { width: 100%; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .pm-issue-table td:nth-child(3) { order: 4; grid-column: 1 / -1; }
   .pm-issue-table td:nth-child(4)::before { content: "优先级 "; }
   .pm-issue-table td:nth-child(5) { order: 5; grid-column: 1 / -1; }
-  .pm-issue-table td:nth-child(6) { order: 6; display: flex; align-items: center; gap: 8px; }
+  .pm-issue-table td:nth-child(6) { order: 6; }
+  .pm-issue-table td:nth-child(7) { order: 7; display: flex; align-items: center; gap: 8px; }
   .pm-issue-table td:nth-child(7)::before { content: "点数"; color: var(--color-muted); }
-  .pm-issue-table td:nth-child(8) { order: 7; text-align: right; align-self: center; }
+  .pm-issue-table td:nth-child(8) { order: 8; text-align: left; }
+  .pm-issue-table td:nth-child(8)::before { content: "截止 "; }
+  .pm-issue-table td:nth-child(10) { order: 9; text-align: right; align-self: center; }
   .pm-issue-table td:nth-child(10)::before { content: "更新 "; }
   .pm-issue-table td:only-child { grid-column: 1 / -1; }
 }

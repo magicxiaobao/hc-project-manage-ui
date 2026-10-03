@@ -2,7 +2,7 @@ import { NavigationFocus } from "@/components/pm/navigation-focus";
 import { notifyPmChange } from "@/lib/pm/feedback";
 import { useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Toaster } from "sonner";
 import {
   AppRail,
@@ -37,7 +37,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const unread = notices.filter((notice) => !notice.read).length;
   const [searchOpen, setSearchOpen] = useState(false);
   const goToItem = useGoToItem();
-  const noticeTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useLayoutEffect(() => {
     return bindPmPersistence();
@@ -46,10 +45,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      // Non-modal panels must still close on Escape after focus moves outside.
-      const blockingDialogSelector = event.key === "Escape"
-        ? '[role="dialog"]:not([aria-modal="false"])'
-        : '[role="dialog"]';
+      // Real modals block every shortcut here. A non-modal notice (aria-modal="false") does not.
+      const blockingDialogSelector = '[role="dialog"]:not([aria-modal="false"])';
       if (document.querySelector(blockingDialogSelector)) return;
       const typing =
         !!target &&
@@ -112,8 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         me={ready ? me : undefined}
         onSearch={() => setSearchOpen(true)}
         onCreate={() => usePm.getState().setCreateOpen(true)}
-        onNotices={(event) => {
-          noticeTriggerRef.current = event.currentTarget;
+        onNotices={() => {
           const next = !usePm.getState().noticeOpen;
           usePm.getState().setNoticeOpen(next);
           if (next) usePm.getState().markNoticesRead();
@@ -159,7 +155,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {noticeOpen ? (
         <NoticePanel
           notices={notices}
-          triggerRef={noticeTriggerRef}
           onClose={() => usePm.getState().setNoticeOpen(false)}
           onOpen={goToItem}
           onReset={() => {

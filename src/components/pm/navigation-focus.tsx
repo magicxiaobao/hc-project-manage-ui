@@ -32,7 +32,7 @@ export function NavigationFocus({ ready }: { ready: boolean }) {
     const frame = requestAnimationFrame(() => {
       if (
         router.state.location.state.__TSR_key !== location.state.__TSR_key ||
-        document.querySelector('[role="dialog"]')
+        document.querySelector('[role="dialog"]:not([aria-modal="false"])')
       )
         return;
       const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a, select"));
