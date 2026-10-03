@@ -109,15 +109,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // 先递增代际：使正在进行的刷新完成后被丢弃，不会恢复已登出的会话
     sessionGeneration += 1;
     const refreshToken = readStorage(REFRESH_TOKEN_STORAGE_KEY);
+    // 先清本地、再调后端：即使用户在吊销请求返回前关闭标签页，会话也不会残留。
+    // 后端吊销凭请求体中的 refreshToken（持有即吊销，不依赖访问令牌头），顺序调换安全。
+    clearStoredAuth();
+    set({ user: null, token: null, isAuthenticated: false });
     if (refreshToken) {
       try {
         await authApi.logout({ refreshToken });
       } catch {
-        /* 后端吊销失败也继续本地清理 */
+        /* 后端吊销失败也继续：本地已清理，吊销按 best-effort 处理 */
       }
     }
-    clearStoredAuth();
-    set({ user: null, token: null, isAuthenticated: false });
   },
 
   refreshAccessToken: async () => {
@@ -134,6 +136,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       set({ user: nextUser, token: res.token, isAuthenticated: true });
       return true;
     } catch (err) {
+      // 旧会话的刷新在登出/重新登录后才返回错误：直接丢弃，不碰新会话的凭证
+      if (generation !== sessionGeneration) return false;
       // 仅在确认 refresh token 失效时清除登录态；瞬时故障保留会话
       if (isRefreshTokenInvalid(err)) {
         clearStoredAuth();
@@ -146,3 +150,5 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
 // 注册到 HTTP 客户端：401 时自动刷新并重放一次（与老前端 request.ts 一致）
 api.setTokenRefresher(() => useAuthStore.getState().refreshAccessToken());
+// 会话代际读取器：让客户端丢弃“旧会话请求在代际变化后返回”的迟到登录失效信号
+api.setSessionGenerationReader(() => sessionGeneration);

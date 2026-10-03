@@ -11,6 +11,7 @@
  * - 重放后依然 401：清本地凭证并通知登录失效（不再触发刷新）
  * - 刷新瞬时失败且凭证仍在：不清凭证、不通知，抛可重试错误（会话保留）
  * - 刷新接口返回 HTTP 401 但响应体畸形/非信封：仍判定 refresh token 失效并清凭证
+ * - 旧会话请求的迟到登录失效信号：代际已变化时不清除新会话凭证、不通知（会话代际守卫）
  * - POST /project/v1/findByPage，请求体 { page, pageSize, bean }
  *
  * 运行：npm run test:contract（需先 npm install）
@@ -229,6 +230,55 @@ describe('401 自动刷新', () => {
     expect(memStore.get('refreshToken')).toBeUndefined();
     expect(memStore.get('userInfo')).toBeUndefined();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+});
+
+describe('会话代际', () => {
+  it('旧会话请求的迟到登录失效信号：不清除新会话凭证、不通知', async () => {
+    // 登出后重新登录，新会话凭证已落盘
+    memStore.set('token', 'new-token');
+    memStore.set('refreshToken', 'new-refresh');
+    let unauthorized = 0;
+    let generation = 1;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => generation);
+
+    // 请求发出后、响应到达前发生登出 + 重新登录（代际变化）
+    let resolveFetch!: (res: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise<Response>((r) => { resolveFetch = r; })),
+    );
+    const pending = client.get('/auth/v1/me').catch((e) => e);
+    generation = 3;
+    resolveFetch(
+      new Response(JSON.stringify({ code: 10106, msg: '登录失效', result: null }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const err = await pending;
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    // 新会话凭证不受影响，不跳转登录页
+    expect(memStore.get('token')).toBe('new-token');
+    expect(memStore.get('refreshToken')).toBe('new-refresh');
+    expect(unauthorized).toBe(0);
+  });
+
+  it('同代际的登录失效信号：仍清除凭证并通知', async () => {
+    memStore.set('token', 'expired');
+    memStore.set('refreshToken', 'refresh-1');
+    let unauthorized = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => 1);
+    mockFetchSequence([{ status: 200, body: { code: 10106, msg: '登录失效', result: null } }]);
+
+    const err = await client.get('/auth/v1/me').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    expect(memStore.get('token')).toBeUndefined();
+    expect(memStore.get('refreshToken')).toBeUndefined();
+    expect(unauthorized).toBe(1);
   });
 });
 

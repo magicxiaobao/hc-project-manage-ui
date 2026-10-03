@@ -7,6 +7,8 @@
  * - 业务码 10106/10107/10108/10109/10115 视为登录失效：清本地凭证并通知上层
  * - HTTP 401（非登录/刷新接口）时尝试刷新 token 并重放一次
  * - baseURL 取 VITE_API_BASE_URL，开发环境默认为 '/api'（由 vite 反代到后端）
+ * - 会话代际：旧会话的请求在登出/重新登录后才返回“登录失效”信号时，
+ *   不清除新会话凭证、不跳转（由 auth-store 注册代际读取器）
  */
 import type { ApiEnvelope } from './types';
 
@@ -102,6 +104,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
   let tokenRefresher: TokenRefresher | null = null;
   /** 正在进行中的刷新：并发 401 共用一次，避免重复刷新触发 refresh token 轮换竞态 */
   let inflightRefresh: Promise<boolean> | null = null;
+  /**
+   * 会话代际读取器（由 auth-store 注册）：请求发出时代际与响应到达时代际不一致，
+   * 说明这是“登出/重新登录前的旧会话”请求的迟到响应，其登录失效信号不得清除新会话凭证。
+   * 未注册时保持原有的无条件行为（单元测试与非单例客户端）。
+   */
+  let readSessionGeneration: (() => number) | null = null;
 
   function refreshOnce(): Promise<boolean> {
     if (inflightRefresh) return inflightRefresh;
@@ -145,6 +153,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
     }
 
     const controller = new AbortController();
+    // 本次请求发出时的会话代际：响应到达时代际已变化 → 这是旧会话请求的迟到响应，
+    // 其“登录失效”信号不得清除新会话凭证、不得跳转（见 authStillCurrent）。
+    const generationAtStart = readSessionGeneration ? readSessionGeneration() : 0;
+    const authStillCurrent = () =>
+      !readSessionGeneration || readSessionGeneration() === generationAtStart;
     // 超时覆盖整个请求（含响应体读取）：fetch 在收到响应头后即 resolve，
     // 若此时清 timer，后续 body stall 会无限等待。放到 finally 保证解析完成后才清。
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -164,11 +177,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
           if (readToken()) {
             throw new Error(`刷新访问令牌失败: ${path}`);
           }
-        } else {
-          // 重放后依然 401：新令牌也被拒绝，登录态确实失效，不再尝试刷新
+        } else if (authStillCurrent()) {
+          // 重放后依然 401：新令牌也被拒绝，登录态确实失效，不再尝试刷新。
+          // 代际已变化 → 这是旧会话请求的迟到响应，不清除新会话凭证。
           clearStoredAuth();
         }
-        notifyUnauthorized();
+        if (authStillCurrent()) {
+          notifyUnauthorized();
+        }
         throw new ApiBusinessError({ code: 10109, msg: '登录已过期，请重新登录', result: null }, 401);
       }
 
@@ -187,8 +203,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }
       if (data.code === 1) return data.result;
       if (AUTH_EXPIRED_CODES.includes(data.code)) {
-        clearStoredAuth();
-        notifyUnauthorized();
+        // 旧会话请求的迟到“登录失效”信号：代际已变化则不清除新会话凭证、不跳转
+        if (authStillCurrent()) {
+          clearStoredAuth();
+          notifyUnauthorized();
+        }
       }
       throw new ApiBusinessError<T>(data, res.status);
     } finally {
@@ -220,6 +239,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
     delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'DELETE' }),
     setTokenRefresher(fn: TokenRefresher | null) {
       tokenRefresher = fn;
+    },
+    /** 注册会话代际读取器（auth-store）：用于丢弃旧会话请求的迟到登录失效信号 */
+    setSessionGenerationReader(fn: (() => number) | null) {
+      readSessionGeneration = fn;
     },
   };
 }
