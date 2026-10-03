@@ -1,5 +1,7 @@
-import { Autocomplete, ListBox, SearchField, useFilter } from "@heroui/react";
+import { Autocomplete, IconChevronDown, ListBox, SearchField, useFilter } from "@heroui/react";
 import type { ReactNode } from "react";
+import { use } from "react";
+import { Button, SelectStateContext } from "react-aria-components";
 
 const EMPTY = "__empty__";
 
@@ -9,6 +11,25 @@ export type SelectOption = {
   icon?: ReactNode;
   hint?: string;
 };
+
+function OptionSelectIndicator({
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+}: {
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
+}) {
+  const state = use(SelectStateContext);
+  return (
+    <Button aria-invalid={ariaInvalid ? true : undefined} aria-describedby={ariaDescribedBy}>
+      <IconChevronDown
+        className="autocomplete__indicator"
+        data-open={state?.isOpen ? "true" : undefined}
+        data-slot="autocomplete-default-indicator"
+      />
+    </Button>
+  );
+}
 
 export function OptionSelect({
   label,
@@ -31,8 +52,6 @@ export function OptionSelect({
   return (
     <Autocomplete
       aria-label={label}
-      aria-invalid={ariaInvalid || undefined}
-      aria-describedby={ariaDescribedBy}
       fullWidth
       placeholder="请选择"
       selectedKey={selected || null}
@@ -48,7 +67,7 @@ export function OptionSelect({
       <Autocomplete.Trigger>
         <Autocomplete.Value className="min-w-0" />
         {canClear ? <Autocomplete.ClearButton aria-label="清除" /> : null}
-        <Autocomplete.Indicator />
+        <OptionSelectIndicator aria-invalid={ariaInvalid} aria-describedby={ariaDescribedBy} />
       </Autocomplete.Trigger>
       <Autocomplete.Popover>
         <Autocomplete.Filter filter={contains}>
