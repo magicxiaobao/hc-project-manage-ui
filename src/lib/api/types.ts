@@ -94,3 +94,43 @@ export interface ProjectResponse {
   createdAt: number;
   updatedAt: number;
 }
+
+/** 项目创建类型（忠实于老前端 frontend/src/types/project.ts） */
+export const PROJECT_CREATE_TYPES = ['agile', 'waterfall', 'maintenance', 'hybrid'] as const;
+export type ProjectCreateType = (typeof PROJECT_CREATE_TYPES)[number];
+
+/** 项目状态 */
+export const PROJECT_STATUSES = ['planning', 'in_progress', 'completed', 'paused', 'cancelled'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+/** 创建项目载荷（忠实于老前端 ProjectCreatePayload） */
+export interface ProjectCreatePayload {
+  projectName: string;
+  projectKey: string;
+  description: string;
+  projectType: ProjectCreateType;
+  startDate: number | null;
+  endDate: number | null;
+  projectManagerId: number;
+}
+
+/** 更新项目载荷（忠实于老前端 ProjectUpdatePayload：日期为后端接受的 string） */
+export interface ProjectUpdatePayload extends Omit<ProjectCreatePayload, 'startDate' | 'endDate'> {
+  id: number;
+  status: ProjectStatus;
+  startDate: string | null;
+  endDate: string | null;
+}
+
+/** 枚举选项 */
+export interface ProjectEnumOption {
+  value: string;
+  label: string;
+}
+
+/** 项目枚举（类型/状态/优先级） */
+export interface ProjectEnums {
+  projectTypes: ProjectEnumOption[];
+  statuses: ProjectEnumOption[];
+  priorities: ProjectEnumOption[];
+}

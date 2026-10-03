@@ -21,6 +21,11 @@
  * - hydrate：userId 非规范十进制时拒绝恢复并清理残留凭证（避免刷新前抛错的僵尸会话）
  * - hydrate：cnName/userName 类型畸形（非字符串）时拒绝恢复并清理残留凭证（避免渲染期崩溃）
  * - POST /project/v1/findByPage，请求体 { page, pageSize, bean }
+ * - POST /project/v1/createProject，请求体 ProjectCreatePayload，返回新建项目 id
+ * - GET /project/v1/findById/{id}，返回项目详情
+ * - POST /project/v1/checkKeyExists，请求体 { projectKey, excludeId? }，返回 boolean
+ * - GET /project/v1/enums，返回类型/状态/优先级选项
+ * - POST /project/v1/updateProject，请求体 ProjectUpdatePayload
  *
  * 运行：npm run test:contract（需先 npm install）
  */
@@ -29,6 +34,7 @@ import { ApiBusinessError, createApiClient } from '../client';
 import { useAuthStore } from '../auth-store';
 import { authApi } from '../auth';
 import { projectApi } from '../project';
+import type { ProjectCreatePayload, ProjectUpdatePayload } from '../types';
 
 const memStore = new Map<string, string>();
 
@@ -504,6 +510,106 @@ describe('项目列表契约', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/project/v1/findByPage');
     expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 100, bean: {} });
+  });
+});
+
+describe('项目 CRUD 契约（P1）', () => {
+  const createPayload: ProjectCreatePayload = {
+    projectName: '新项目',
+    projectKey: 'NEW',
+    description: '描述',
+    projectType: 'agile',
+    startDate: 1720000000000,
+    endDate: null,
+    projectManagerId: 1,
+  };
+
+  it('POST /project/v1/createProject，返回新建项目 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 42 } }]);
+    const id = await projectApi.createProject(createPayload);
+
+    expect(id).toBe(42);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/project/v1/createProject');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(createPayload);
+  });
+
+  it('GET /project/v1/findById/{id}，id 拼在路径上', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 7, projectName: '恒川' } } },
+    ]);
+    const detail = await projectApi.findById(7);
+
+    expect(detail.id).toBe(7);
+    expect(detail.projectName).toBe('恒川');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/project/v1/findById/7');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /project/v1/checkKeyExists，不带 excludeId 时只传 projectKey', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: true } }]);
+    const exists = await projectApi.checkKeyExists('HC');
+
+    expect(exists).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/project/v1/checkKeyExists');
+    expect(JSON.parse(init.body as string)).toEqual({ projectKey: 'HC' });
+  });
+
+  it('POST /project/v1/checkKeyExists，编辑场景带 excludeId 排除自身', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: false } }]);
+    const exists = await projectApi.checkKeyExists('HC', 7);
+
+    expect(exists).toBe(false);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ projectKey: 'HC', excludeId: 7 });
+  });
+
+  it('GET /project/v1/enums，返回类型/状态/优先级选项', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            projectTypes: [{ value: 'agile', label: '敏捷' }],
+            statuses: [{ value: 'planning', label: '规划中' }],
+            priorities: [{ value: 'high', label: '高' }],
+          },
+        },
+      },
+    ]);
+    const enums = await projectApi.getEnums();
+
+    expect(enums.projectTypes[0].value).toBe('agile');
+    expect(enums.statuses[0].value).toBe('planning');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/project/v1/enums');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /project/v1/updateProject，更新载荷日期为 string 格式', async () => {
+    const updatePayload: ProjectUpdatePayload = {
+      id: 7,
+      projectName: '恒川',
+      projectKey: 'HC',
+      description: '更新',
+      projectType: 'agile',
+      startDate: '2026-01-01',
+      endDate: null,
+      projectManagerId: 1,
+      status: 'in_progress',
+    };
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await projectApi.updateProject(updatePayload);
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/project/v1/updateProject');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(updatePayload);
   });
 });
 
