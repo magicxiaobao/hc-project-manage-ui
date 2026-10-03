@@ -9,11 +9,12 @@
  * 任务类型/优先级/状态没有后端选项接口：优先级与状态走前端契约常量
  * （TASK_PRIORITIES/TASK_STATUSES，与后端枚举 JSON identity 一致），
  * 中文标签走 domain 的 statusLabel('task', …)/priorityLabel。
- * 任务详情路由在 p1-task-detail 接入，届时标题将改为可跳转链接。
+ * 标题跳转到任务详情（/p/$projectKey/issues/$taskId，p1-task-detail 接入）。
  *
  * 未登录走演示列表（ListView）时不使用本组件。
  */
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, StatusChip } from "@/components/biz";
 import { priorityLabel, statusLabel } from "@/lib/pm/domain";
@@ -26,7 +27,7 @@ const PAGE_SIZE = 20;
 const PRIORITY_OPTIONS = [{ id: "", label: "全部" }, ...TASK_PRIORITIES.map((priority) => ({ id: priority, label: priorityLabel(priority) }))];
 const STATUS_OPTIONS = [{ id: "", label: "全部" }, ...TASK_STATUSES.map((status) => ({ id: status, label: statusLabel("task", status) }))];
 
-export function TaskListLive({ projectId }: { projectId: number }) {
+export function TaskListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
   const [titleInput, setTitleInput] = useState("");
   const [appliedTitle, setAppliedTitle] = useState("");
   const [taskTypeInput, setTaskTypeInput] = useState("");
@@ -139,9 +140,14 @@ export function TaskListLive({ projectId }: { projectId: number }) {
         <div className="overflow-hidden rounded-sm border border-border bg-surface">
           {listQuery.data!.list.map((item) => (
             <div key={item.id} className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0">
-              <span className="type-body min-w-0 flex-1 truncate" title={item.title}>
+              <Link
+                to="/p/$projectKey/issues/$taskId"
+                params={{ projectKey, taskId: String(item.id) }}
+                className="type-body min-w-0 flex-1 truncate underline-offset-2 hover:underline"
+                title={item.title}
+              >
                 {item.title}
-              </span>
+              </Link>
               {item.taskType ? (
                 <span className="type-caption hidden shrink-0 sm:inline">{item.taskType}</span>
               ) : null}

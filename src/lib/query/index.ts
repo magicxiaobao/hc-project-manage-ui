@@ -16,6 +16,20 @@ export type { RequirementListParams, RequirementOptions } from './hooks/useRequi
 export { useTaskList } from './hooks/useTasks';
 export type { TaskListParams } from './hooks/useTasks';
 export {
+  TASK_TRANSITIONS_BY_STATUS,
+  useAssignTask,
+  useCreateTaskComment,
+  useTaskComments,
+  useTaskDetail,
+  useUpdateTaskStatus,
+  taskNeedsActorReason,
+  taskNeedsAssigneeConfirm,
+  taskNeedsReason,
+  taskNeedsReopenReason,
+  taskTransitionLabel,
+  taskTransitionTargets,
+} from './hooks/useTasks';
+export {
   useAllowedTransitions,
   useCreateRequirementComment,
   useRequirementChildren,
