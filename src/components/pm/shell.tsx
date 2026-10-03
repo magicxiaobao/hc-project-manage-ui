@@ -2,7 +2,7 @@ import { NavigationFocus } from "@/components/pm/navigation-focus";
 import { notifyPmChange } from "@/lib/pm/feedback";
 import { useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Toaster } from "sonner";
 import {
   AppRail,
@@ -37,6 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const unread = notices.filter((notice) => !notice.read).length;
   const [searchOpen, setSearchOpen] = useState(false);
   const goToItem = useGoToItem();
+  const noticeTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useLayoutEffect(() => {
     return bindPmPersistence();
@@ -107,7 +108,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         me={ready ? me : undefined}
         onSearch={() => setSearchOpen(true)}
         onCreate={() => usePm.getState().setCreateOpen(true)}
-        onNotices={() => {
+        onNotices={(event) => {
+          noticeTriggerRef.current = event.currentTarget;
           const next = !usePm.getState().noticeOpen;
           usePm.getState().setNoticeOpen(next);
           if (next) usePm.getState().markNoticesRead();
@@ -153,9 +155,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {noticeOpen ? (
         <NoticePanel
           notices={notices}
+          triggerRef={noticeTriggerRef}
           onClose={() => usePm.getState().setNoticeOpen(false)}
           onOpen={goToItem}
           onReset={() => {
+            if (!window.confirm("恢复示例数据将替换当前数据，并写入本机持久化存储。确定恢复吗？")) return;
             usePm.getState().reset();
             notifyPmChange("已恢复示例数据");
           }}

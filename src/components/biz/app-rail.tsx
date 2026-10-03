@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Bell, Plus, Search } from "lucide-react";
-import type { ReactNode } from "react";
+import type { MouseEventHandler, ReactNode } from "react";
 import type { Person } from "@/lib/pm/domain";
 import { PersonAvatar } from "@/components/biz/person-avatar";
 
@@ -15,7 +15,7 @@ export function AppRail({
   me?: Person;
   onSearch: () => void;
   onCreate: () => void;
-  onNotices: () => void;
+  onNotices: MouseEventHandler<HTMLButtonElement>;
 }) {
   return (
     <nav className="z-30 flex w-16 shrink-0 flex-col items-center bg-nav py-3 text-on-nav" aria-label="应用">
@@ -43,7 +43,7 @@ export function AppRail({
   );
 }
 
-function RailButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+function RailButton({ label, onClick, children }: { label: string; onClick: MouseEventHandler<HTMLButtonElement>; children: ReactNode }) {
   return (
     <button type="button" title={label} aria-label={label} className="mb-1 flex size-10 items-center justify-center rounded-sm text-on-nav/90 hover:bg-on-nav/10" onClick={onClick}>
       {children}
