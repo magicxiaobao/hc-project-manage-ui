@@ -29,7 +29,15 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
           event.preventDefault();
           const result = usePm.getState().updateProject(project.id, { name, summary, memberIds: members, leadId });
           if (!result.ok) toast.error(result.message);
-          else { setSubmitted(true); notifyPmChange("已保存项目设置"); }
+          else {
+            const accepted = usePm.getState().projects.find((entry) => entry.id === project.id);
+            if (accepted) {
+              setName(accepted.name);
+              setSummary(accepted.summary);
+            }
+            setSubmitted(true);
+            notifyPmChange("已保存项目设置");
+          }
         }}
       >
         <TextField value={name} onChange={setName}>

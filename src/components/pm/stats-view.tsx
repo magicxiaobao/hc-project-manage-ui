@@ -204,11 +204,11 @@ export function StatsView({ projectKey }: { projectKey: string }) {
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
       <PageHeading title="统计" hint="按类型、需求状态、负责人和迭代看这个项目。取消的需求不计入完成率。" />
       <nav aria-label="统计行动入口" className="type-link flex flex-wrap gap-x-4 gap-y-2">
-        <Link to="/p/$projectKey/issues" params={{ projectKey }} search={{ query: undefined, kind: "all", mine: false, hideDone: true }}>查看未完成事项</Link>
-        <Link to="/p/$projectKey/issues" params={{ projectKey }} search={{ query: undefined, kind: "all", mine: false, hideDone: false }}>查看全部事项</Link>
-        <Link to="/p/$projectKey/defects" params={{ projectKey }}>查看缺陷</Link>
-        <Link to="/p/$projectKey/sprints" params={{ projectKey }}>查看迭代</Link>
-        <Link to="/p/$projectKey/releases" params={{ projectKey }}>查看版本</Link>
+        <Link className="inline-flex min-h-11 items-center rounded-sm px-3 hover:bg-line focus-visible:outline-2 focus-visible:outline-primary" to="/p/$projectKey/issues" params={{ projectKey }} search={{ query: undefined, kind: "all", mine: false, hideDone: true }}>查看未完成事项</Link>
+        <Link className="inline-flex min-h-11 items-center rounded-sm px-3 hover:bg-line focus-visible:outline-2 focus-visible:outline-primary" to="/p/$projectKey/issues" params={{ projectKey }} search={{ query: undefined, kind: "all", mine: false, hideDone: false }}>查看全部事项</Link>
+        <Link className="inline-flex min-h-11 items-center rounded-sm px-3 hover:bg-line focus-visible:outline-2 focus-visible:outline-primary" to="/p/$projectKey/defects" params={{ projectKey }}>查看缺陷</Link>
+        <Link className="inline-flex min-h-11 items-center rounded-sm px-3 hover:bg-line focus-visible:outline-2 focus-visible:outline-primary" to="/p/$projectKey/sprints" params={{ projectKey }}>查看迭代</Link>
+        <Link className="inline-flex min-h-11 items-center rounded-sm px-3 hover:bg-line focus-visible:outline-2 focus-visible:outline-primary" to="/p/$projectKey/releases" params={{ projectKey }}>查看版本</Link>
       </nav>
       <section className="overflow-hidden rounded-sm border border-border bg-surface">
         <h2 className="type-section border-b border-border px-4 py-3">高优先级未完成</h2>

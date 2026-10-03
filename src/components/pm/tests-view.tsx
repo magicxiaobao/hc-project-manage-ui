@@ -605,6 +605,12 @@ function CaseDetail({ caseId, onClose, onOpen }: { caseId: string; onClose: () =
             const result = usePm.getState().updateCase(current.id, { precondition, steps, suite, requirementId: requirementId || null });
             if (!result.ok) toast.error(result.message);
             else {
+              const accepted = usePm.getState().testCases.find((entry) => entry.id === current.id);
+              if (accepted) {
+                setPrecondition(accepted.precondition ?? "");
+                setSteps(accepted.steps ?? []);
+                setSuite(accepted.suite);
+              }
               setSubmitted(true);
               notifyPmChange(action || expected ? "已保存已加入的步骤；输入中的新步骤尚未提交。" : "已保存用例");
             }
