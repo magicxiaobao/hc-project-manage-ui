@@ -34,6 +34,7 @@ import { ApiBusinessError, createApiClient } from '../client';
 import { useAuthStore } from '../auth-store';
 import { authApi } from '../auth';
 import { projectApi } from '../project';
+import { requirementApi } from '../requirement';
 import type { ProjectCreatePayload, ProjectUpdatePayload } from '../types';
 
 const memStore = new Map<string, string>();
@@ -709,5 +710,338 @@ describe('hydrate 会话恢复', () => {
       expect(memStore.get('token')).toBeUndefined();
       expect(memStore.get('userInfo')).toBeUndefined();
     }
+  });
+});
+
+describe('需求契约（P1）', () => {
+  const createPayload = {
+    title: '登录支持 SSO',
+    description: '支持企业 SSO 登录',
+    requirementType: 'Story' as const,
+    priority: 'HIGH' as const,
+    storyPoints: 5,
+    projectId: 7,
+    assigneeId: 3,
+    estimatedStartDate: '2026-10-05',
+    estimatedEndDate: '2026-10-20',
+  };
+
+  it('POST /requirement/v1/createRequirement，返回新建需求 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 101 } }]);
+    const id = await requirementApi.createRequirement(createPayload);
+
+    expect(id).toBe(101);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/createRequirement');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(createPayload);
+  });
+
+  it('POST /requirement/v1/updateRequirement，更新载荷带 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await requirementApi.updateRequirement({
+      id: 101,
+      title: '登录支持 SSO（更新）',
+      description: '支持企业 SSO 登录',
+      requirementType: 'Story',
+      priority: 'MEDIUM',
+      projectId: 7,
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/updateRequirement');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string).id).toBe(101);
+  });
+
+  it('POST /requirement/v1/valid/{id} 与 invalid/{id}，id 拼在路径上', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await requirementApi.validRequirement(101);
+    await requirementApi.invalidRequirement(101);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/requirement/v1/valid/101');
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/requirement/v1/invalid/101');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('POST');
+  });
+
+  it('GET /requirement/v1/findById/{id}，返回需求详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 101, title: '登录支持 SSO', status: 'DRAFT' } } },
+    ]);
+    const detail = await requirementApi.findById(101);
+
+    expect(detail.id).toBe(101);
+    expect(detail.title).toBe('登录支持 SSO');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/findById/101');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /requirement/v1/findByPage，标准分页请求体', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            list: [{ id: 101, title: '登录支持 SSO', requirementType: 'Story', priority: 'HIGH', status: 'DRAFT' }],
+            total: 1,
+            pageNumber: 1,
+            pageSize: 100,
+          },
+        },
+      },
+    ]);
+    const page = await requirementApi.getRequirementList({
+      page: 1,
+      pageSize: 100,
+      bean: { projectId: 7, title: '登录' },
+    });
+
+    expect(page.total).toBe(1);
+    expect(page.list[0].requirementType).toBe('Story');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/findByPage');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 100,
+      bean: { projectId: 7, title: '登录' },
+    });
+  });
+
+  it('GET 选项接口：types/priorities/statuses 返回 { value, label }[]', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: [{ value: 'Story', label: '用户故事' }] } },
+      { body: { code: 1, msg: 'ok', result: [{ value: 'HIGH', label: '高' }] } },
+      { body: { code: 1, msg: 'ok', result: [{ value: 'DRAFT', label: '草稿' }] } },
+    ]);
+    const [types, priorities, statuses] = await Promise.all([
+      requirementApi.getRequirementTypes(),
+      requirementApi.getRequirementPriorities(),
+      requirementApi.getRequirementStatuses(),
+    ]);
+
+    expect(types[0]).toEqual({ value: 'Story', label: '用户故事' });
+    expect(priorities[0].value).toBe('HIGH');
+    expect(statuses[0].value).toBe('DRAFT');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/requirement/v1/types');
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/requirement/v1/priorities');
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/requirement/v1/statuses');
+  });
+
+  it('POST /requirement/v1/status/transition，流转载荷原样透传', async () => {
+    const payload = {
+      requirementId: 101,
+      toStatus: 'REVIEW',
+      reason: '评审',
+      comment: '请评审',
+      assigneeId: 3,
+      actualStartDate: '2026-10-05',
+    };
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    await requirementApi.executeStatusTransition(payload);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/status/transition');
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it('POST /requirement/v1/status/validate，返回 boolean', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: true } }]);
+    const ok = await requirementApi.validateStatusTransition(101, 'REVIEW');
+
+    expect(ok).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/status/validate');
+    expect(JSON.parse(init.body as string)).toEqual({ requirementId: 101, toStatus: 'REVIEW' });
+  });
+
+  it('GET /requirement/v1/status/allowed/{id}/{currentStatus}，返回允许流转列表', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: ['REVIEW', 'CANCELLED'] } },
+    ]);
+    const allowed = await requirementApi.getAllowedTransitions(101, 'DRAFT');
+
+    expect(allowed).toEqual(['REVIEW', 'CANCELLED']);
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/status/allowed/101/DRAFT');
+  });
+
+  it('GET /requirement/v1/status/history/{id}，返回流转历史聚合', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            requirementId: 101,
+            currentStatus: 'REVIEW',
+            transitions: [
+              {
+                id: 1,
+                requirementId: 101,
+                fromStatus: 'DRAFT',
+                toStatus: 'REVIEW',
+                transitionReason: '评审',
+                transitionComment: null,
+                operatorId: 3,
+                transitionTime: '2026-10-04T05:00:00',
+                isAutoTransition: false,
+                triggerCondition: null,
+              },
+            ],
+            total: 1,
+            allowedTransitions: ['APPROVED', 'CANCELLED'],
+          },
+        },
+      },
+    ]);
+    const history = await requirementApi.getTransitionHistory(101);
+
+    expect(history.currentStatus).toBe('REVIEW');
+    expect(history.transitions[0].fromStatus).toBe('DRAFT');
+    expect(history.allowedTransitions).toEqual(['APPROVED', 'CANCELLED']);
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/status/history/101');
+  });
+
+  it('GET 追溯图 trace/{id} 与 impact/{id}', async () => {
+    const node = {
+      objectType: 'REQUIREMENT',
+      objectId: 101,
+      displayName: '登录支持 SSO',
+      status: 'REVIEW',
+      assigneeId: 3,
+      runId: null,
+      runType: null,
+      direct: true,
+      path: [{ objectType: 'REQUIREMENT', objectId: 101 }],
+    };
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            requirement: node,
+            tasks: { total: 0, list: [], truncated: false },
+            testCases: { total: 0, list: [], truncated: false },
+            testRuns: { total: 0, list: [], truncated: false },
+            testExecutions: { total: 0, list: [], truncated: false },
+            defects: { total: 0, list: [], truncated: false },
+            versions: { total: 0, list: [], truncated: false },
+            edges: [],
+            generatedAt: '2026-10-04T05:00:00Z',
+          },
+        },
+      },
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            root: node,
+            nodes: [node],
+            edges: [],
+            totalNodes: 1,
+            truncated: false,
+            generatedAt: '2026-10-04T05:00:00Z',
+          },
+        },
+      },
+    ]);
+    const trace = await requirementApi.getTrace(101);
+    const impact = await requirementApi.getImpact(101);
+
+    expect(trace.requirement.objectId).toBe(101);
+    expect(trace.tasks.total).toBe(0);
+    expect(impact.totalNodes).toBe(1);
+    expect(impact.truncated).toBe(false);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/requirement/v1/trace/101');
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/requirement/v1/trace/101/impact');
+  });
+
+  it('POST /requirement/v1/trace/matrix/findByPage，分页查询追溯矩阵', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            list: [
+              {
+                requirement: {
+                  objectType: 'REQUIREMENT',
+                  objectId: 101,
+                  displayName: '登录支持 SSO',
+                  status: 'REVIEW',
+                  assigneeId: 3,
+                  runId: null,
+                  runType: null,
+                  direct: true,
+                  path: [{ objectType: 'REQUIREMENT', objectId: 101 }],
+                },
+                taskSummaries: [],
+                testCaseSummaries: [],
+                defectSummaries: [],
+                versionEvidence: { total: 0, truncated: false, items: [] },
+              },
+            ],
+            total: 1,
+            pageNumber: 1,
+            pageSize: 20,
+          },
+        },
+      },
+    ]);
+    const page = await requirementApi.findMatrixByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7 },
+    });
+
+    expect(page.total).toBe(1);
+    expect(page.list[0].requirement.objectId).toBe(101);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/requirement/v1/trace/matrix/findByPage');
+    expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 20, bean: { projectId: 7 } });
+  });
+
+  it('需求评论线程：target/REQUIREMENT 路径，create/find/update/invalid', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 501 } },
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            list: [{ id: 501, content: '好需求', targetType: 'REQUIREMENT', targetId: 101, parentId: null, creatorId: 3 }],
+            total: 1,
+            pageNumber: 1,
+            pageSize: 20,
+          },
+        },
+      },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    const commentId = await requirementApi.createComment(101, { content: '好需求' });
+    const comments = await requirementApi.findComments(101, { page: 1, pageSize: 20 });
+    await requirementApi.invalidComment(501);
+
+    expect(commentId).toBe(501);
+    expect(comments.list[0].targetType).toBe('REQUIREMENT');
+    const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url0).toBe('/api/comment/v1/target/REQUIREMENT/101/create');
+    expect(init0.method).toBe('POST');
+    expect(JSON.parse(init0.body as string)).toEqual({ content: '好需求' });
+    const [url1, init1] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url1).toBe('/api/comment/v1/target/REQUIREMENT/101/find');
+    expect(init1.method).toBe('POST');
+    expect(JSON.parse(init1.body as string)).toEqual({ page: 1, pageSize: 20 });
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/comment/v1/invalid/501');
   });
 });
