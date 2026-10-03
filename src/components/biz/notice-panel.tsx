@@ -28,6 +28,7 @@ export function NoticePanel({
   return (
     <div
       role="dialog"
+      aria-modal="false"
       aria-label="通知"
       className="fixed bottom-4 left-4 z-40 flex max-h-[calc(100dvh-2rem)] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-sm border border-border bg-surface shadow-pop sm:left-20 sm:max-w-[calc(100vw-6rem)]"
       onKeyDown={(event) => {

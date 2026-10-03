@@ -46,7 +46,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (document.querySelector('[role="dialog"]')) return;
+      // Non-modal panels must still close on Escape after focus moves outside.
+      const blockingDialogSelector = event.key === "Escape"
+        ? '[role="dialog"]:not([aria-modal="false"])'
+        : '[role="dialog"]';
+      if (document.querySelector(blockingDialogSelector)) return;
       const typing =
         !!target &&
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
