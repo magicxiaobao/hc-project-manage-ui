@@ -59,11 +59,18 @@ function LiveProjectList() {
     );
   }
   const projects = data?.list ?? [];
-  if (projects.length === 0) {
-    return <p className="py-8 text-sm text-default-500">暂无项目</p>;
-  }
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PROJECT_PAGE_SIZE));
+  // Codex review 4175402475：页码越界（删除/权限变化导致当前页变空）时自动回到
+  // 最后一页；空的越界页仍渲染分页器，避免用户被困在"暂无项目"无处可回。
+  useEffect(() => {
+    if (!isLoading && total > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isLoading, total, totalPages, page]);
+  if (projects.length === 0 && total === 0) {
+    return <p className="py-8 text-sm text-default-500">暂无项目</p>;
+  }
   return (
     <>
       <div className="grid gap-3 md:grid-cols-2">

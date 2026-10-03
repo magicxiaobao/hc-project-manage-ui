@@ -40,6 +40,7 @@ import type {
   RequirementResponse,
   RequirementTransitionPayload,
 } from "@/lib/api/requirement-types";
+import { parseOptionalPositiveInt } from "@/lib/task-create";
 
 const COMMENT_PAGE_SIZE = 50;
 
@@ -113,8 +114,11 @@ export function RequirementDetailLive({
     const trimmedReason = reason.trim();
     if (trimmedReason) payload.reason = trimmedReason;
     if (fields.requireAssignee) {
-      const parsed = Number(assigneeInput.trim());
-      if (!Number.isInteger(parsed) || parsed <= 0) {
+      // Codex review 4175402481：负责人 ID 用严格的十进制正整数解析
+      // （Number("9007199254740993") 会四舍五入、"1e3"/"0x10" 也会被接受，
+      // 可能把请求发给错误的用户）。
+      const parsed = parseOptionalPositiveInt(assigneeInput);
+      if (parsed == null) {
         setFormError("请填写负责人 ID（正整数）。");
         return;
       }

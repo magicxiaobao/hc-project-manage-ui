@@ -28,6 +28,7 @@ import {
 } from "@/components/biz";
 import { statusLabel } from "@/lib/pm/domain";
 import { useAuthStore } from "@/lib/api/auth-store";
+import { parseOptionalPositiveInt } from "@/lib/task-create";
 import {
   taskNeedsActorReason,
   taskNeedsAssigneeConfirm,
@@ -136,8 +137,11 @@ export function TaskDetailLive({
     if (toStatus === "IN_PROGRESS") {
       const current = task.assigneeId;
       if (taskNeedsAssigneeConfirm(fromStatus, toStatus, current)) {
-        const parsed = Number(assigneeInput.trim());
-        if (!Number.isInteger(parsed) || parsed <= 0) {
+        // Codex review 4175402481：执行人 ID 用严格的十进制正整数解析
+        // （Number("9007199254740993") 会四舍五入、"1e3"/"0x10" 也会被接受，
+        // 可能把请求发给错误的用户）。
+        const parsed = parseOptionalPositiveInt(assigneeInput);
+        if (parsed == null) {
           setFormError("请填写执行人 ID（正整数）。");
           return;
         }
@@ -156,8 +160,9 @@ export function TaskDetailLive({
   };
 
   const submitAssign = () => {
-    const parsed = Number(assignAssignee.trim());
-    if (!Number.isInteger(parsed) || parsed <= 0) {
+    // Codex review 4175402481：同上，改派的执行人 ID 也用严格解析。
+    const parsed = parseOptionalPositiveInt(assignAssignee);
+    if (parsed == null) {
       setAssignError("请填写执行人 ID（正整数）。");
       return;
     }
