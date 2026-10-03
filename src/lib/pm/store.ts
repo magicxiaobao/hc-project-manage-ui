@@ -123,7 +123,7 @@ interface PmActions {
     parentId?: string | null;
   }) => string;
   startSprint: (id: string) => { ok: true } | { ok: false; message: string };
-  completeSprint: (id: string) => void;
+  completeSprint: (id: string) => { ok: true } | { ok: false; message: string };
   transitionVersion: (id: string, to: VersionStatus) => void;
   createVersion: (input: { projectId: string; name: string; versionNumber: string; plannedReleaseDate: string; description: string }) => { ok: true } | { ok: false; message: string };
   createProject: (input: { key: string; name: string; summary: string; leadId: string }) => { ok: true; key: string } | { ok: false; message: string };
@@ -485,10 +485,10 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   completeSprint: (id) => {
-    if (backendReadOnly()) return;
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const data = get();
     const sprint = data.sprints.find((entry) => entry.id === id);
-    if (!sprint || sprint.state !== "active") return;
+    if (!sprint || sprint.state !== "active") return { ok: false, message: "只有进行中的迭代可以完成。" };
     const at = nowIso();
     set({
       sprints: data.sprints.map((entry) => (entry.id === id ? { ...entry, state: "closed" as SprintState } : entry)),
@@ -499,6 +499,7 @@ export const usePm = create<PmState>((set, get) => ({
         return { ...entry, sprintId: null, updatedAt: at };
       }),
     });
+    return { ok: true };
   },
   transitionVersion: (id, to) => {
     if (backendReadOnly()) return;

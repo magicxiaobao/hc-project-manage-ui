@@ -17,6 +17,7 @@ import {
 import { ContentSkeleton } from "@/components/biz/skeleton";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { bindPmPersistence, usePm } from "@/lib/pm/store";
+import type { Person } from "@/lib/pm/domain";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -36,7 +37,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // 后端模式：页面展示真实后端数据，隐藏只读写本地 usePm 演示数据的 shell 入口，
   // 避免用户创建/打开本地事项后被带入无关的演示项目（与项目页隐藏“新建项目”同理）。
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const me = people.find((person) => person.id === currentUserId);
+  const authUser = useAuthStore((state) => state.user);
+  // 后端模式展示真实登录人；未登录时才用演示数据的选中人员。
+  const me: Person | undefined =
+    isAuthenticated && authUser
+      ? { id: authUser.userId, name: authUser.cnName || authUser.userName || "已登录", role: authUser.roles.join("、") }
+      : people.find((person) => person.id === currentUserId);
   const project = projects.find(
     (entry) => pathname === `/p/${entry.key}` || pathname.startsWith(`/p/${entry.key}/`),
   );

@@ -91,9 +91,10 @@ export function BacklogView({ projectKey }: { projectKey: string }) {
               onAskComplete={() => setConfirmId(sprint.id)}
               onCancel={() => setConfirmId(null)}
               onComplete={() => {
-                usePm.getState().completeSprint(sprint.id);
+                const result = usePm.getState().completeSprint(sprint.id);
                 setConfirmId(null);
-                toast(`${sprint.name} 已完成，未完成事项回到未排期`);
+                if (result.ok) toast(`${sprint.name} 已完成，未完成事项回到未排期`);
+                else toast(result.message);
               }}
             />
           }
