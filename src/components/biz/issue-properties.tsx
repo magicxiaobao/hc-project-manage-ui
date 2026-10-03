@@ -1,6 +1,7 @@
 import { Label, NumberField } from "@heroui/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DayField } from "@/components/biz/date-fields";
 import { LabeledField } from "@/components/biz/labeled-field";
 import { PersonSelect, PrioritySelect, SprintSelect, VersionSelect } from "@/components/biz/field-selects";
 import { ProgressSlider } from "@/components/biz/progress-slider";
@@ -133,10 +134,12 @@ export function IssueProperties({
         <div className="type-label">记一笔工时</div>
         <div className="flex gap-2">
           <input aria-label="小时" value={hours} onChange={(event) => setHours(event.target.value)} className="type-body h-9 w-16 rounded-sm border border-border px-2" />
-          <input aria-label="工时日期" type="date" value={workDate} onChange={(event) => setWorkDate(event.target.value)} className="type-body h-9 min-w-0 flex-1 rounded-sm border border-border px-2" />
+          <div className="min-w-0 flex-1">
+            <DayField label="工时日期" value={workDate} onChange={setWorkDate} />
+          </div>
         </div>
         <input aria-label="工时说明" value={note} onChange={(event) => setNote(event.target.value)} placeholder="说明" className="type-body h-9 rounded-sm border border-border px-2" />
-        <button type="submit" className="type-link self-start">提交</button>
+        <button type="submit" className="type-link self-start">记一笔</button>
       </form>
       {related.length > 0 ? (
         <div>
