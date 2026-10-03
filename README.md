@@ -3,8 +3,8 @@
 Jira 式看板交互的前端样板。数据在浏览器内存里，状态流转沿用恒川需求、任务、缺陷的状态机。
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 打开看板 `/p/HC`。拖拽只接受当前状态允许的下一步。点卡片打开居中事项窗。
@@ -24,8 +24,8 @@ npm run dev
 ```bash
 # 1. 在 hc-project-manage 仓库启动后端（监听 127.0.0.1:8089）
 # 2. 本仓库：
-npm install
-npm run dev   # /api 会被反代到 http://127.0.0.1:8089
+pnpm install
+pnpm dev   # /api 会被反代到 http://127.0.0.1:8089
 ```
 
 打开 `/login`，用后端账号登录，成功后进入 `/projects` 应看到真实项目列表。
@@ -33,7 +33,7 @@ npm run dev   # /api 会被反代到 http://127.0.0.1:8089
 后端地址可通过环境变量覆盖：
 
 ```bash
-VITE_API_BASE_URL=http://192.168.1.10:8089 npm run dev
+VITE_API_BASE_URL=http://192.168.1.10:8089 pnpm dev
 ```
 
 注意：直接指向后端地址时浏览器会直连，需后端放行 CORS；默认 `/api` + vite 反代无此问题。
@@ -41,7 +41,7 @@ VITE_API_BASE_URL=http://192.168.1.10:8089 npm run dev
 ### 契约测试
 
 ```bash
-npm run test:contract
+pnpm test:contract
 ```
 
 断言登录/项目列表接口的请求与响应结构（URL、请求体、信封解包、401 刷新重放）。
