@@ -21,7 +21,10 @@ function OptionSelectIndicator({
 }) {
   const state = use(SelectStateContext);
   return (
-    <Button aria-invalid={ariaInvalid ? true : undefined} aria-describedby={ariaDescribedBy}>
+    <Button
+      aria-describedby={ariaDescribedBy}
+      render={(domProps) => <button {...domProps} aria-invalid={ariaInvalid ? true : undefined} />}
+    >
       <IconChevronDown
         className="autocomplete__indicator"
         data-open={state?.isOpen ? "true" : undefined}
