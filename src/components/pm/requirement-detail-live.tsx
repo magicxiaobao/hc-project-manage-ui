@@ -182,6 +182,16 @@ export function RequirementDetailLive({
       <EmptyHint>{`需求 #${requirementId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
     );
   }
+  // Codex review 4175337049：写操作区（状态流转/发表评论）只有在路由项目
+  // 解析成功且与记录的 projectId 精确一致时才渲染。解析中 / 解析失败 / key 不
+  // 存在时页面仍展示只读详情，但不暴露任何写控件，避免在错误的项目上下文里变异数据。
+  const projectContextVerified =
+    typeof routeProjectId === "number" &&
+    detail.projectId != null &&
+    detail.projectId === routeProjectId;
+  const projectContextNotice = routeProjectQuery.isPending
+    ? "正在确认项目归属，操作区稍后可用…"
+    : "当前无法确认该记录归属于此项目，操作区已禁用。";
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
@@ -226,6 +236,8 @@ export function RequirementDetailLive({
         )}
       </section>
 
+      {/* Codex review 4175337049：项目归属未确认前不渲染写操作区。 */}
+      {projectContextVerified ? (
       <section aria-label="状态流转">
         <h2 className="type-emphasis mb-2">状态流转</h2>
         {allowedQuery.isPending ? (
@@ -261,6 +273,11 @@ export function RequirementDetailLive({
           </div>
         ) : null}
       </section>
+      ) : (
+        <p className="type-body rounded-sm border border-border bg-surface px-3 py-2 text-default-500">
+          {projectContextNotice}
+        </p>
+      )}
 
       <section aria-label="流转历史">
         <h2 className="type-emphasis mb-2">流转历史</h2>
@@ -348,6 +365,7 @@ export function RequirementDetailLive({
           </ul>
         ) : null}
 
+        {projectContextVerified ? (
         <form
           className="mt-4 flex flex-col gap-2"
           onSubmit={(event) => {
@@ -384,6 +402,9 @@ export function RequirementDetailLive({
             {commentMutation.isPending ? "发送中…" : "发送评论"}
           </Button>
         </form>
+        ) : (
+          <p className="type-caption mt-4 text-default-500">{projectContextNotice}</p>
+        )}
       </section>
 
       <AppModal

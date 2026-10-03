@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button, Card, CardBody, Chip, Spinner } from "@heroui/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { PageHeading } from "@/components/biz";
 import { AppShell } from "@/components/pm/shell";
 import { DemoProjectList } from "@/components/pm/demo-project-list";
@@ -20,12 +20,17 @@ function ProjectsPage() {
 /**
  * P1 p1-store-migration：已登录时走 react-query useProjectList
  *（POST /project/v1/findByPage），不再直调 projectApi、不再引用 usePm 演示 store。
+ *
+ * Codex review 4175337074：用 PageResult.total 做分页，不再只取第一页前 100 条。
  */
+const PROJECT_PAGE_SIZE = 20;
+
 function LiveProjectList() {
   const navigate = useNavigate();
+  const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, refetch, isRefetching } = useProjectList({
-    page: 1,
-    pageSize: 100,
+    page,
+    pageSize: PROJECT_PAGE_SIZE,
   });
 
   if (isLoading) {
@@ -57,8 +62,11 @@ function LiveProjectList() {
   if (projects.length === 0) {
     return <p className="py-8 text-sm text-default-500">暂无项目</p>;
   }
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PROJECT_PAGE_SIZE));
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    <>
+      <div className="grid gap-3 md:grid-cols-2">
       {projects.map((p) => (
         <Card key={p.id} className="w-full">
           <CardBody className="flex flex-col items-start gap-2">
@@ -85,7 +93,31 @@ function LiveProjectList() {
           </CardBody>
         </Card>
       ))}
-    </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="type-meta">
+          共 {total} 个项目 · 第 {page} / {totalPages} 页
+        </span>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={page <= 1 || isLoading}
+            onPress={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            上一页
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={page >= totalPages || isLoading}
+            onPress={() => setPage((current) => current + 1)}
+          >
+            下一页
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
 

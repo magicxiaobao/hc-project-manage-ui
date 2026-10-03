@@ -223,6 +223,16 @@ export function TaskDetailLive({
       <EmptyHint>{`任务 #${taskId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
     );
   }
+  // Codex review 4175337049：写操作区（状态流转/改派/发表评论）只有在路由项目
+  // 解析成功且与记录的 projectId 精确一致时才渲染。解析中 / 解析失败 / key 不
+  // 存在时页面仍展示只读详情，但不暴露任何写控件，避免在错误的项目上下文里变异数据。
+  const projectContextVerified =
+    typeof routeProjectId === "number" &&
+    detail.projectId != null &&
+    detail.projectId === routeProjectId;
+  const projectContextNotice = routeProjectQuery.isPending
+    ? "正在确认项目归属，操作区稍后可用…"
+    : "当前无法确认该记录归属于此项目，操作区已禁用。";
   const targets = taskTransitionTargets(detail.status);
   const comments: CommentView[] = commentsQuery.data?.list ?? [];
 
@@ -280,6 +290,9 @@ export function TaskDetailLive({
         )}
       </section>
 
+      {/* Codex review 4175337049：项目归属未确认前不渲染写操作区。 */}
+      {projectContextVerified ? (
+        <>
       <section aria-label="状态流转">
         <h2 className="type-emphasis mb-2">状态流转</h2>
         {targets.length === 0 ? (
@@ -342,6 +355,12 @@ export function TaskDetailLive({
           <p className="type-caption mt-2 text-default-500">改派成功（走状态机改派工作流）。</p>
         ) : null}
       </section>
+        </>
+      ) : (
+        <p className="type-body rounded-sm border border-border bg-surface px-3 py-2 text-default-500">
+          {projectContextNotice}
+        </p>
+      )}
 
       <section aria-label="评论">
         <h2 className="type-emphasis mb-2">评论</h2>
@@ -386,6 +405,7 @@ export function TaskDetailLive({
           </ul>
         ) : null}
 
+        {projectContextVerified ? (
         <form
           className="mt-4 flex flex-col gap-2"
           onSubmit={(event) => {
@@ -422,6 +442,9 @@ export function TaskDetailLive({
             {commentMutation.isPending ? "发送中…" : "发送评论"}
           </Button>
         </form>
+        ) : (
+          <p className="type-caption mt-4 text-default-500">{projectContextNotice}</p>
+        )}
       </section>
 
       <AppModal

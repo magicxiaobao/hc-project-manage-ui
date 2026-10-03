@@ -12,7 +12,7 @@
  */
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button, Spinner } from "@heroui/react";
+import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, StateChip, StatusChip } from "@/components/biz";
 import { itemStatusTone } from "@/components/biz/state-tone";
 import {
@@ -45,14 +45,46 @@ const TABS: Array<{ id: TraceTab; label: string }> = [
 
 const MATRIX_PAGE_SIZE = 20;
 
+const SELECTOR_PAGE_SIZE = 20;
+
 export function TraceViewLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
   const [tab, setTab] = useState<TraceTab>("graph");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  // 追溯图 / 影响范围共用需求选择器：需求列表第一页（100 条），登录态门控。
-  const requirementsQuery = useRequirementList({ page: 1, pageSize: 100, bean: {}, projectId });
+  // Codex review 4175337083：追溯图 / 影响范围共用需求选择器支持标题搜索 +
+  // 分页（登录态门控），不再局限于需求列表第一页前 100 条。
+  const [selectorTitleInput, setSelectorTitleInput] = useState("");
+  const [selectorTitle, setSelectorTitle] = useState("");
+  const [selectorPage, setSelectorPage] = useState(1);
+  const trimmedSelectorTitle = selectorTitle.trim();
+  const requirementsQuery = useRequirementList({
+    page: selectorPage,
+    pageSize: SELECTOR_PAGE_SIZE,
+    bean: trimmedSelectorTitle ? { title: trimmedSelectorTitle } : {},
+    projectId,
+  });
   const requirements = requirementsQuery.data?.list ?? [];
+  const selectorTotal = requirementsQuery.data?.total ?? 0;
+  const selectorTotalPages = Math.max(1, Math.ceil(selectorTotal / SELECTOR_PAGE_SIZE));
   const effectiveId = selectedId ?? requirements[0]?.id ?? null;
+  const applySelectorSearch = () => {
+    setSelectorTitle(selectorTitleInput);
+    setSelectorPage(1);
+  };
+  const selectorProps = {
+    requirements,
+    requirementsPending: requirementsQuery.isPending,
+    requirementsError: requirementsQuery.isError ? requirementsQuery.error : null,
+    selectedId: effectiveId,
+    onSelect: (id: number) => setSelectedId(id),
+    titleInput: selectorTitleInput,
+    onTitleInputChange: setSelectorTitleInput,
+    onSearch: applySelectorSearch,
+    page: selectorPage,
+    totalPages: selectorTotalPages,
+    total: selectorTotal,
+    onPageChange: (next: number) => setSelectorPage(next),
+  };
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
@@ -73,21 +105,13 @@ export function TraceViewLive({ projectId, projectKey }: { projectId: number; pr
       {tab === "graph" ? (
         <TraceGraphTab
           projectKey={projectKey}
-          requirements={requirements}
-          requirementsPending={requirementsQuery.isPending}
-          requirementsError={requirementsQuery.isError ? requirementsQuery.error : null}
-          selectedId={effectiveId}
-          onSelect={(id) => setSelectedId(id)}
+          {...selectorProps}
         />
       ) : null}
       {tab === "impact" ? (
         <ImpactTab
           projectKey={projectKey}
-          requirements={requirements}
-          requirementsPending={requirementsQuery.isPending}
-          requirementsError={requirementsQuery.isError ? requirementsQuery.error : null}
-          selectedId={effectiveId}
-          onSelect={(id) => setSelectedId(id)}
+          {...selectorProps}
         />
       ) : null}
       {tab === "matrix" ? <TraceMatrixTab projectId={projectId} projectKey={projectKey} /> : null}
@@ -103,9 +127,30 @@ interface SelectorProps {
   requirementsError: unknown;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  titleInput: string;
+  onTitleInputChange: (value: string) => void;
+  onSearch: () => void;
+  page: number;
+  totalPages: number;
+  total: number;
+  onPageChange: (page: number) => void;
 }
 
-function RequirementSelector({ projectKey, requirements, requirementsPending, requirementsError, selectedId, onSelect }: SelectorProps) {
+function RequirementSelector({
+  projectKey,
+  requirements,
+  requirementsPending,
+  requirementsError,
+  selectedId,
+  onSelect,
+  titleInput,
+  onTitleInputChange,
+  onSearch,
+  page,
+  totalPages,
+  total,
+  onPageChange,
+}: SelectorProps) {
   if (requirementsPending) {
     return (
       <div className="flex items-center gap-2 text-sm text-default-500">
@@ -118,15 +163,76 @@ function RequirementSelector({ projectKey, requirements, requirementsPending, re
     return <p className="type-body text-danger">需求列表加载失败：{toUserMessage(requirementsError)}</p>;
   }
   if (requirements.length === 0) {
-    return <EmptyHint>这个项目还没有需求，先去需求列表创建一条吧。</EmptyHint>;
+    return (
+      <div className="flex flex-col gap-3">
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSearch();
+          }}
+        >
+          <div className="min-w-48 flex-1">
+            <TextField value={titleInput} onChange={onTitleInputChange} aria-label="按标题搜索需求">
+              <Input placeholder="按标题搜索需求，回车确认" />
+            </TextField>
+          </div>
+          <Button type="submit" size="sm" variant="primary">
+            搜索
+          </Button>
+        </form>
+        <EmptyHint>没有匹配的需求（换关键词试试，或先去需求列表创建一条）。</EmptyHint>
+      </div>
+    );
   }
   return (
-    <OptionSelect
-      label="当前需求"
-      value={selectedId != null ? String(selectedId) : ""}
-      options={requirements.map((item) => ({ id: String(item.id), label: item.title }))}
-      onChange={(id) => onSelect(Number(id))}
-    />
+    <div className="flex flex-col gap-3">
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSearch();
+        }}
+      >
+        <div className="min-w-48 flex-1">
+          <TextField value={titleInput} onChange={onTitleInputChange} aria-label="按标题搜索需求">
+            <Input placeholder="按标题搜索需求，回车确认" />
+          </TextField>
+        </div>
+        <Button type="submit" size="sm" variant="primary">
+          搜索
+        </Button>
+      </form>
+      <OptionSelect
+        label="当前需求"
+        value={selectedId != null ? String(selectedId) : ""}
+        options={requirements.map((item) => ({ id: String(item.id), label: `#${item.id} ${item.title}` }))}
+        onChange={(id) => onSelect(Number(id))}
+      />
+      <div className="flex items-center justify-between gap-3">
+        <span className="type-meta">
+          共 {total} 条 · 第 {page} / {totalPages} 页
+        </span>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={page <= 1 || requirementsPending}
+            onPress={() => onPageChange(Math.max(1, page - 1))}
+          >
+            上一页
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={page >= totalPages || requirementsPending}
+            onPress={() => onPageChange(page + 1)}
+          >
+            下一页
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -202,20 +308,16 @@ function formatIsoDateTime(value: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
 }
 
-function TraceGraphTab({ projectKey, requirements, requirementsPending, requirementsError, selectedId, onSelect }: SelectorProps) {
-  const traceQuery = useRequirementTrace(selectedId);
+function TraceGraphTab({ projectKey, ...selector }: SelectorProps) {
+  const traceQuery = useRequirementTrace(selector.selectedId);
 
   return (
     <div className="flex flex-col gap-4">
       <RequirementSelector
         projectKey={projectKey}
-        requirements={requirements}
-        requirementsPending={requirementsPending}
-        requirementsError={requirementsError}
-        selectedId={selectedId}
-        onSelect={onSelect}
+        {...selector}
       />
-      {selectedId == null ? null : traceQuery.isPending ? (
+      {selector.selectedId == null ? null : traceQuery.isPending ? (
         <div className="flex items-center gap-2 text-sm text-default-500">
           <Spinner size="sm" />
           正在加载追溯图…
@@ -234,7 +336,7 @@ function TraceGraphTab({ projectKey, requirements, requirementsPending, requirem
             {traceQuery.data.requirement.status ? <StatusChip kind="requirement" status={traceQuery.data.requirement.status} /> : null}
             <Link
               to="/p/$projectKey/requirements/$requirementId"
-              params={{ projectKey, requirementId: String(selectedId) }}
+              params={{ projectKey, requirementId: String(selector.selectedId) }}
               className="type-caption text-primary hover:underline"
             >
               查看需求详情
@@ -274,20 +376,16 @@ function TraceGraphTab({ projectKey, requirements, requirementsPending, requirem
   );
 }
 
-function ImpactTab({ projectKey, requirements, requirementsPending, requirementsError, selectedId, onSelect }: SelectorProps) {
-  const impactQuery = useRequirementImpact(selectedId);
+function ImpactTab({ projectKey, ...selector }: SelectorProps) {
+  const impactQuery = useRequirementImpact(selector.selectedId);
 
   return (
     <div className="flex flex-col gap-4">
       <RequirementSelector
         projectKey={projectKey}
-        requirements={requirements}
-        requirementsPending={requirementsPending}
-        requirementsError={requirementsError}
-        selectedId={selectedId}
-        onSelect={onSelect}
+        {...selector}
       />
-      {selectedId == null ? null : impactQuery.isPending ? (
+      {selector.selectedId == null ? null : impactQuery.isPending ? (
         <div className="flex items-center gap-2 text-sm text-default-500">
           <Spinner size="sm" />
           正在加载影响范围…
