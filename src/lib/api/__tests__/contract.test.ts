@@ -12,6 +12,9 @@
  * - 刷新瞬时失败且凭证仍在：不清凭证、不通知，抛可重试错误（会话保留）
  * - 刷新接口返回 HTTP 401 但响应体畸形/非信封：仍判定 refresh token 失效并清凭证
  * - 旧会话请求的迟到登录失效信号：代际已变化时不清除新会话凭证、不通知（会话代际守卫）
+ * - 旧会话请求的迟到 401：代际已变化时不触发刷新、不重放旧请求
+ * - 登录失效确认（业务码/重放后仍 401）：调用 sessionInvalidator 递增代际，
+ *   使在途刷新完成后被丢弃，不复活已失效的会话
  * - POST /project/v1/findByPage，请求体 { page, pageSize, bean }
  *
  * 运行：npm run test:contract（需先 npm install）
@@ -278,6 +281,100 @@ describe('会话代际', () => {
     expect(err).toBeInstanceOf(ApiBusinessError);
     expect(memStore.get('token')).toBeUndefined();
     expect(memStore.get('refreshToken')).toBeUndefined();
+    expect(unauthorized).toBe(1);
+  });
+
+  it('旧会话请求的迟到 401：不触发刷新、不重放、不清除新会话凭证', async () => {
+    // 登出后重新登录，新会话凭证已落盘
+    memStore.set('token', 'new-token');
+    memStore.set('refreshToken', 'new-refresh');
+    let unauthorized = 0;
+    let generation = 1;
+    let refreshCalls = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => generation);
+    client.setTokenRefresher(async () => {
+      refreshCalls++;
+      return true;
+    });
+
+    // 请求发出后、401 到达前发生登出 + 重新登录（代际变化）
+    let resolveFetch!: (res: Response) => void;
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Promise<Response>((r) => {
+          resolveFetch = r;
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = client.get('/auth/v1/me').catch((e) => e);
+    generation = 3;
+    resolveFetch(
+      new Response(JSON.stringify({ code: 10109, msg: 'expired', result: null }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const err = await pending;
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    expect((err as ApiBusinessError).code).toBe(10109);
+    // 不用新会话的 refresh token 刷新、不重放旧请求：只发了一次请求
+    expect(refreshCalls).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // 新会话凭证不受影响，不跳转登录页
+    expect(memStore.get('token')).toBe('new-token');
+    expect(memStore.get('refreshToken')).toBe('new-refresh');
+    expect(unauthorized).toBe(0);
+  });
+
+  it('登录失效类业务码：调用 sessionInvalidator 递增代际并通知', async () => {
+    memStore.set('token', 'expired');
+    let unauthorized = 0;
+    let generation = 1;
+    let invalidated = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => generation);
+    client.setSessionInvalidator(() => {
+      invalidated++;
+      generation++;
+    });
+    mockFetchSequence([{ status: 200, body: { code: 10106, msg: '登录失效', result: null } }]);
+
+    const err = await client.get('/auth/v1/me').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    // 递增代际：在途的刷新完成时会核对到代际变化而被丢弃，不复活已失效的会话
+    expect(invalidated).toBe(1);
+    expect(memStore.get('token')).toBeUndefined();
+    expect(unauthorized).toBe(1);
+  });
+
+  it('重放后依然 401：调用 sessionInvalidator 递增代际，防止在途刷新复活会话', async () => {
+    memStore.set('token', 'expired');
+    memStore.set('refreshToken', 'refresh-1');
+    let unauthorized = 0;
+    let generation = 1;
+    let invalidated = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => generation);
+    client.setSessionInvalidator(() => {
+      invalidated++;
+      generation++;
+    });
+    client.setTokenRefresher(async () => {
+      // 刷新“成功”落盘新 token，但新 token 依然被后端拒绝
+      memStore.set('token', 'new-token');
+      return true;
+    });
+    mockFetchSequence([
+      { status: 401, body: { code: 10109, msg: 'expired', result: null } },
+      { status: 401, body: { code: 10109, msg: 'still expired', result: null } },
+    ]);
+
+    const err = await client.get('/auth/v1/me').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    expect(invalidated).toBe(1);
+    expect(memStore.get('token')).toBeUndefined();
     expect(unauthorized).toBe(1);
   });
 });

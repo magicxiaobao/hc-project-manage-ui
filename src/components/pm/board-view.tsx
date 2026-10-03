@@ -192,6 +192,14 @@ export function BoardView({
     closeMove();
   }
 
+  /**
+   * 后端模式：演示看板只读。拖拽/移动不再写入本地 demo 数据（KanbanBoard 收到
+   * { ok: false } 会 toast 提示），等 Phase 1 接入后端项目详情后再移除该门控。
+   */
+  function readOnlyBoardMove(): BoardMoveResult {
+    return { ok: false, message: "后端模式下演示看板为只读，项目看板将在 Phase 1 接入后端。" };
+  }
+
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
 
   return (
@@ -250,7 +258,7 @@ export function BoardView({
         limits={project.wip}
         lockedKind={lockedKind}
         onOpen={goToItem}
-        onMove={moveItem}
+        onMove={isAuthenticated ? readOnlyBoardMove : moveItem}
         onCreate={isAuthenticated ? undefined : (column, kind, title) => {
           const id = usePm.getState().createItem({
             projectId: project.id,
@@ -275,7 +283,7 @@ export function BoardView({
             .map((entry) => entry.id);
           usePm.getState().placeItem(id, null, lane);
         }}
-        onLimit={(column, limit) => {
+        onLimit={isAuthenticated ? undefined : (column, limit) => {
           const wip = { ...project.wip };
           if (limit == null || limit <= 0) delete wip[column];
           else wip[column] = limit;

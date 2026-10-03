@@ -77,6 +77,12 @@ interface AuthState {
   logout: () => Promise<void>;
   /** 供 HTTP 客户端 401 时调用：刷新访问令牌，成功返回 true */
   refreshAccessToken: () => Promise<boolean>;
+  /**
+   * 客户端驱动的登录失效（登录失效类业务码 / 401 重放仍失败）：
+   * 递增会话代际（使在途刷新完成后被丢弃）、清本地存储与内存态。
+   * 由客户端经 api.setSessionInvalidator 注册后调用。
+   */
+  invalidateSessionFromClient: () => void;
 }
 
 /**
@@ -146,9 +152,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       return false;
     }
   },
+
+  invalidateSessionFromClient: () => {
+    // 先递增代际：在途的刷新完成时核对到代际已变化，丢弃刷新结果，不复活已失效的会话
+    sessionGeneration += 1;
+    clearStoredAuth();
+    set({ user: null, token: null, isAuthenticated: false });
+  },
 }));
 
 // 注册到 HTTP 客户端：401 时自动刷新并重放一次（与老前端 request.ts 一致）
 api.setTokenRefresher(() => useAuthStore.getState().refreshAccessToken());
 // 会话代际读取器：让客户端丢弃“旧会话请求在代际变化后返回”的迟到登录失效信号
 api.setSessionGenerationReader(() => sessionGeneration);
+// 登录失效清理器：客户端确认登录失效时递增代际并清内存态
+api.setSessionInvalidator(() => useAuthStore.getState().invalidateSessionFromClient());
