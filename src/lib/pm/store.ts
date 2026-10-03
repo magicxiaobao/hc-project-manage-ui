@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { clearCommentDrafts, clearCreateDraft } from "./edit-rules";
 import {
   type Board,
   type ColumnId,
@@ -1046,7 +1047,11 @@ export const usePm = create<PmState>((set, get) => ({
     });
     return { ok: true };
   },
-  reset: () => set({ ...cloneSeed(), createOpen: false }),
+  reset: () => {
+    clearCreateDraft();
+    clearCommentDrafts();
+    set({ ...cloneSeed(), createOpen: false });
+  },
   replaceData: (data) => set({ ...data }),
 }));
 

@@ -1,6 +1,6 @@
 import { notifyPmChange } from "@/lib/pm/feedback";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { EmptyHint, OptionSelect, PageHeading } from "@/components/biz";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,12 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
   const [members, setMembers] = useState<string[]>(project?.memberIds ?? []);
   const [leadId, setLeadId] = useState(project?.leadId ?? "");
   const [submitted, setSubmitted] = useState(false);
+  const [nameError, setNameError] = useState("");
+  const [leadError, setLeadError] = useState("");
+  const [missingError, setMissingError] = useState("");
+  const nameErrorId = useId();
+  const leadErrorId = useId();
+  const missingErrorId = useId();
   const ready = usePm((state) => state.ready);
   const persistenceError = usePm((state) => state.persistenceError);
   if (!project) return <EmptyHint>没有找到这个项目。</EmptyHint>;
@@ -28,8 +34,15 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
         onSubmit={(event) => {
           event.preventDefault();
           const result = usePm.getState().updateProject(project.id, { name, summary, memberIds: members, leadId });
-          if (!result.ok) toast.error(result.message);
-          else {
+          if (!result.ok) {
+            toast.error(result.message);
+            setNameError(result.message === "项目名称不能为空。" ? result.message : "");
+            setLeadError(result.message === "负责人必须是项目成员。" ? result.message : "");
+            if (result.message === "项目不存在。") setMissingError(result.message);
+          } else {
+            setNameError("");
+            setLeadError("");
+            setMissingError("");
             const accepted = usePm.getState().projects.find((entry) => entry.id === project.id);
             if (accepted) {
               setName(accepted.name);
@@ -40,9 +53,21 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
           }
         }}
       >
-        <TextField value={name} onChange={setName}>
+        <TextField
+          value={name}
+          isInvalid={Boolean(nameError)}
+          onChange={(next) => {
+            setName(next);
+            if (nameError) setNameError("");
+          }}
+        >
           <Label>名称</Label>
-          <Input />
+          <Input aria-invalid={nameError ? true : undefined} aria-describedby={nameError ? nameErrorId : undefined} />
+          {nameError ? (
+            <p id={nameErrorId} role="alert" className="type-body text-danger">
+              {nameError}
+            </p>
+          ) : null}
         </TextField>
         <TextField value={summary} onChange={setSummary}>
           <Label>简介</Label>
@@ -77,11 +102,33 @@ export function SettingsView({ projectKey }: { projectKey: string }) {
             })}
           </div>
         </div>
-        <OptionSelect label="负责人" value={leadId} options={people.filter((person) => members.includes(person.id)).map((person) => ({ id: person.id, label: person.name }))} onChange={setLeadId} />
         <div>
-          <Button type="submit" variant="primary">
+          <OptionSelect
+            label="负责人"
+            value={leadId}
+            aria-invalid={Boolean(leadError)}
+            aria-describedby={leadError ? leadErrorId : undefined}
+            options={people.filter((person) => members.includes(person.id)).map((person) => ({ id: person.id, label: person.name }))}
+            onChange={(next) => {
+              setLeadId(next);
+              if (leadError) setLeadError("");
+            }}
+          />
+          {leadError ? (
+            <p id={leadErrorId} role="alert" className="type-body text-danger">
+              {leadError}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" variant="primary" aria-describedby={missingError ? missingErrorId : undefined}>
             保存
           </Button>
+          {missingError ? (
+            <p id={missingErrorId} role="alert" className="type-body text-danger">
+              {missingError}
+            </p>
+          ) : null}
         </div>
         <PersistenceStatus ready={ready} error={persistenceError} draft={draft} saved={submitted} onRetry={() => usePm.getState().retryPersistence()} />
       </form>

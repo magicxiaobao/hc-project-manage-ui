@@ -1,5 +1,7 @@
-import { Autocomplete, ListBox, SearchField, useFilter } from "@heroui/react";
+import { Autocomplete, IconChevronDown, ListBox, SearchField, useFilter } from "@heroui/react";
 import type { ReactNode } from "react";
+import { use } from "react";
+import { Button, SelectStateContext } from "react-aria-components";
 
 const EMPTY = "__empty__";
 
@@ -10,16 +12,42 @@ export type SelectOption = {
   hint?: string;
 };
 
+function OptionSelectIndicator({
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+}: {
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
+}) {
+  const state = use(SelectStateContext);
+  return (
+    <Button
+      aria-describedby={ariaDescribedBy}
+      render={(domProps) => <button {...domProps} aria-invalid={ariaInvalid ? true : undefined} />}
+    >
+      <IconChevronDown
+        className="autocomplete__indicator"
+        data-open={state?.isOpen ? "true" : undefined}
+        data-slot="autocomplete-default-indicator"
+      />
+    </Button>
+  );
+}
+
 export function OptionSelect({
   label,
   value,
   options,
   onChange,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   label: string;
   value: string;
   options: SelectOption[];
   onChange: (id: string) => void;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const canClear = options.some((option) => option.id === "");
@@ -42,7 +70,7 @@ export function OptionSelect({
       <Autocomplete.Trigger>
         <Autocomplete.Value className="min-w-0" />
         {canClear ? <Autocomplete.ClearButton aria-label="清除" /> : null}
-        <Autocomplete.Indicator />
+        <OptionSelectIndicator aria-invalid={ariaInvalid} aria-describedby={ariaDescribedBy} />
       </Autocomplete.Trigger>
       <Autocomplete.Popover>
         <Autocomplete.Filter filter={contains}>

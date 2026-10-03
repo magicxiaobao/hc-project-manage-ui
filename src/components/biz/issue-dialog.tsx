@@ -190,6 +190,7 @@ export function IssueDialog({
         </div>
         <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <IssueProperties
+            key={item.id}
             item={item}
             people={people}
             sprints={sprints}
@@ -202,6 +203,7 @@ export function IssueDialog({
           <div className="mt-6">
             <DiscussionPanel
               key={item.id}
+              itemId={item.id}
               comments={comments}
               feeds={feeds}
               histories={histories}

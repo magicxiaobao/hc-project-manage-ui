@@ -9,11 +9,13 @@ import {
   type ListSortColumn,
   type ProjectViewSearch,
 } from "@/lib/pm/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { NumberField } from "@heroui/react";
 import { toast } from "sonner";
 import { EmptyHint, ListFilterBar, PageHeading, PersonSelect } from "@/components/biz";
 import { rememberBrowse, useGoToItem } from "@/components/pm/use-go-item";
 import { columnOf, kindLabel, needsReason, nextStatuses, statusLabel, COLUMNS, type ColumnId, type Priority, type WorkItem } from "@/lib/pm/domain";
+import { storyPointsWrite } from "@/lib/pm/edit-rules";
 import { usePm } from "@/lib/pm/store";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 import { cn } from "@/lib/utils";
@@ -164,13 +166,10 @@ export function ListView({ projectKey }: { projectKey: string }) {
           {item.kind === "defect" ? (
             <span className="type-caption">—</span>
           ) : (
-            <input
-              aria-label={`${item.key} 故事点`}
-              type="number"
-              min={0}
+            <StoryPointsCell
+              itemKey={item.key}
               value={item.storyPoints ?? 0}
-              className="type-caption h-8 w-16 rounded-sm border border-border bg-surface px-1"
-              onChange={(event) => showEdit(item.id, usePm.getState().updateItem(item.id, { storyPoints: Number(event.target.value) }))}
+              onWrite={(points) => showEdit(item.id, usePm.getState().updateItem(item.id, { storyPoints: points }))}
             />
           )}
         </td>
@@ -461,3 +460,61 @@ function Header({
     </th>
   );
 }
+
+function StoryPointsCell({ itemKey, value, onWrite }: { itemKey: string; value: number; onWrite: (points: number) => void }) {
+  const [draft, setDraft] = useState(value);
+  const latest = useRef(value);
+  const dirty = useRef(false);
+  const fromStepper = useRef(false);
+  useEffect(() => {
+    if (!dirty.current) {
+      latest.current = value;
+      setDraft(value);
+    }
+  }, [value]);
+  const commit = (next: number) => {
+    const written = storyPointsWrite(next);
+    dirty.current = false;
+    latest.current = written;
+    setDraft(written);
+    onWrite(written);
+  };
+  return (
+    <NumberField
+      aria-label={`${itemKey} 故事点`}
+      minValue={0}
+      value={draft}
+      className="w-28"
+      onChange={(next) => {
+        const written = storyPointsWrite(next);
+        latest.current = written;
+        setDraft(written);
+        if (fromStepper.current) {
+          fromStepper.current = false;
+          dirty.current = false;
+          onWrite(written);
+          return;
+        }
+        dirty.current = true;
+      }}
+      onBlur={() => {
+        if (dirty.current) commit(latest.current);
+      }}
+    >
+      <NumberField.Group className="h-8">
+        <NumberField.DecrementButton
+          onPointerDown={() => { fromStepper.current = true; }}
+          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fromStepper.current = true; }}
+        />
+        <NumberField.Input
+          onKeyDown={(event) => { if (event.key === "ArrowUp" || event.key === "ArrowDown") fromStepper.current = true; }}
+        />
+        <NumberField.IncrementButton
+          onPointerDown={() => { fromStepper.current = true; }}
+          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fromStepper.current = true; }}
+        />
+      </NumberField.Group>
+    </NumberField>
+  );
+}
+

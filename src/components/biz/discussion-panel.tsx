@@ -3,10 +3,13 @@ import { useState } from "react";
 import type { Comment, FeedEntry, ItemKind, LifecycleRecord, Person } from "@/lib/pm/domain";
 import { ActivityList, HistoryList } from "@/components/biz/activity-list";
 import { CommentThread } from "@/components/biz/comment-thread";
+import { commentDrafts, commentSubmitted } from "@/lib/pm/edit-rules";
+import { usePm } from "@/lib/pm/store";
 
 type Tab = "comment" | "feed" | "history";
 
 export function DiscussionPanel({
+  itemId,
   comments,
   feeds,
   histories,
@@ -14,6 +17,7 @@ export function DiscussionPanel({
   kind,
   onComment,
 }: {
+  itemId: string;
   comments: Comment[];
   feeds: FeedEntry[];
   histories: LifecycleRecord[];
@@ -22,7 +26,14 @@ export function DiscussionPanel({
   onComment: (body: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("comment");
-  const [draft, setDraft] = useState("");
+  // 评论草稿按用户隔离：key 包含 userId，/me 切换用户后不会把 A 的草稿递给 B 提交
+  const currentUserId = usePm((state) => state.currentUserId);
+  const draftKey = `${currentUserId}:${itemId}`;
+  const [draft, setDraft] = useState(() => commentDrafts.get(draftKey) ?? "");
+  const writeDraft = (value: string) => {
+    commentDrafts.set(draftKey, value);
+    setDraft(value);
+  };
   return (
     <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(String(key) as Tab)}>
       <Tabs.ListContainer>
@@ -46,10 +57,11 @@ export function DiscussionPanel({
           comments={comments}
           people={people}
           draft={draft}
-          onDraft={setDraft}
+          onDraft={writeDraft}
           onSubmit={() => {
-            if (!draft.trim()) return;
+            if (!commentSubmitted(draft)) return;
             onComment(draft);
+            commentDrafts.delete(draftKey);
             setDraft("");
           }}
         />

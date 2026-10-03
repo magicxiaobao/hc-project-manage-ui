@@ -1,12 +1,14 @@
 import { Label, NumberField } from "@heroui/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
+import { DayField } from "@/components/biz/date-fields";
 import { LabeledField } from "@/components/biz/labeled-field";
 import { PersonSelect, PrioritySelect, SprintSelect, VersionSelect } from "@/components/biz/field-selects";
 import { ProgressSlider } from "@/components/biz/progress-slider";
 import { SeverityChip, StatusChip } from "@/components/biz/status-chip";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { DEPENDENCY_TYPE_LABEL, formatDay, fsBlockers, type Person, type ReleaseVersion, type Sprint, type WorkItem } from "@/lib/pm/domain";
+import { hoursError } from "@/lib/pm/edit-rules";
 import { usePm } from "@/lib/pm/store";
 
 type Patch = Partial<Pick<WorkItem, "priority" | "assigneeId" | "sprintId" | "versionId" | "storyPoints" | "progress" | "dueDate" | "tags">>;
@@ -35,6 +37,8 @@ export function IssueProperties({
   const blocked = new Set(fsBlockers(item, "IN_PROGRESS", items, dependencies).map((entry) => entry.id));
   const [tag, setTag] = useState("");
   const [hours, setHours] = useState("1");
+  const [hoursMessage, setHoursMessage] = useState<string | null>(null);
+  const hoursAlertId = useId();
   const [workDate, setWorkDate] = useState(localDay());
   const [note, setNote] = useState("");
   return (
@@ -116,27 +120,47 @@ export function IssueProperties({
         className="flex flex-col gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          const amount = Number(hours);
-          if (!Number.isFinite(amount) || amount <= 0 || amount > 24) {
-            toast.error("工时要在 0 到 24 小时之间");
+          const message = hoursError(hours);
+          if (message) {
+            setHoursMessage(message);
             return;
           }
           if (!workDate) {
             toast.error("请填写日期");
             return;
           }
-          usePm.getState().addWorkLog({ projectId: item.projectId, itemId: item.id, hours: amount, workDate, note });
+          usePm.getState().addWorkLog({ projectId: item.projectId, itemId: item.id, hours: Number(hours), workDate, note });
+          setHoursMessage(null);
           setNote("");
           toast("已记下工时，待审批");
         }}
       >
         <div className="type-label">记一笔工时</div>
         <div className="flex gap-2">
-          <input aria-label="小时" value={hours} onChange={(event) => setHours(event.target.value)} className="type-body h-9 w-16 rounded-sm border border-border px-2" />
-          <input aria-label="工时日期" type="date" value={workDate} onChange={(event) => setWorkDate(event.target.value)} className="type-body h-9 min-w-0 flex-1 rounded-sm border border-border px-2" />
+          <div className="flex w-16 shrink-0 flex-col gap-1">
+            <input
+              aria-label="小时"
+              value={hours}
+              aria-invalid={hoursMessage ? true : undefined}
+              aria-describedby={hoursMessage ? hoursAlertId : undefined}
+              onChange={(event) => {
+                setHours(event.target.value);
+                if (hoursMessage) setHoursMessage(null);
+              }}
+              className="type-body h-9 w-16 rounded-sm border border-border px-2"
+            />
+            {hoursMessage ? (
+              <p id={hoursAlertId} role="alert" className="type-body text-danger">
+                {hoursMessage}
+              </p>
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1">
+            <DayField label="工时日期" value={workDate} onChange={setWorkDate} />
+          </div>
         </div>
         <input aria-label="工时说明" value={note} onChange={(event) => setNote(event.target.value)} placeholder="说明" className="type-body h-9 rounded-sm border border-border px-2" />
-        <button type="submit" className="type-link self-start">提交</button>
+        <button type="submit" className="type-link self-start">记一笔</button>
       </form>
       {related.length > 0 ? (
         <div>
