@@ -170,6 +170,7 @@ export function ListFilterBar({
   onKind,
   onMine,
   onHideDone,
+  showScope = true,
 }: {
   query: string;
   kind: string;
@@ -179,6 +180,7 @@ export function ListFilterBar({
   onKind: (kind: string) => void;
   onMine: (next: boolean) => void;
   onHideDone: (next: boolean) => void;
+  showScope?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -188,8 +190,8 @@ export function ListFilterBar({
       <div className="w-40">
         <KindSelect allowAll value={kind} onChange={onKind} />
       </div>
-      <FilterCheckbox label="只看我的" checked={mine} onChange={onMine} />
-      <FilterCheckbox label="隐藏完成" checked={hideDone} onChange={onHideDone} />
+      {showScope ? <FilterCheckbox label="只看我的" checked={mine} onChange={onMine} /> : null}
+      {showScope ? <FilterCheckbox label="隐藏完成" checked={hideDone} onChange={onHideDone} /> : null}
     </div>
   );
 }

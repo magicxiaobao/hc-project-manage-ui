@@ -10,7 +10,7 @@ export type ProjectViewSearch = {
   cancelled?: boolean;
   assignees?: string[];
   tag?: string;
-  sort?: "key" | "title" | "priority" | "status" | "points" | "updated";
+  sort?: "key" | "title" | "priority" | "status" | "points" | "due" | "updated";
   ascending?: boolean;
 };
 
@@ -34,7 +34,7 @@ export function parseProjectViewSearch(value: Record<string, unknown>): ProjectV
     tag: typeof value.tag === "string" ? value.tag : undefined,
     sort:
       typeof value.sort === "string" &&
-      ["key", "title", "priority", "status", "points", "updated"].includes(value.sort)
+      ["key", "title", "priority", "status", "points", "due", "updated"].includes(value.sort)
         ? (value.sort as ProjectViewSearch["sort"])
         : undefined,
     ascending: typeof value.ascending === "boolean" ? value.ascending : undefined,
