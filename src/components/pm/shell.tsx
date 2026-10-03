@@ -19,7 +19,9 @@ import { bindPmPersistence, usePm } from "@/lib/pm/store";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const location = useRouterState({ select: (state) => state.location });
+  const pathname = location.pathname;
+  const itemOrigin = location.state?.pmItemOrigin;
   const navOpen = usePm((state) => state.navOpen);
   const setNavOpen = usePm((state) => state.setNavOpen);
   const people = usePm((state) => state.people);
@@ -119,6 +121,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         open={navOpen}
         pathname={pathname}
         project={project}
+        projects={projects}
+        itemOrigin={itemOrigin}
         onClose={() => setNavOpen(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
