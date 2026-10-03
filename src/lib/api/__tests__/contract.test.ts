@@ -35,6 +35,7 @@ import { useAuthStore } from '../auth-store';
 import { authApi } from '../auth';
 import { projectApi } from '../project';
 import { requirementApi } from '../requirement';
+import { taskApi } from '../task';
 import type { ProjectCreatePayload, ProjectUpdatePayload } from '../types';
 
 const memStore = new Map<string, string>();
@@ -1043,5 +1044,173 @@ describe('需求契约（P1）', () => {
     expect(init1.method).toBe('POST');
     expect(JSON.parse(init1.body as string)).toEqual({ page: 1, pageSize: 20 });
     expect(fetchMock.mock.calls[2][0]).toBe('/api/comment/v1/invalid/501');
+  });
+});
+
+describe('任务契约（P1）', () => {
+  const createPayload = {
+    title: '实现登录页',
+    description: '接真实后端登录',
+    taskType: 'dev',
+    priority: 'HIGH' as const,
+    storyPoints: 3,
+    projectId: 7,
+    implementsRequirementIds: [101, 102],
+    assigneeId: 3,
+    estimatedStartDate: '2026-10-05',
+    estimatedEndDate: '2026-10-12',
+    estimatedHours: 16,
+  };
+
+  it('POST /task/v1/createTask，返回新建任务 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 201 } }]);
+    const id = await taskApi.createTask(createPayload);
+
+    expect(id).toBe(201);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/task/v1/createTask');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(createPayload);
+  });
+
+  it('POST /task/v1/updateTask，字段级更新；显式 null 清空', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await taskApi.updateTask({ id: 201, storyPoints: 5, description: null });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/task/v1/updateTask');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ id: 201, storyPoints: 5, description: null });
+  });
+
+  it('POST /task/v1/valid/{id} 与 invalid/{id}，id 拼在路径上', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await taskApi.validTask(201);
+    await taskApi.invalidTask(201);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/task/v1/valid/201');
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/task/v1/invalid/201');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('POST');
+  });
+
+  it('GET /task/v1/findById/{id}，返回任务详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 201, title: '实现登录页', status: 'IN_PROGRESS', priority: 'HIGH' } } },
+    ]);
+    const detail = await taskApi.findById(201);
+
+    expect(detail.id).toBe(201);
+    expect(detail.title).toBe('实现登录页');
+    expect(detail.status).toBe('IN_PROGRESS');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/task/v1/findById/201');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /task/v1/findByPage，请求体 { page, pageSize, bean }', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 201, title: '实现登录页', status: 'TODO' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await taskApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'TODO' },
+    });
+
+    expect(page.total).toBe(1);
+    expect(page.list[0].id).toBe(201);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/task/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'TODO' },
+    });
+  });
+
+  it('getTaskList 默认第 1 页每页 100 条，空查询条件', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { list: [], total: 0, pageNumber: 1, pageSize: 100 } } },
+    ]);
+    await taskApi.getTaskList({ bean: { projectId: 7 } });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/task/v1/findByPage');
+    expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 100, bean: { projectId: 7 } });
+  });
+
+  it('POST /task/v1/updateStatus，流转上下文拼进请求体', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'OK' } }]);
+    const res = await taskApi.updateTaskStatus(201, 'COMPLETED', {
+      reason: '功能完成',
+      deliverables: '登录页合并主干',
+    });
+
+    expect(res).toBe('OK');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/task/v1/updateStatus');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      taskId: 201,
+      status: 'COMPLETED',
+      reason: '功能完成',
+      deliverables: '登录页合并主干',
+    });
+  });
+
+  it('POST /task/v1/assign，改派请求带 taskId/assigneeId/reason', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: '任务分配成功' } }]);
+    const res = await taskApi.assignTask({ taskId: 201, assigneeId: 5, reason: '负载均衡' });
+
+    expect(res).toBe('任务分配成功');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/task/v1/assign');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ taskId: 201, assigneeId: 5, reason: '负载均衡' });
+  });
+
+  it('任务评论线程：target/TASK 路径，create/find/update/invalid', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 601 } },
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            list: [{ id: 601, content: '进度不错', targetType: 'TASK', targetId: 201, parentId: null, creatorId: 3 }],
+            total: 1,
+            pageNumber: 1,
+            pageSize: 20,
+          },
+        },
+      },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    const commentId = await taskApi.createComment(201, { content: '进度不错' });
+    const comments = await taskApi.findComments(201, { page: 1, pageSize: 20 });
+    await taskApi.invalidComment(601);
+
+    expect(commentId).toBe(601);
+    expect(comments.list[0].targetType).toBe('TASK');
+    const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url0).toBe('/api/comment/v1/target/TASK/201/create');
+    expect(init0.method).toBe('POST');
+    expect(JSON.parse(init0.body as string)).toEqual({ content: '进度不错' });
+    const [url1, init1] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url1).toBe('/api/comment/v1/target/TASK/201/find');
+    expect(init1.method).toBe('POST');
+    expect(JSON.parse(init1.body as string)).toEqual({ page: 1, pageSize: 20 });
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/comment/v1/invalid/601');
   });
 });

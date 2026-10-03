@@ -8,8 +8,10 @@
  */
 export * from './types';
 export * from './requirement-types';
+export * from './task-types';
 export * from './client';
 export { authApi } from './auth';
 export { projectApi } from './project';
 export { requirementApi } from './requirement';
+export { taskApi } from './task';
 export { useAuthStore } from './auth-store';
