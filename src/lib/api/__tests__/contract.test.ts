@@ -10,6 +10,7 @@
  *   并用新 token 重放原请求
  * - 重放后依然 401：清本地凭证并通知登录失效（不再触发刷新）
  * - 刷新瞬时失败且凭证仍在：不清凭证、不通知，抛可重试错误（会话保留）
+ * - 刷新接口返回 HTTP 401 但响应体畸形/非信封：仍判定 refresh token 失效并清凭证
  * - POST /project/v1/findByPage，请求体 { page, pageSize, bean }
  *
  * 运行：npm run test:contract（需先 npm install）
@@ -203,6 +204,31 @@ describe('401 自动刷新', () => {
     expect(memStore.get('token')).toBe('expired');
     expect(memStore.get('refreshToken')).toBe('refresh-1');
     expect(unauthorized).toBe(0);
+  });
+
+  it('刷新接口返回 HTTP 401 畸形响应：仍判定 refresh token 失效，清凭证', async () => {
+    const { useAuthStore } = await import('../auth-store');
+    memStore.set('token', 'expired');
+    memStore.set('refreshToken', 'refresh-1');
+    memStore.set(
+      'userInfo',
+      JSON.stringify({ userId: '1', userName: 'admin', cnName: null, extraInfo: {}, roles: [], authorities: [] }),
+    );
+    // 刷新接口 HTTP 401 但响应体为空（非信封）：Codex finding 场景
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ok = await useAuthStore.getState().refreshAccessToken();
+
+    expect(ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/auth/v1/refreshToken');
+    // 凭证被清除，用户可正常被踢回登录页，不会卡在“已登录但刷新永远失败”的状态
+    expect(memStore.get('token')).toBeUndefined();
+    expect(memStore.get('refreshToken')).toBeUndefined();
+    expect(memStore.get('userInfo')).toBeUndefined();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 });
 

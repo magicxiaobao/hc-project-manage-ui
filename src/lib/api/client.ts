@@ -35,6 +35,20 @@ export class ApiBusinessError<T = unknown> extends Error {
   }
 }
 
+/**
+ * 非信封/畸形响应错误：仍保留 HTTP 状态，供上层（如刷新逻辑）分类决策。
+ * 例如刷新接口返回 HTTP 401 但响应体为空时，auth-store 仍应判定 refresh token 失效。
+ */
+export class HttpResponseError extends Error {
+  readonly httpStatus: number;
+
+  constructor(message: string, httpStatus: number) {
+    super(message);
+    this.name = 'HttpResponseError';
+    this.httpStatus = httpStatus;
+  }
+}
+
 function getStorage(): Storage | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage;
@@ -169,7 +183,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }
       if (!data || typeof data.code !== 'number') {
         if (res.ok && !text) return undefined as T;
-        throw new Error(`接口返回格式异常: ${path}`);
+        throw new HttpResponseError(`接口返回格式异常: ${path}`, res.status);
       }
       if (data.code === 1) return data.result;
       if (AUTH_EXPIRED_CODES.includes(data.code)) {

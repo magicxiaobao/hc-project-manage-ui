@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import {
   AUTH_EXPIRED_CODES,
   ApiBusinessError,
+  HttpResponseError,
   REFRESH_TOKEN_STORAGE_KEY,
   TOKEN_STORAGE_KEY,
   USER_INFO_STORAGE_KEY,
@@ -50,13 +51,18 @@ function persistLogin(token: string, refreshToken: string, user: AuthenticatedUs
 }
 
 /**
- * 刷新失败是否确认 refresh token 已失效（登录失效类业务码 / HTTP 401）：
+ * 刷新失败是否确认 refresh token 已失效（登录失效类业务码 / HTTP 401，含响应体畸形的 HTTP 401）：
  * 是 → 清除登录态；否（超时、网络中断、5xx、网关畸形响应等瞬时故障）
  * → 保留会话，返回 false 让调用方按可重试错误处理，避免一次后端抖动就把用户踢下线。
  */
 function isRefreshTokenInvalid(err: unknown): boolean {
   if (err instanceof ApiBusinessError) {
     return err.httpStatus === 401 || AUTH_EXPIRED_CODES.includes(err.code);
+  }
+  // 刷新接口返回 HTTP 401 但响应体畸形/非信封：仍判定 refresh token 失效，清登录态，
+  // 否则凭证会被保留，用户卡在“已登录但每次请求都刷新失败”的状态，且永远不会被踢回登录页。
+  if (err instanceof HttpResponseError) {
+    return err.httpStatus === 401;
   }
   return false;
 }

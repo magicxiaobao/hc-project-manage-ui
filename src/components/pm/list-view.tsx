@@ -15,6 +15,7 @@ import { EmptyHint, ListFilterBar, PageHeading, PersonSelect } from "@/component
 import { rememberBrowse, useGoToItem } from "@/components/pm/use-go-item";
 import { columnOf, kindLabel, needsReason, nextStatuses, statusLabel, COLUMNS, type ColumnId, type Priority, type WorkItem } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,8 @@ export function ListView({ projectKey }: { projectKey: string }) {
   const [edited, setEdited] = useState<{ id: string; accepted: boolean } | null>(null);
   const ready = usePm((state) => state.ready);
   const persistenceError = usePm((state) => state.persistenceError);
+  // Phase 0：后端模式隐藏本地演示 store 的创建入口，避免用户误以为事项同步到了后端。
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   useEffect(() => {
     // Do not overwrite immediate typing with an older committed route match.
     if ((search.query ?? "") === (router.state.location.search.query ?? "")) {
@@ -345,7 +348,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
                 <td colSpan={10}>
                   <EmptyHint>{hasProjectItems ? "没有符合筛选的事项。" : "这个项目还没有事项。"}</EmptyHint>
                   <div className="flex justify-center pb-4">
-                    {hasProjectItems ? <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => { setQuery(""); setFilter(clearListFiltersPatch()); }}>清空筛选，查看全部事项</button> : <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => usePm.getState().setCreateOpen(true)}>创建工作项</button>}
+                    {hasProjectItems ? <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => { setQuery(""); setFilter(clearListFiltersPatch()); }}>清空筛选，查看全部事项</button> : !isAuthenticated ? <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => usePm.getState().setCreateOpen(true)}>创建工作项</button> : null}
                   </div>
                 </td>
               </tr>

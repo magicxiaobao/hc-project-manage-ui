@@ -20,6 +20,7 @@ import {
 } from "@/lib/pm/board-presentation";
 import type { ProjectViewSearch } from "@/lib/pm/navigation";
 import { usePm } from "@/lib/pm/store";
+import { useAuthStore } from "@/lib/api/auth-store";
 
 type PendingRankMove = PendingBoardMove & { beforeId: string | null };
 
@@ -41,6 +42,8 @@ export function BoardView({
   const people = usePm((state) => state.people);
   const boards = usePm((state) => state.boards);
   const currentUserId = usePm((state) => state.currentUserId);
+  // Phase 0：后端模式隐藏看板快捷添加表单——它只写本地演示 store，不同步后端。
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const projectBoards = useMemo(
     () => boards.filter((entry) => entry.projectId === project?.id),
     [boards, project?.id],
@@ -248,7 +251,7 @@ export function BoardView({
         lockedKind={lockedKind}
         onOpen={goToItem}
         onMove={moveItem}
-        onCreate={(column, kind, title) => {
+        onCreate={isAuthenticated ? undefined : (column, kind, title) => {
           const id = usePm.getState().createItem({
             projectId: project.id,
             kind,
