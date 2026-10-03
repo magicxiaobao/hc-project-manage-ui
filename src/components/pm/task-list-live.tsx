@@ -14,7 +14,7 @@
  * 未登录走演示列表（ListView）时不使用本组件。
  */
 import { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, StatusChip } from "@/components/biz";
 import { priorityLabel, statusLabel } from "@/lib/pm/domain";
@@ -28,6 +28,7 @@ const PRIORITY_OPTIONS = [{ id: "", label: "全部" }, ...TASK_PRIORITIES.map((p
 const STATUS_OPTIONS = [{ id: "", label: "全部" }, ...TASK_STATUSES.map((status) => ({ id: status, label: statusLabel("task", status) }))];
 
 export function TaskListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
+  const navigate = useNavigate();
   const [titleInput, setTitleInput] = useState("");
   const [appliedTitle, setAppliedTitle] = useState("");
   const [taskTypeInput, setTaskTypeInput] = useState("");
@@ -78,7 +79,17 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
-      <PageHeading title="任务" hint="真实后端数据（POST /task/v1/findByPage）。按标题、类型、优先级、状态、执行人筛选。" />
+      <div className="flex items-start justify-between gap-3">
+        <PageHeading title="任务" hint="真实后端数据（POST /task/v1/findByPage）。按标题、类型、优先级、状态、执行人筛选。" />
+        <Button
+          variant="primary"
+          onPress={() =>
+            void navigate({ to: "/p/$projectKey/issues/new", params: { projectKey } })
+          }
+        >
+          新建任务
+        </Button>
+      </div>
 
       <form
         className="flex flex-wrap items-end gap-3"

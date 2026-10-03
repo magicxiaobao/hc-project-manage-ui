@@ -13,6 +13,7 @@ import { taskApi } from '../../api/task';
 import type { CommentCreatePayload } from '../../api/requirement-types';
 import type {
   TaskAssignPayload,
+  TaskCreatePayload,
   TaskQueryRequest,
   TaskStatus,
   TaskTransitionPayload,
@@ -148,6 +149,20 @@ export function useAssignTask() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: TaskAssignPayload) => taskApi.assignTask(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
+    },
+  });
+}
+
+/**
+ * 创建任务：走 POST /task/v1/createTask（后端返回新建任务 id，创建后状态为待开始）。
+ * 成功后失效任务域全部缓存（详情/列表全部变脏），列表下次读取即出现新任务。
+ */
+export function useCreateTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: TaskCreatePayload) => taskApi.createTask(data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
     },

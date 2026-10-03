@@ -18,6 +18,7 @@ export type { TaskListParams } from './hooks/useTasks';
 export {
   TASK_TRANSITIONS_BY_STATUS,
   useAssignTask,
+  useCreateTask,
   useCreateTaskComment,
   useTaskComments,
   useTaskDetail,
