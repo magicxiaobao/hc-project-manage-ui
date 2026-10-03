@@ -1,5 +1,12 @@
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import type { ProjectViewSearch } from "@/lib/pm/navigation";
+import {
+  clearListFiltersPatch,
+  deriveListScope,
+  scopeSearchPatch,
+  type ListGroupId,
+  type ListScope,
+  type ProjectViewSearch,
+} from "@/lib/pm/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { EmptyHint, ListFilterBar, PageHeading, PersonSelect } from "@/components/biz";
@@ -10,7 +17,6 @@ import { PersistenceStatus } from "@/components/biz/persistence-status";
 import { cn } from "@/lib/utils";
 
 type SortKey = "key" | "title" | "priority" | "status" | "points" | "due" | "updated";
-type ListScope = "all" | "open" | "mine" | "doing" | "done" | "cancelled";
 
 const PRIORITY_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 const SCOPES: { id: ListScope; label: string }[] = [
@@ -60,10 +66,10 @@ export function ListView({ projectKey }: { projectKey: string }) {
       replace: true,
     });
   };
-  const [grouped, setGrouped] = useState(true);
-  const [closedGroups, setClosedGroups] = useState<ColumnId[]>([]);
-  const [scope, setScope] = useState<ListScope>(search.mine ? "mine" : search.hideDone === false ? "all" : "open");
-  const [priority, setPriority] = useState<Priority | "all">("all");
+  const scope = deriveListScope(search);
+  const priority = search.priority ?? "all";
+  const grouped = search.grouped ?? true;
+  const closedGroups = search.closedGroups ?? [];
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkColumn, setBulkColumn] = useState<ColumnId | "cancelled" | "">("");
   const goToItem = useGoToItem();
@@ -232,7 +238,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
               type="button"
               aria-pressed={scope === entry.id}
               className={cn("type-body flex items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left", scope === entry.id ? "bg-primary-soft text-primary-ink" : "hover:bg-line")}
-              onClick={() => setScope(entry.id)}
+              onClick={() => setFilter(scopeSearchPatch(entry.id, search))}
             >
               <span>{entry.label}</span>
               <span className="type-caption">{scopeCount(entry.id)}</span>
@@ -241,7 +247,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
         </div>
         <div className="flex min-w-max flex-col gap-1 md:min-w-0">
           <p className="type-caption px-2">优先级</p>
-          <button type="button" aria-pressed={priority === "all"} className={cn("type-body rounded-sm px-2 py-1.5 text-left", priority === "all" ? "bg-primary-soft text-primary-ink" : "hover:bg-line")} onClick={() => setPriority("all")}>
+          <button type="button" aria-pressed={priority === "all"} className={cn("type-body rounded-sm px-2 py-1.5 text-left", priority === "all" ? "bg-primary-soft text-primary-ink" : "hover:bg-line")} onClick={() => setFilter({ priority: undefined })}>
             全部
           </button>
           {PRIORITIES.map((entry) => (
@@ -250,7 +256,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
               type="button"
               aria-pressed={priority === entry.id}
               className={cn("type-body flex items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left", priority === entry.id ? "bg-primary-soft text-primary-ink" : "hover:bg-line")}
-              onClick={() => setPriority(entry.id)}
+              onClick={() => setFilter({ priority: entry.id })}
             >
               <span>{entry.label}</span>
               <span className="type-caption">{priorityCount(entry.id)}</span>
@@ -278,7 +284,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
       </div>
       <p className="type-meta flex flex-wrap items-center gap-3">
         <span>{rows.length} 项</span>
-        <button type="button" className="type-link" aria-pressed={grouped} onClick={() => setGrouped((value) => !value)}>
+        <button type="button" className="type-link" aria-pressed={grouped} onClick={() => setFilter(grouped ? { grouped: false } : { grouped: undefined })}>
           {grouped ? "取消按状态分组" : "按状态分组"}
         </button>
       </p>
@@ -343,12 +349,12 @@ export function ListView({ projectKey }: { projectKey: string }) {
                 <td colSpan={10}>
                   <EmptyHint>{hasProjectItems ? "没有符合筛选的事项。" : "这个项目还没有事项。"}</EmptyHint>
                   <div className="flex justify-center pb-4">
-                    {hasProjectItems ? <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => { setQuery(""); setScope("all"); setPriority("all"); setFilter({ query: undefined, kind: "all" }); }}>清空筛选，查看全部事项</button> : <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => usePm.getState().setCreateOpen(true)}>创建工作项</button>}
+                    {hasProjectItems ? <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => { setQuery(""); setFilter(clearListFiltersPatch()); }}>清空筛选，查看全部事项</button> : <button type="button" className="type-link min-h-10 rounded-sm border border-border px-3" onClick={() => usePm.getState().setCreateOpen(true)}>创建工作项</button>}
                   </div>
                 </td>
               </tr>
             ) : grouped ? (
-              (["todo", "doing", "check", "done", "cancelled"] as ColumnId[]).map((column) => {
+              (["todo", "doing", "check", "done", "cancelled"] as ListGroupId[]).map((column) => {
                 const group = rows.filter((item) => columnOf(item.kind, item.status) === column);
                 if (group.length === 0) return null;
                 const name = COLUMNS.find((entry) => entry.id === column)?.name ?? "已取消";
@@ -359,7 +365,13 @@ export function ListView({ projectKey }: { projectKey: string }) {
                     name={name}
                     count={group.length}
                     collapsed={collapsed}
-                    onToggle={() => setClosedGroups((current) => (current.includes(column) ? current.filter((entry) => entry !== column) : [...current, column]))}
+                    onToggle={() => {
+                      const next = closedGroups.includes(column)
+                        ? closedGroups.filter((entry) => entry !== column)
+                        : [...closedGroups, column];
+                      const unique = next.filter((id, index) => next.indexOf(id) === index);
+                      setFilter({ closedGroups: unique.length ? unique : undefined });
+                    }}
                   >
                     {group.map((item) => renderIssueRow(item))}
                   </GroupRows>
