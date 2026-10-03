@@ -40,3 +40,11 @@ export function moduleDestination(module: SidebarModule, projectKey: string): st
 export function projectLayoutRemountKey(params: { projectKey: string }): string {
   return params.projectKey;
 }
+
+export function chosenProjectKey(
+  chosen: string,
+  projects: readonly { key: string }[],
+  currentKey: string,
+): string {
+  return projects.some((entry) => entry.key === chosen) ? chosen : currentKey;
+}

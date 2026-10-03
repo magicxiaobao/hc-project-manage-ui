@@ -4,7 +4,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { BarChart3, Bug, CalendarRange, ChartGantt, Clock3, FlaskConical, GitBranch, Kanban, Layers, LayoutDashboard, ListTree, Package, Settings, SquareCheckBig, Users, Waypoints } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Project } from "@/lib/pm/domain";
-import { highlightedModule, moduleDestination, type SidebarModule } from "@/lib/pm/sidebar-nav";
+import { chosenProjectKey, highlightedModule, moduleDestination, type SidebarModule } from "@/lib/pm/sidebar-nav";
 import { cn } from "@/lib/utils";
 
 export function ProjectSidebar({
@@ -143,6 +143,10 @@ function ProjectSwitcher({
   const id = useId();
   const navigate = useNavigate();
   const [chosen, setChosen] = useState(project.key);
+  useEffect(() => {
+    const next = chosenProjectKey(chosen, projects, project.key);
+    if (next !== chosen) setChosen(next);
+  }, [projects, project.key, chosen]);
   return (
     <div className="mt-2 flex min-w-0 flex-col gap-1">
       <label htmlFor={id} className="type-caption">切换项目</label>
@@ -153,16 +157,17 @@ function ProjectSwitcher({
         onChange={(event) => setChosen(event.target.value)}
       >
         {projects.map((entry) => (
-          <option key={entry.id} value={entry.key}>{entry.name}</option>
+          <option key={entry.id} value={entry.key}>{entry.name}（{entry.key}）</option>
         ))}
       </select>
       <button
         type="button"
         className="type-caption h-7 rounded-sm border border-border px-2"
         onClick={() => {
-          if (chosen === project.key || current === undefined) return;
+          const key = chosenProjectKey(chosen, projects, project.key);
+          if (key !== chosen || key === project.key || current === undefined) return;
           onClose();
-          void navigate({ href: moduleDestination(current, chosen) });
+          void navigate({ href: moduleDestination(current, key) });
         }}
       >
         切换

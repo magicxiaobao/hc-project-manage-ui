@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { highlightedModule, moduleDestination, projectLayoutRemountKey } from "./sidebar-nav.ts";
+import { chosenProjectKey, highlightedModule, moduleDestination, projectLayoutRemountKey } from "./sidebar-nav.ts";
 
 const origin = (href: string) => ({ href, index: 0, focus: {}, scrollTop: 0, scrollLeft: 0 });
 
@@ -33,4 +33,12 @@ it("builds the other project's module index without a search", () => {
 
 it("remounts the project layout from the project key", () => {
   assert.equal(projectLayoutRemountKey({ projectKey: "HC" }), "HC");
+});
+
+it("keeps a chosen project key that is still in the list", () => {
+  assert.equal(chosenProjectKey("NEW", [{ key: "HC" }, { key: "NEW" }], "HC"), "NEW");
+});
+
+it("falls back to the current project key when the chosen key is gone", () => {
+  assert.equal(chosenProjectKey("GONE", [{ key: "HC" }], "HC"), "HC");
 });
