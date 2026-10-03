@@ -203,6 +203,11 @@ export function CreateIssueDialog() {
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? titleErrorId : undefined}
           />
+          {error ? (
+            <p id={titleErrorId} role="alert" className="type-body text-danger">
+              {error}
+            </p>
+          ) : null}
         </TextField>
         <TextField
           value={form.description}
@@ -211,11 +216,6 @@ export function CreateIssueDialog() {
           <Label>描述</Label>
           <TextArea rows={4} />
         </TextField>
-        {error ? (
-          <p id={titleErrorId} role="alert" className="type-body text-danger">
-            {error}
-          </p>
-        ) : null}
         <div className="flex justify-end gap-2">
           <Button
             type="button"

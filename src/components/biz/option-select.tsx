@@ -15,11 +15,15 @@ export function OptionSelect({
   value,
   options,
   onChange,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
 }: {
   label: string;
   value: string;
   options: SelectOption[];
   onChange: (id: string) => void;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const canClear = options.some((option) => option.id === "");
@@ -27,6 +31,8 @@ export function OptionSelect({
   return (
     <Autocomplete
       aria-label={label}
+      aria-invalid={ariaInvalid || undefined}
+      aria-describedby={ariaDescribedBy}
       fullWidth
       placeholder="请选择"
       selectedKey={selected || null}

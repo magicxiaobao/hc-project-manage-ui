@@ -1,9 +1,10 @@
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DayField, EmptyHint, IssueTypeIcon, LabeledField, OptionSelect, PageHeading, PersonAvatar, StateAction, StateChip } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { formatDay, WORK_LOG_STATUS_LABEL, workLogStatus, type WorkLog, type WorkLogStatus } from "@/lib/pm/domain";
+import { hoursError } from "@/lib/pm/edit-rules";
 import { usePm } from "@/lib/pm/store";
 
 // Keep the source partition on item return, scoped to the project and current user.
@@ -25,7 +26,10 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
   const [hours, setHours] = useState("1");
   const [workDate, setWorkDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [note, setNote] = useState("");
-  const [error, setError] = useState("");
+  const [itemError, setItemError] = useState("");
+  const [hoursFieldError, setHoursFieldError] = useState<string | null>(null);
+  const itemErrorId = useId();
+  const hoursErrorId = useId();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editHours, setEditHours] = useState("1");
   const [editDate, setEditDate] = useState("");
@@ -146,22 +150,20 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
 <summary className="type-section cursor-pointer rounded-sm px-3 py-3 focus-visible:outline-2 focus-visible:outline-primary">登记工时</summary>
 <div className="flex flex-col gap-3 p-3">
       <form
+        noValidate
         className="flex flex-col gap-3 rounded-sm border border-border bg-surface p-3"
         onSubmit={(event) => {
           event.preventDefault();
-          const amount = Number(hours);
-          if (!itemId) {
-            setError("先选择事项");
-            return;
-          }
-          if (!Number.isFinite(amount) || amount <= 0 || amount > 24) {
-            setError("工时要在 0 到 24 小时之间");
-            return;
-          }
-          usePm.getState().addWorkLog({ projectId: project.id, itemId, hours: amount, workDate, note });
+          const nextItemError = itemId ? "" : "先选择事项";
+          const nextHoursError = hoursError(hours);
+          setItemError(nextItemError);
+          setHoursFieldError(nextHoursError);
+          if (nextItemError || nextHoursError) return;
+          usePm.getState().addWorkLog({ projectId: project.id, itemId, hours: Number(hours), workDate, note });
           setNote("");
           setHours("1");
-          setError("");
+          setItemError("");
+          setHoursFieldError(null);
         }}
       >
         <div className="type-section">登记工时{me ? ` · ${me.name}` : ""}</div>
@@ -170,21 +172,49 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
             <OptionSelect
               label="事项"
               value={itemId}
+              aria-invalid={Boolean(itemError)}
+              aria-describedby={itemError ? itemErrorId : undefined}
               options={projectItems.map((item) => ({ id: item.id, label: `${item.key} ${item.title}`, icon: <IssueTypeIcon item={item} /> }))}
-              onChange={setItemId}
+              onChange={(next) => {
+                setItemId(next);
+                if (itemError) setItemError("");
+              }}
             />
+            {itemError ? (
+              <p id={itemErrorId} role="alert" className="type-body text-danger">
+                {itemError}
+              </p>
+            ) : null}
           </LabeledField>
           <DayField label="日期" value={workDate} onChange={setWorkDate} />
-          <TextField value={hours} onChange={setHours}>
+          <TextField
+            value={hours}
+            isInvalid={Boolean(hoursFieldError)}
+            onChange={(next) => {
+              setHours(next);
+              if (hoursFieldError) setHoursFieldError(null);
+            }}
+          >
             <Label>小时</Label>
-            <Input type="number" min={0.5} max={24} step={0.5} />
+            <Input
+              type="number"
+              min={0.5}
+              max={24}
+              step={0.5}
+              aria-invalid={hoursFieldError ? true : undefined}
+              aria-describedby={hoursFieldError ? hoursErrorId : undefined}
+            />
+            {hoursFieldError ? (
+              <p id={hoursErrorId} role="alert" className="type-body text-danger">
+                {hoursFieldError}
+              </p>
+            ) : null}
           </TextField>
         </div>
         <TextField value={note} onChange={setNote}>
           <Label>说明</Label>
           <TextArea placeholder="做了什么" />
         </TextField>
-        {error ? <p className="type-body text-danger">{error}</p> : null}
         <div>
           <Button type="submit" variant="primary">
             记一笔
