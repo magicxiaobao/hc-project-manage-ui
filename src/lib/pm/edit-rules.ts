@@ -63,18 +63,21 @@ export function commentSubmitted(body: string): boolean {
   return body.trim().length > 0;
 }
 
-let savedCreate: CreateForm | null = null;
+/** 创建草稿按用户隔离：/me 切换用户时，他人的未发布输入不会串到当前用户 */
+const savedCreateByUser = new Map<string, CreateForm>();
 
-export function readCreateDraft() {
-  return savedCreate;
+export function readCreateDraft(userId: string): CreateForm | null {
+  return savedCreateByUser.get(userId) ?? null;
 }
 
-export function writeCreateDraft(value: CreateForm | null) {
-  savedCreate = value;
+export function writeCreateDraft(userId: string, value: CreateForm | null) {
+  if (value) savedCreateByUser.set(userId, value);
+  else savedCreateByUser.delete(userId);
 }
 
-export function clearCreateDraft() {
-  savedCreate = null;
+export function clearCreateDraft(userId?: string) {
+  if (userId === undefined) savedCreateByUser.clear();
+  else savedCreateByUser.delete(userId);
 }
 
 export const commentDrafts = new Map<string, string>();
