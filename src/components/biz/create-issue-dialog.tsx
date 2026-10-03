@@ -16,7 +16,7 @@ import {
 } from "@/components/biz/field-selects";
 import { LabeledField } from "@/components/biz/labeled-field";
 import type { ItemKind, Priority } from "@/lib/pm/domain";
-import { keptSprintId, readCreateDraft, sameCreateForm, writeCreateDraft, type CreateForm } from "@/lib/pm/edit-rules";
+import { createDraftOnClose, keptSprintId, readCreateDraft, writeCreateDraft, type CreateForm } from "@/lib/pm/edit-rules";
 import { usePm } from "@/lib/pm/store";
 
 const empty: CreateForm = {
@@ -45,6 +45,7 @@ export function CreateIssueDialog() {
   const [error, setError] = useState("");
   const titleErrorId = useId();
   const openedRef = useRef(empty);
+  const restoredRef = useRef(false);
   const wasOpen = useRef(false);
   const formRef = useRef(form);
   formRef.current = form;
@@ -58,12 +59,12 @@ export function CreateIssueDialog() {
       const next = draft
         ? { ...draft, sprintId: keptSprintId(draft.sprintId, sprints, draft.projectId) }
         : { ...empty, projectId: matched?.id ?? projects[0]?.id ?? "pr-hc" };
+      restoredRef.current = draft != null;
       setForm(next);
       openedRef.current = next;
       setError("");
     } else if (!open && wasOpen.current) {
-      const current = formRef.current;
-      writeCreateDraft(sameCreateForm(current, openedRef.current) ? null : current);
+      writeCreateDraft(createDraftOnClose(formRef.current, openedRef.current, restoredRef.current));
     }
     wasOpen.current = open;
   }, [open, pathname, projects, sprints]);

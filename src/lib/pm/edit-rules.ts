@@ -30,6 +30,12 @@ export function sameCreateForm(a: CreateForm, b: CreateForm): boolean {
   return createFields.every((key) => a[key] === b[key]);
 }
 
+
+export function createDraftOnClose(current: CreateForm, opened: CreateForm, restored: boolean): CreateForm | null {
+  if (sameCreateForm(current, opened) && !restored) return null;
+  return current;
+}
+
 export function keptSprintId(
   sprintId: string,
   sprints: { id: string; projectId: string; state: string }[],

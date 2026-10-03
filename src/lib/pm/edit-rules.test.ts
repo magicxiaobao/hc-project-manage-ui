@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { commentSubmitted, hoursError, keptSprintId, sameCreateForm, storyPointsWrite } from "./edit-rules.ts";
+import { commentSubmitted, createDraftOnClose, hoursError, keptSprintId, sameCreateForm, storyPointsWrite } from "./edit-rules.ts";
 
 const opened = {
   kind: "requirement" as const,
@@ -20,6 +20,16 @@ it("treats an unchanged create form as clean, including a revert", () => {
   assert.equal(sameCreateForm(opened, opened), true);
   assert.equal(sameCreateForm({ ...opened, title: "x" }, opened), false);
   assert.equal(sameCreateForm({ ...opened, title: "x", projectId: "pr-b" }, { ...opened, title: "x", projectId: "pr-b" }), true);
+});
+
+it("keeps a restored create draft when the form is closed at the opened snapshot", () => {
+  const restored = { ...opened, title: "留下", projectId: "pr-b", sprintId: "" };
+  const reverted = { ...restored };
+  assert.equal(createDraftOnClose(opened, opened, false), null);
+  assert.deepEqual(createDraftOnClose(restored, restored, true), restored);
+  assert.deepEqual(createDraftOnClose(reverted, restored, true), restored);
+  assert.equal(createDraftOnClose(opened, opened, false), null);
+  assert.deepEqual(createDraftOnClose({ ...opened, title: "改过" }, opened, false), { ...opened, title: "改过" });
 });
 
 it("drops a sprint that is closed or not in this project", () => {
