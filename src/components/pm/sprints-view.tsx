@@ -70,7 +70,10 @@ export function SprintsView({ projectKey }: { projectKey: string }) {
               </Button>
             ) : null}
             {sprint.state === "active" ? (
-              <StateAction tone="done" onPress={() => usePm.getState().completeSprint(sprint.id)}>
+              <StateAction tone="done" onPress={() => {
+                const result = usePm.getState().completeSprint(sprint.id);
+                if (!result.ok) toast.error(result.message);
+              }}>
                 完成
               </StateAction>
             ) : null}
@@ -103,7 +106,10 @@ export function SprintsView({ projectKey }: { projectKey: string }) {
               </Button>
             ) : null}
             {sprint.state === "active" ? (
-              <StateAction tone="done" onPress={() => usePm.getState().completeSprint(sprint.id)}>
+              <StateAction tone="done" onPress={() => {
+                const result = usePm.getState().completeSprint(sprint.id);
+                if (!result.ok) toast.error(result.message);
+              }}>
                 完成
               </StateAction>
             ) : null}

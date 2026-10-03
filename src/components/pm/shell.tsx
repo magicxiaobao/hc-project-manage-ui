@@ -1,5 +1,6 @@
 import { NavigationFocus } from "@/components/pm/navigation-focus";
 import { notifyPmChange } from "@/lib/pm/feedback";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
@@ -16,6 +17,7 @@ import {
 import { ContentSkeleton } from "@/components/biz/skeleton";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { bindPmPersistence, usePm } from "@/lib/pm/store";
+import type { Person } from "@/lib/pm/domain";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -32,7 +34,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const noticeOpen = usePm((state) => state.noticeOpen);
   const ready = usePm((state) => state.ready);
   const persistenceError = usePm((state) => state.persistenceError);
-  const me = people.find((person) => person.id === currentUserId);
+  // 后端模式：页面展示真实后端数据，隐藏只读写本地 usePm 演示数据的 shell 入口，
+  // 避免用户创建/打开本地事项后被带入无关的演示项目（与项目页隐藏“新建项目”同理）。
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authUser = useAuthStore((state) => state.user);
+  // 后端模式展示真实登录人；未登录时才用演示数据的选中人员。
+  const me: Person | undefined =
+    isAuthenticated && authUser
+      ? { id: authUser.userId, name: authUser.cnName || authUser.userName || "已登录", role: authUser.roles.join("、") }
+      : people.find((person) => person.id === currentUserId);
   const project = projects.find(
     (entry) => pathname === `/p/${entry.key}` || pathname.startsWith(`/p/${entry.key}/`),
   );
@@ -41,6 +51,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const goToItem = useGoToItem();
 
   useLayoutEffect(() => {
+    // 后端模式不读写本地演示数据：跳过演示持久化绑定，避免本机演示数据
+    // 损坏（hc-pm-sample-v1 解析失败）时把合法后端用户拦在错误页外——
+    // 后端项目数据本就不依赖演示存储。
+    if (useAuthStore.getState().isAuthenticated) {
+      usePm.setState({ ready: true });
+      return;
+    }
     return bindPmPersistence();
   }, []);
 
@@ -61,6 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
       if (
         !typing &&
+        !useAuthStore.getState().isAuthenticated &&
         event.key.toLowerCase() === "c" &&
         !event.metaKey &&
         !event.ctrlKey &&
@@ -84,7 +102,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("beforeunload", warnUnsaved);
   }, [ready, persistenceError]);
 
-  if (!ready && persistenceError) {
+  // 演示持久化错误只在演示模式拦截全页：后端模式下演示存储未绑定，
+  // 也不应让本机演示数据问题遮挡真实后端页面。
+  if (!ready && persistenceError && !isAuthenticated) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg p-6 text-fg">
         <section role="alert" className="max-w-lg rounded-sm border border-danger bg-surface p-6">
@@ -109,13 +129,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <AppRail
         unread={unread}
         me={ready ? me : undefined}
-        onSearch={() => setSearchOpen(true)}
-        onCreate={() => usePm.getState().setCreateOpen(true)}
-        onNotices={() => {
-          const next = !usePm.getState().noticeOpen;
-          usePm.getState().setNoticeOpen(next);
-          if (next) usePm.getState().markNoticesRead();
-        }}
+        onSearch={isAuthenticated ? undefined : () => setSearchOpen(true)}
+        onCreate={isAuthenticated ? undefined : () => usePm.getState().setCreateOpen(true)}
+        onNotices={
+          isAuthenticated
+            ? undefined
+            : () => {
+                const next = !usePm.getState().noticeOpen;
+                usePm.getState().setNoticeOpen(next);
+                if (next) usePm.getState().markNoticesRead();
+              }
+        }
       />
       <ProjectSidebar
         open={navOpen}
@@ -161,11 +185,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           notices={notices}
           onClose={() => usePm.getState().setNoticeOpen(false)}
           onOpen={goToItem}
-          onReset={() => {
-            if (!window.confirm("恢复示例数据将替换当前数据，并写入本机持久化存储。确定恢复吗？")) return;
-            usePm.getState().reset();
-            notifyPmChange("已恢复示例数据");
-          }}
+          onReset={
+            isAuthenticated
+              ? undefined
+              : () => {
+                  if (!window.confirm("恢复示例数据将替换当前数据，并写入本机持久化存储。确定恢复吗？")) return;
+                  usePm.getState().reset();
+                  notifyPmChange("已恢复示例数据");
+                }
+          }
         />
       ) : null}
       {searchOpen ? (

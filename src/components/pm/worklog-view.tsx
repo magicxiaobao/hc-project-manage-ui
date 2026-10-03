@@ -158,7 +158,11 @@ export function WorklogView({ projectKey }: { projectKey: string }) {
             setError("工时要在 0 到 24 小时之间");
             return;
           }
-          usePm.getState().addWorkLog({ projectId: project.id, itemId, hours: amount, workDate, note });
+          const result = usePm.getState().addWorkLog({ projectId: project.id, itemId, hours: amount, workDate, note });
+          if (!result.ok) {
+            setError(result.message ?? "提交失败");
+            return;
+          }
           setNote("");
           setHours("1");
           setError("");

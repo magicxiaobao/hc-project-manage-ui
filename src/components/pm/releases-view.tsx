@@ -57,8 +57,14 @@ export function ReleasesView({ projectKey }: { projectKey: string }) {
           items={items.filter((item) => item.versionId === version.id)}
           people={people}
           onOpen={goToItem}
-          onTransition={(to) => usePm.getState().transitionVersion(version.id, to)}
-          onDate={(plannedReleaseDate) => usePm.getState().updateVersion(version.id, { plannedReleaseDate })}
+          onTransition={(to) => {
+            const result = usePm.getState().transitionVersion(version.id, to);
+            if (!result.ok) toast.error(result.message);
+          }}
+          onDate={(plannedReleaseDate) => {
+            const result = usePm.getState().updateVersion(version.id, { plannedReleaseDate });
+            if (!result.ok) toast.error(result.message);
+          }}
           dateMarks={versions
             .filter((entry) => entry.id !== version.id)
             .map((entry) => ({ date: entry.plannedReleaseDate, tone: "done" as const }))}
