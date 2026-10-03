@@ -4,6 +4,7 @@ import type { Comment, FeedEntry, ItemKind, LifecycleRecord, Person } from "@/li
 import { ActivityList, HistoryList } from "@/components/biz/activity-list";
 import { CommentThread } from "@/components/biz/comment-thread";
 import { commentDrafts, commentSubmitted } from "@/lib/pm/edit-rules";
+import { usePm } from "@/lib/pm/store";
 
 type Tab = "comment" | "feed" | "history";
 
@@ -25,9 +26,12 @@ export function DiscussionPanel({
   onComment: (body: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("comment");
-  const [draft, setDraft] = useState(() => commentDrafts.get(itemId) ?? "");
+  // 评论草稿按用户隔离：key 包含 userId，/me 切换用户后不会把 A 的草稿递给 B 提交
+  const currentUserId = usePm((state) => state.currentUserId);
+  const draftKey = `${currentUserId}:${itemId}`;
+  const [draft, setDraft] = useState(() => commentDrafts.get(draftKey) ?? "");
   const writeDraft = (value: string) => {
-    commentDrafts.set(itemId, value);
+    commentDrafts.set(draftKey, value);
     setDraft(value);
   };
   return (
@@ -57,7 +61,7 @@ export function DiscussionPanel({
           onSubmit={() => {
             if (!commentSubmitted(draft)) return;
             onComment(draft);
-            commentDrafts.delete(itemId);
+            commentDrafts.delete(draftKey);
             setDraft("");
           }}
         />
