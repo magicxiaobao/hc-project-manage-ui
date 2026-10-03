@@ -47,7 +47,7 @@ export function ProjectSidebar({
               </div>
               <div role="group" aria-label="计划与交付" className="flex shrink-0 flex-col gap-1">
                 <h2 className="type-label px-3">计划与交付</h2>
-              <ProjectLink projectKey={project.key} to="/p/$projectKey" active={current === "board"} icon={<Kanban className="size-4" />} label="看板" onClose={onClose} />
+              <ProjectLink projectKey={project.key} to="/p/$projectKey" active={current === "board"} activeOptions={{ exact: true }} icon={<Kanban className="size-4" />} label="看板" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/backlog" active={current === "backlog"} icon={<Layers className="size-4" />} label="待办" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/sprints" active={current === "sprints"} icon={<CalendarRange className="size-4" />} label="迭代" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/issues" active={current === "issues"} icon={<SquareCheckBig className="size-4" />} label="事项" onClose={onClose} />
@@ -184,6 +184,7 @@ function ProjectLink({
   projectKey,
   to,
   active,
+  activeOptions,
   icon,
   label,
   onClose,
@@ -191,6 +192,7 @@ function ProjectLink({
   projectKey: string;
   to: "/p/$projectKey" | "/p/$projectKey/dashboard" | "/p/$projectKey/backlog" | "/p/$projectKey/sprints" | "/p/$projectKey/issues" | "/p/$projectKey/defects" | "/p/$projectKey/assignment" | "/p/$projectKey/requirements" | "/p/$projectKey/trace" | "/p/$projectKey/gantt" | "/p/$projectKey/dependencies" | "/p/$projectKey/tests" | "/p/$projectKey/worklogs" | "/p/$projectKey/releases" | "/p/$projectKey/stats" | "/p/$projectKey/settings";
   active: boolean;
+  activeOptions?: { exact: true };
   icon: ReactNode;
   label: string;
   onClose: () => void;
@@ -199,6 +201,7 @@ function ProjectLink({
     <Link
       to={to}
       params={{ projectKey }}
+      {...(activeOptions ? { activeOptions } : {})}
       onClick={onClose}
       {...(active ? { "aria-current": "page" as const } : {})}
       className={cn("flex h-10 items-center gap-3 rounded-sm px-3", active ? "type-emphasis bg-line text-primary" : "type-body hover:bg-line")}
