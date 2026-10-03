@@ -32,6 +32,11 @@ it("keeps a restored create draft when the form is closed at the opened snapshot
   assert.deepEqual(createDraftOnClose({ ...opened, title: "改过" }, opened, false), { ...opened, title: "改过" });
 });
 
+it("drops a submitted form that matches the opened snapshot when it was not restored", () => {
+  const submitted = { ...opened, title: "已创建" };
+  assert.equal(createDraftOnClose(submitted, submitted, false), null);
+});
+
 it("drops a sprint that is closed or not in this project", () => {
   const sprints = [
     { id: "s-open", projectId: "pr-a", state: "active" },

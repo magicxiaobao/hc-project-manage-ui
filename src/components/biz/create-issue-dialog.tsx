@@ -105,6 +105,7 @@ export function CreateIssueDialog() {
           });
           if (!id) return;
           writeCreateDraft(null);
+          restoredRef.current = false;
           openedRef.current = form;
           const created = usePm.getState().items.find((entry) => entry.id === id);
           const project = projects.find((entry) => entry.id === created?.projectId);
