@@ -14,7 +14,7 @@ import {
   api,
   clearStoredAuth,
 } from './client';
-import { authApi } from './auth';
+import { authApi, isCanonicalUserId } from './auth';
 import type { AuthenticatedUser } from './types';
 
 function readStorage(key: string): string | null {
@@ -40,7 +40,9 @@ function getPersistedUser(): AuthenticatedUser | null {
     const user = JSON.parse(raw) as AuthenticatedUser;
     // 完整性校验：AppShell 在登录态下会直接求值 authUser.roles.join(...) 等字段，
     // 只校验 userId 字符串不足以防范 userInfo 被部分篡改/损坏后的渲染期崩溃。
-    return user && typeof user.userId === 'string' && Array.isArray(user.roles) ? user : null;
+    // 另要求 userId 为规范十进制（与 toWireUserId 同约束）：非法持久化 ID 会让
+    // 刷新接口在请求前抛出普通 Error、被误判为瞬时故障而保留僵尸会话。
+    return user && isCanonicalUserId(user.userId) && Array.isArray(user.roles) ? user : null;
   } catch {
     return null;
   }

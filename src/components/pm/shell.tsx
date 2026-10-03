@@ -51,6 +51,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const goToItem = useGoToItem();
 
   useLayoutEffect(() => {
+    // 后端模式不读写本地演示数据：跳过演示持久化绑定，避免本机演示数据
+    // 损坏（hc-pm-sample-v1 解析失败）时把合法后端用户拦在错误页外——
+    // 后端项目数据本就不依赖演示存储。
+    if (useAuthStore.getState().isAuthenticated) {
+      usePm.setState({ ready: true });
+      return;
+    }
     return bindPmPersistence();
   }, []);
 
@@ -95,7 +102,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("beforeunload", warnUnsaved);
   }, [ready, persistenceError]);
 
-  if (!ready && persistenceError) {
+  // 演示持久化错误只在演示模式拦截全页：后端模式下演示存储未绑定，
+  // 也不应让本机演示数据问题遮挡真实后端页面。
+  if (!ready && persistenceError && !isAuthenticated) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg p-6 text-fg">
         <section role="alert" className="max-w-lg rounded-sm border border-danger bg-surface p-6">

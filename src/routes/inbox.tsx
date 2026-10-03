@@ -4,6 +4,7 @@ import { Button } from "@heroui/react";
 import { useState } from "react";
 import { EmptyHint, PageHeading } from "@/components/biz";
 import { useGoToItem } from "@/components/pm/use-go-item";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { formatRelative, NOTICE_KIND_LABEL, type NoticeKind } from "@/lib/pm/domain";
 import { usePm } from "@/lib/pm/store";
 
@@ -23,8 +24,22 @@ function Page() {
 }
 
 function Body() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const notices = usePm((state) => state.notices);
   const goToItem = useGoToItem();
+  // 后端模式：演示通知数据为只读（全部已读/点开标记在 guard 层直接拦截），
+  // 直接展示演示通知会让人误以为控件可用。显式给空态，不渲染假数据。
+  if (isAuthenticated) {
+    return (
+      <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6">
+        <Link to="/" className="type-link w-fit hover:underline">
+          返回工作台
+        </Link>
+        <PageHeading title="通知中心" hint="后端模式下通知中心暂未接入后端。" />
+        <EmptyHint>后端模式下演示数据为只读，项目数据将在 Phase 1 接入后端。</EmptyHint>
+      </div>
+    );
+  }
   const [filter, setFilter] = useState(remembered);
   const [kind, setKind] = useState(rememberedKind);
   const unread = notices.filter((notice) => !notice.read).length;

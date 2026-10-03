@@ -68,7 +68,10 @@ export function BacklogView({ projectKey }: { projectKey: string }) {
                     { date: entry.start, tone: "progress" as const },
                     { date: entry.end, tone: "review" as const },
                   ])}
-                onChange={(start, end) => usePm.getState().updateSprint(sprint.id, { start, end })}
+                onChange={(start, end) => {
+                  const result = usePm.getState().updateSprint(sprint.id, { start, end });
+                  if (!result.ok) toast.error(result.message);
+                }}
               />
             )
           }

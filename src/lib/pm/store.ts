@@ -127,8 +127,8 @@ interface PmActions {
   transitionVersion: (id: string, to: VersionStatus) => PmActionResult;
   createVersion: (input: { projectId: string; name: string; versionNumber: string; plannedReleaseDate: string; description: string }) => { ok: true } | { ok: false; message: string };
   createProject: (input: { key: string; name: string; summary: string; leadId: string }) => { ok: true; key: string } | { ok: false; message: string };
-  updateSprint: (id: string, patch: Partial<Pick<Sprint, "start" | "end">>) => void;
-  updateVersion: (id: string, patch: Partial<Pick<ReleaseVersion, "plannedReleaseDate">>) => void;
+  updateSprint: (id: string, patch: Partial<Pick<Sprint, "start" | "end">>) => PmActionResult;
+  updateVersion: (id: string, patch: Partial<Pick<ReleaseVersion, "plannedReleaseDate">>) => PmActionResult;
   recordExecution: (id: string, result: TestResult) => { ok: true } | { ok: false; message: string };
   createRun: (input: {
     projectId: string;
@@ -553,16 +553,18 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true, key };
   },
   updateSprint: (id, patch) => {
-    if (backendReadOnly()) return;
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     set({
       sprints: get().sprints.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
     });
+    return { ok: true };
   },
   updateVersion: (id, patch) => {
-    if (backendReadOnly()) return;
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     set({
       versions: get().versions.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
     });
+    return { ok: true };
   },
   recordExecution: (id, result) => {
     if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };

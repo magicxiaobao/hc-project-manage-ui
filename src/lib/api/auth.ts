@@ -29,6 +29,17 @@ interface RefreshTokenWireResponse {
 
 const CANONICAL_DECIMAL_USER_ID = /^(?:0|[1-9]\d*)$/;
 
+/**
+ * 与 toWireUserId 同约束的规范十进制用户 ID 校验（供持久化恢复用）。
+ * 刷新接口 wire 层要求 userId 为 number：非法持久化 ID 会在请求前抛出普通
+ * Error，被误判为瞬时故障而保留僵尸会话；因此 hydrate 阶段就必须拒绝它。
+ */
+export function isCanonicalUserId(userId: unknown): userId is string {
+  if (typeof userId !== 'string') return false;
+  if (!CANONICAL_DECIMAL_USER_ID.test(userId)) return false;
+  return Number.isSafeInteger(Number(userId));
+}
+
 function toWireUserId(userId: string): number {
   if (!CANONICAL_DECIMAL_USER_ID.test(userId)) {
     throw new Error('用户ID必须是规范的十进制字符串');

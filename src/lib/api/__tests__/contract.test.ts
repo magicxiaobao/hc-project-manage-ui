@@ -543,6 +543,31 @@ describe('hydrate 会话恢复', () => {
     expect(memStore.get('userInfo')).toBeUndefined();
   });
 
+  it('userInfo.userId 非规范十进制时拒绝恢复并清理残留凭证（避免刷新前抛错的僵尸会话）', () => {
+    const badUsers = ['', '01', 'user-1', '9007199254740993'];
+    for (const userId of badUsers) {
+      memStore.set('token', 'access-token');
+      memStore.set('refreshToken', 'refresh-token');
+      memStore.set('userInfo', JSON.stringify({
+        userId,
+        userName: 'demo',
+        cnName: null,
+        extraInfo: {},
+        roles: [],
+        authorities: [],
+      }));
+      useAuthStore.getState().hydrate();
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.user).toBeNull();
+      expect(state.token).toBeNull();
+      // 残留凭证已清理：刷新接口 wire 层要求规范十进制 ID，非法 ID 会在请求前
+      // 抛出普通 Error，被误判为瞬时故障而保留会话、access token 过期后每次请求失败
+      expect(memStore.get('token')).toBeUndefined();
+      expect(memStore.get('userInfo')).toBeUndefined();
+    }
+  });
+
   it('空存储时保持未登录且不抛错', () => {
     expect(() => useAuthStore.getState().hydrate()).not.toThrow();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
