@@ -6,6 +6,7 @@ import {
   scopeSearchPatch,
   type ListGroupId,
   type ListScope,
+  type ListSortColumn,
   type ProjectViewSearch,
 } from "@/lib/pm/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -16,8 +17,6 @@ import { columnOf, kindLabel, needsReason, nextStatuses, statusLabel, COLUMNS, t
 import { usePm } from "@/lib/pm/store";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 import { cn } from "@/lib/utils";
-
-type SortKey = "key" | "title" | "priority" | "status" | "points" | "due" | "updated";
 
 const PRIORITY_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 const SCOPES: { id: ListScope; label: string }[] = [
@@ -181,7 +180,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
       </tr>
     );
   };
-  const sort = (key: SortKey) => {
+  const sort = (key: ListSortColumn) => {
     if (sortKey === key) setFilter({ ascending: !ascending });
     else {
       setFilter({ sort: key, ascending: key === "key" || key === "title" || key === "due" });
@@ -311,7 +310,7 @@ export function ListView({ projectKey }: { projectKey: string }) {
       ) : null}
       <div className="flex flex-wrap items-center gap-2 sm:hidden">
         <label className="type-label" htmlFor="mobile-issue-sort">排序</label>
-        <select id="mobile-issue-sort" className="rounded-sm border border-border bg-surface px-2" value={sortKey} onChange={(event) => sort(event.target.value as SortKey)}>
+        <select id="mobile-issue-sort" className="rounded-sm border border-border bg-surface px-2" value={sortKey} onChange={(event) => sort(event.target.value as ListSortColumn)}>
           {[ ["key", "编号"], ["title", "标题"], ["priority", "优先级"], ["status", "状态"], ["points", "点数"], ["due", "截止"], ["updated", "更新"] ].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
         <button type="button" className="type-link rounded-sm border border-border px-3" onClick={() => setFilter({ ascending: !ascending })}>{ascending ? "升序" : "降序"}</button>
@@ -429,7 +428,7 @@ function localDay() {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
-function compareRow(a: WorkItem, b: WorkItem, key: SortKey) {
+function compareRow(a: WorkItem, b: WorkItem, key: ListSortColumn) {
   if (key === "key") return a.key.localeCompare(b.key);
   if (key === "title") return a.title.localeCompare(b.title, "zh");
   if (key === "priority") return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
@@ -447,8 +446,8 @@ function Header({
   onClick,
 }: {
   label: string;
-  column: SortKey;
-  sortKey: SortKey;
+  column: ListSortColumn;
+  sortKey: ListSortColumn;
   ascending: boolean;
   onClick: () => void;
 }) {

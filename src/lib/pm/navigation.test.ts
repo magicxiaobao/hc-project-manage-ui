@@ -262,7 +262,10 @@ it("drops invalid list context and does not treat cancelled as absent", () => {
   assert.equal(parseProjectViewSearch({ priority: "all", grouped: true, closedGroups: [] }).priority, undefined);
   assert.equal(parseProjectViewSearch({ grouped: true }).grouped, undefined);
   assert.equal(parseProjectViewSearch({ closedGroups: [] }).closedGroups, undefined);
-  assert.equal(parseProjectViewSearch({ scope: "board", priority: "urgent", grouped: "false" }).scope, undefined);
+  const invalidListContext = parseProjectViewSearch({ scope: "board", priority: "urgent", grouped: "false" });
+  assert.equal(invalidListContext.scope, undefined);
+  assert.equal(invalidListContext.priority, undefined);
+  assert.equal(invalidListContext.grouped, undefined);
 });
 
 it("names the current sort direction and leaves other columns unsorted", () => {
@@ -271,5 +274,6 @@ it("names the current sort direction and leaves other columns unsorted", () => {
     direction: "降序",
   });
   assert.deepEqual(headerSortState("key", "key", true), { ariaSort: "ascending", direction: "升序" });
+  assert.deepEqual(headerSortState("key", "key", undefined), { ariaSort: "descending", direction: "降序" });
   assert.deepEqual(headerSortState("title", "key", true), { ariaSort: "none", direction: null });
 });
