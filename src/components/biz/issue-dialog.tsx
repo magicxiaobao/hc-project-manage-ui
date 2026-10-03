@@ -202,6 +202,7 @@ export function IssueDialog({
           <div className="mt-6">
             <DiscussionPanel
               key={item.id}
+              itemId={item.id}
               comments={comments}
               feeds={feeds}
               histories={histories}
