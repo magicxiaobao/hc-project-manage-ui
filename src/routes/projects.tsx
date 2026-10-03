@@ -1,14 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button, Card, CardBody, Chip, Spinner } from "@heroui/react";
-import { useEffect, useState } from "react";
-import { PageHeading, ProjectCard } from "@/components/biz";
+import { useEffect } from "react";
+import { PageHeading } from "@/components/biz";
 import { AppShell } from "@/components/pm/shell";
-import { columnOf } from "@/lib/pm/domain";
-import { usePm } from "@/lib/pm/store";
-import { ApiBusinessError } from "@/lib/api/client";
+import { DemoProjectList } from "@/components/pm/demo-project-list";
 import { useAuthStore } from "@/lib/api/auth-store";
-import { projectApi } from "@/lib/api/project";
-import type { ProjectResponse } from "@/lib/api/types";
+import { toUserMessage, useProjectList } from "@/lib/query";
 
 export const Route = createFileRoute("/projects")({ component: ProjectsPage });
 
@@ -21,49 +18,17 @@ function ProjectsPage() {
 }
 
 /**
- * Phase 0 垂直切片：已登录时走真实后端 /project/v1/findByPage 渲染项目列表。
+ * P1 p1-store-migration：已登录时走 react-query useProjectList
+ *（POST /project/v1/findByPage），不再直调 projectApi、不再引用 usePm 演示 store。
  */
 function LiveProjectList() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<ProjectResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { data, isLoading, isError, error, refetch, isRefetching } = useProjectList({
+    page: 1,
+    pageSize: 100,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    projectApi
-      .getProjectList({ page: 1, pageSize: 100 })
-      .then((page) => {
-        if (!cancelled) setProjects(page.list);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof ApiBusinessError ? err.message : "加载项目列表失败");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  if (error) {
-    return (
-      <div className="flex items-center gap-3 py-8 text-sm text-danger">
-        <span>加载失败：{error}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onPress={() => {
-            setError(null);
-            setReloadKey((key) => key + 1);
-          }}
-        >
-          重试
-        </Button>
-      </div>
-    );
-  }
-  if (!projects) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-default-500">
         <Spinner size="sm" />
@@ -71,6 +36,24 @@ function LiveProjectList() {
       </div>
     );
   }
+  if (isError) {
+    return (
+      <div className="flex items-center gap-3 py-8 text-sm text-danger">
+        <span>加载失败：{toUserMessage(error, "加载项目列表失败")}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          isDisabled={isRefetching}
+          onPress={() => {
+            void refetch();
+          }}
+        >
+          重试
+        </Button>
+      </div>
+    );
+  }
+  const projects = data?.list ?? [];
   if (projects.length === 0) {
     return <p className="py-8 text-sm text-default-500">暂无项目</p>;
   }
@@ -109,9 +92,6 @@ function LiveProjectList() {
 function ProjectsBody() {
   const navigate = useNavigate();
   const { isAuthenticated, hydrate, logout } = useAuthStore();
-  const projects = usePm((state) => state.projects);
-  const items = usePm((state) => state.items);
-  const people = usePm((state) => state.people);
 
   useEffect(() => {
     hydrate();
@@ -143,31 +123,8 @@ function ProjectsBody() {
           </Button>
         </div>
       </div>
-      {isAuthenticated ? (
-        <LiveProjectList />
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {projects.map((project) => {
-            const owned = items.filter((item) => item.projectId === project.id);
-            const open = owned.filter((item) => {
-              const column = columnOf(item.kind, item.status);
-              return column !== "done" && column !== "cancelled";
-            }).length;
-            return (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                lead={people.find((person) => person.id === project.leadId)}
-                openCount={open}
-                total={owned.length}
-                onOpen={() => {
-                  void navigate({ to: "/p/$projectKey", params: { projectKey: project.key } });
-                }}
-              />
-            );
-          })}
-        </div>
-      )}
+      {/* P1 p1-store-migration：登录态走 react-query，演示分支已抽为 DemoProjectList；本路由不再引用 usePm。 */}
+      {isAuthenticated ? <LiveProjectList /> : <DemoProjectList />}
     </div>
   );
 }

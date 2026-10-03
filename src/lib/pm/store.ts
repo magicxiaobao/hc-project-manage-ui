@@ -46,14 +46,7 @@ import { useAuthStore } from "../api/auth-store";
 
 const STORAGE_KEY = "hc-pm-sample-v1";
 
-/**
- * 后端模式（已登录）下演示数据只读：演示 store 的一切写入动作直接拒绝，
- * 返回 { ok: false } 让调用方按既有约定 toast 提示。已登录时项目列表等
- * 走真实后端，/p/* 等演示路由展示的仍是本地种子数据，写入它们只会静默
- * 篡改演示数据而不会同步到后端。等 Phase 1 接入后端项目详情后，
- * 演示路由将被真实数据替换，此门控随之移除。
- */
-export const BACKEND_READONLY_MESSAGE = "后端模式下演示数据为只读，项目数据将在 Phase 1 接入后端。";
+export const BACKEND_READONLY_MESSAGE = "后端模式下演示数据为只读（缺陷/测试/版本/敏捷等模块将在后续阶段接入后端）。";
 
 function backendReadOnly(): boolean {
   try {
@@ -62,6 +55,26 @@ function backendReadOnly(): boolean {
     return false;
   }
 }
+
+/**
+ * P1 迁移状态声明（p1-store-migration，2026-10-04）。
+ *
+ * 已迁移（登录态一律走 react-query @/lib/query hooks，禁止再经本 store 读写）：
+ * - 项目列表/新建/详情：useProjectList / useCreateProject / useProjectIdByKey+useProjectDetail
+ * - 需求列表/详情/追溯：useRequirementList / useRequirementDetail / useRequirementTrace 等
+ * - 任务列表/详情/新建：useTaskList / useTaskDetail / useCreateTask 等
+ *
+ * 未迁移（仍由本 store 承载，供未登录演示与后续 phase 使用；P2 缺陷/测试/版本、
+ * P3 看板/Sprint/Backlog/甘特/依赖、P4 仪表盘/工时/通知/工作台、P5 用户/设置）：
+ * items/comments/histories/testCases/testRuns/testExecutions/workLogs/dependencies/
+ * boards/sprints/versions/releases/suites/environments/notices/feeds 等选择器与写入动作。
+ *
+ * backendReadOnly 门控保留：已登录时未迁移域仍展示本地种子数据，写入只会静默
+ * 偏离后端，故继续拒绝；待 P5 完成后随演示数据一起退役。
+ *
+ * @deprecated 标记仅打在 P1 已迁移的动作上（见 createProject），表示新代码
+ * 不得再调用；未迁移域的动作保持可用。
+ */
 
 export interface PmData {
   people: Person[];
@@ -126,6 +139,10 @@ interface PmActions {
   completeSprint: (id: string) => { ok: true } | { ok: false; message: string };
   transitionVersion: (id: string, to: VersionStatus) => PmActionResult;
   createVersion: (input: { projectId: string; name: string; versionNumber: string; plannedReleaseDate: string; description: string }) => { ok: true } | { ok: false; message: string };
+  /**
+   * @deprecated P1 已迁移：登录态项目创建请用 useCreateProject（@/lib/query）。
+   * 仅未登录演示路径（DemoCreateProject）可继续使用。
+   */
   createProject: (input: { key: string; name: string; summary: string; leadId: string }) => { ok: true; key: string } | { ok: false; message: string };
   updateSprint: (id: string, patch: Partial<Pick<Sprint, "start" | "end">>) => PmActionResult;
   updateVersion: (id: string, patch: Partial<Pick<ReleaseVersion, "plannedReleaseDate">>) => PmActionResult;
@@ -533,6 +550,7 @@ export const usePm = create<PmState>((set, get) => ({
     set({ versions: [...get().versions, entry] });
     return { ok: true };
   },
+  /** @deprecated P1 已迁移：登录态项目创建请用 useCreateProject（@/lib/query）。 */
   createProject: (input) => {
     if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     const key = input.key.trim().toUpperCase();
