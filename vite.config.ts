@@ -150,6 +150,14 @@ export default defineConfig(({ command, isPreview }) => ({
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    // Phase 0: /api 反代到本机后端（与 hc-project-manage 老前端一致），避免浏览器直连跨域
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8089",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/api/, ""),
+      },
+    },
   },
   preview: {
     host: "127.0.0.1",
