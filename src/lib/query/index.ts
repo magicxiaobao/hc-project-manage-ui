@@ -9,5 +9,5 @@
 export { createQueryClient, isRetryableQueryError } from './client';
 export { queryKeys } from './keys';
 export { isAuthExpiredError, toUserMessage } from './error';
-export { useProjectDetail, useProjectEnums, useProjectList } from './hooks/useProjects';
+export { useCreateProject, useProjectDetail, useProjectEnums, useProjectList } from './hooks/useProjects';
 export type { ProjectListParams } from './hooks/useProjects';

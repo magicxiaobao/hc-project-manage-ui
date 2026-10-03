@@ -16,10 +16,10 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient, isRetryableQueryError } from '../client';
 import { queryKeys } from '../keys';
 import { isAuthExpiredError, toUserMessage } from '../error';
-import { useProjectList } from '../hooks/useProjects';
+import { useCreateProject, useProjectList } from '../hooks/useProjects';
 import { api, ApiBusinessError, HttpResponseError } from '../../api/client';
 import { projectApi } from '../../api/project';
-import type { PageResult, ProjectResponse } from '../../api/types';
+import type { PageResult, ProjectCreatePayload, ProjectResponse } from '../../api/types';
 
 const businessError = (code: number, msg = '业务错误') =>
   new ApiBusinessError({ code, msg, result: null }, 200);
@@ -167,5 +167,44 @@ describe('useProjectList 数据链路（mock api.post）', () => {
     expect(html).toContain('loading');
     // 服务端渲染不触发 queryFn
     expect(postSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useCreateProject 数据链路（mock api.post）', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('走 POST /project/v1/createProject 并返回新建 id，成功后项目域缓存被失效', async () => {
+    const payload: ProjectCreatePayload = {
+      projectName: '冒烟项目',
+      projectKey: 'SMOKE',
+      description: '',
+      projectType: 'agile',
+      startDate: null,
+      endDate: null,
+      projectManagerId: 1,
+    };
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue(7);
+    const client = createQueryClient();
+    // 预置列表缓存，验证失效确实命中项目域
+    const listKey = queryKeys.project.list({ page: 1, pageSize: 100, bean: {} });
+    client.setQueryData(listKey, { list: [], total: 0, pageNumber: 1, pageSize: 100 });
+    let mutateAsync: ((data: ProjectCreatePayload) => Promise<number>) | null = null;
+    function SmokeCreate() {
+      const mutation = useCreateProject();
+      mutateAsync = mutation.mutateAsync;
+      return null;
+    }
+    renderToString(
+      <QueryClientProvider client={client}>
+        <SmokeCreate />
+      </QueryClientProvider>,
+    );
+    expect(mutateAsync).not.toBeNull();
+    const id = await mutateAsync!(payload);
+    expect(id).toBe(7);
+    expect(postSpy).toHaveBeenCalledWith('/project/v1/createProject', payload);
+    expect(client.getQueryState(listKey)?.isInvalidated).toBe(true);
   });
 });

@@ -7,9 +7,9 @@
  *   保证同一语义的查询 key 形状一致，缓存不被拆散
  * - 详情 hook 的 id 为 null/undefined 时 disabled，不发起请求
  */
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { projectApi } from '../../api/project';
-import type { ProjectQuery } from '../../api/types';
+import type { ProjectCreatePayload, ProjectQuery } from '../../api/types';
 import { queryKeys } from '../keys';
 
 export interface ProjectListParams {
@@ -49,5 +49,19 @@ export function useProjectEnums() {
   return useQuery({
     queryKey: queryKeys.project.enums(),
     queryFn: () => projectApi.getEnums(),
+  });
+}
+
+/**
+ * 创建项目：走 POST /project/v1/createProject。
+ * 成功后失效项目域全部缓存，/projects 列表自动刷新。
+ */
+export function useCreateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ProjectCreatePayload) => projectApi.createProject(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.project.all });
+    },
   });
 }

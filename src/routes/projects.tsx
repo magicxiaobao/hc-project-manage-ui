@@ -130,13 +130,9 @@ function ProjectsBody() {
               登录后端
             </Button>
           )}
-          {/* Phase 0：后端模式暂不提供“新建项目”——/projects/new 只写本地 usePm 演示数据，
-              不会发送到后端，会造成“建了但后端没有”的误解。待后端创建接口接入后再恢复。 */}
-          {!isAuthenticated && (
-            <Button variant="primary" onPress={() => void navigate({ to: "/projects/new" })}>
-              新建项目
-            </Button>
-          )}
+          <Button variant="primary" onPress={() => void navigate({ to: "/projects/new" })}>
+            新建项目
+          </Button>
         </div>
       </div>
       {isAuthenticated ? (
