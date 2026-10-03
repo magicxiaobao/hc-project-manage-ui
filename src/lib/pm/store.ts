@@ -124,7 +124,7 @@ interface PmActions {
   }) => string;
   startSprint: (id: string) => { ok: true } | { ok: false; message: string };
   completeSprint: (id: string) => { ok: true } | { ok: false; message: string };
-  transitionVersion: (id: string, to: VersionStatus) => void;
+  transitionVersion: (id: string, to: VersionStatus) => PmActionResult;
   createVersion: (input: { projectId: string; name: string; versionNumber: string; plannedReleaseDate: string; description: string }) => { ok: true } | { ok: false; message: string };
   createProject: (input: { key: string; name: string; summary: string; leadId: string }) => { ok: true; key: string } | { ok: false; message: string };
   updateSprint: (id: string, patch: Partial<Pick<Sprint, "start" | "end">>) => void;
@@ -505,10 +505,11 @@ export const usePm = create<PmState>((set, get) => ({
     return { ok: true };
   },
   transitionVersion: (id, to) => {
-    if (backendReadOnly()) return;
+    if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };
     set({
       versions: get().versions.map((entry) => (entry.id === id ? { ...entry, status: to } : entry)),
     });
+    return { ok: true };
   },
   createVersion: (input) => {
     if (backendReadOnly()) return { ok: false, message: BACKEND_READONLY_MESSAGE };

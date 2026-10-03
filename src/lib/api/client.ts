@@ -188,6 +188,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
           if (!authStillCurrent()) {
             throw new ApiBusinessError({ code: 10109, msg: '登录已过期，请重新登录', result: null }, 401);
           }
+          // 在途期间令牌已被轮转（如并发请求的刷新先成功，代际不变）：
+          // 该 401 来自旧令牌，不再触发重复刷新（否则会反复轮转凭证并重放），
+          // 直接用新令牌重放一次。
+          const currentToken = readToken();
+          if (currentToken && currentToken !== token) {
+            return request<T>(path, { ...init, _retry: true });
+          }
           const refreshed = await refreshOnce();
           if (refreshed) {
             return request<T>(path, { ...init, _retry: true });

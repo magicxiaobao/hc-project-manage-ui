@@ -412,6 +412,54 @@ describe('会话代际', () => {
     expect(memStore.get('refreshToken')).toBe('refresh-1');
     expect(unauthorized).toBe(0);
   });
+
+  it('请求在途期间令牌被轮转：旧令牌的迟到 401 不再重复刷新，直接用新令牌重放', async () => {
+    // 请求带着旧 token 发出；在途期间并发请求的刷新先成功，存储已轮转为新 token（代际不变）
+    memStore.set('token', 'expired-a');
+    memStore.set('refreshToken', 'refresh-1');
+    let refreshCalls = 0;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => {} });
+    client.setSessionGenerationReader(() => 1);
+    client.setTokenRefresher(async () => {
+      refreshCalls++;
+      return true;
+    });
+
+    const resolvers: Array<(res: Response) => void> = [];
+    const fetchMock = vi.fn().mockImplementation(
+      () => new Promise<Response>((r) => { resolvers.push(r); }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = client.get('/auth/v1/me').catch((e) => e);
+    // 401 到达前，并发请求的刷新先完成并落盘新凭证
+    memStore.set('token', 'fresh-b');
+    memStore.set('refreshToken', 'refresh-2');
+    // 旧令牌的迟到 401 到达
+    resolvers[0](
+      new Response(JSON.stringify({ code: 10109, msg: 'expired', result: null }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    // 等待重放请求发出后，以新令牌的身份返回成功
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    resolvers[1](
+      new Response(JSON.stringify({ code: 1, msg: 'ok', result: { hello: 1 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const result = await pending;
+    expect(result).toEqual({ hello: 1 });
+    // 没有触发第二次刷新：没有反复轮转凭证
+    expect(refreshCalls).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // 重放请求携带的是轮转后的新令牌
+    const [, retryInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect((retryInit.headers as Headers).get('token')).toBe('fresh-b');
+    expect(memStore.get('token')).toBe('fresh-b');
+  });
 });
 
 describe('项目列表契约', () => {
