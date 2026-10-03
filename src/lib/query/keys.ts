@@ -15,6 +15,8 @@ function domainKeys(domain: 'project' | 'requirement' | 'task') {
     list: (params: Record<string, unknown> = {}) => [...all, 'list', params] as const,
     /** 详情查询 */
     detail: (id: number | string) => [...all, 'detail', id] as const,
+    /** 按业务 key（项目 key 等）解析 id 的查询 */
+    byKey: (key: string) => [...all, 'byKey', key] as const,
     /** 枚举/选项查询 */
     enums: () => [...all, 'enums'] as const,
   };

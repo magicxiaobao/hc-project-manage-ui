@@ -24,6 +24,7 @@ function ProjectsPage() {
  * Phase 0 垂直切片：已登录时走真实后端 /project/v1/findByPage 渲染项目列表。
  */
 function LiveProjectList() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectResponse[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -88,9 +89,16 @@ function LiveProjectList() {
             <span className="type-meta">
               状态 {p.status} · 负责人 {p.projectManagerName ?? "未指定"} · 成员 {p.memberCount ?? 0} 人
             </span>
-            {/* Phase 0：后端项目暂不提供“进入项目”跳转——目标路由（/p/$projectKey）只从本地
-                usePm 种子数据解析项目，跳转会导致“没有找到这个项目”或误操作 demo 数据。
-                待后端项目路由接入后再恢复。 */}
+            {/* P1 p1-project-detail-live：后端项目可进入 /p/$projectKey，路由内解析 projectKey → id 后走 findById。 */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onPress={() => {
+                void navigate({ to: "/p/$projectKey", params: { projectKey: p.projectKey } });
+              }}
+            >
+              进入项目
+            </Button>
           </CardBody>
         </Card>
       ))}
