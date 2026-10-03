@@ -502,9 +502,17 @@ function StoryPointsCell({ itemKey, value, onWrite }: { itemKey: string; value: 
       }}
     >
       <NumberField.Group className="h-8">
-        <NumberField.DecrementButton onPointerDown={() => { fromStepper.current = true; }} />
-        <NumberField.Input />
-        <NumberField.IncrementButton onPointerDown={() => { fromStepper.current = true; }} />
+        <NumberField.DecrementButton
+          onPointerDown={() => { fromStepper.current = true; }}
+          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fromStepper.current = true; }}
+        />
+        <NumberField.Input
+          onKeyDown={(event) => { if (event.key === "ArrowUp" || event.key === "ArrowDown") fromStepper.current = true; }}
+        />
+        <NumberField.IncrementButton
+          onPointerDown={() => { fromStepper.current = true; }}
+          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") fromStepper.current = true; }}
+        />
       </NumberField.Group>
     </NumberField>
   );
