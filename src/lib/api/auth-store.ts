@@ -79,6 +79,12 @@ interface AuthState {
   refreshAccessToken: () => Promise<boolean>;
 }
 
+/**
+ * 会话代际：logout/login 使代际递增。refreshAccessToken 在完成后核对代际，
+ * 丢弃“登出后才返回”的刷新结果，避免并发时序把已登出的用户重新置为登录态。
+ */
+let sessionGeneration = 0;
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   token: null,
@@ -94,11 +100,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   login: async (username: string, password: string) => {
     const res = await authApi.login({ username, password });
+    sessionGeneration += 1;
     persistLogin(res.token, res.refreshToken, res.userInfo);
     set({ user: res.userInfo, token: res.token, isAuthenticated: true });
   },
 
   logout: async () => {
+    // 先递增代际：使正在进行的刷新完成后被丢弃，不会恢复已登出的会话
+    sessionGeneration += 1;
     const refreshToken = readStorage(REFRESH_TOKEN_STORAGE_KEY);
     if (refreshToken) {
       try {
@@ -115,8 +124,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const refreshToken = readStorage(REFRESH_TOKEN_STORAGE_KEY);
     const user = get().user ?? getPersistedUser();
     if (!refreshToken || !user) return false;
+    const generation = sessionGeneration;
     try {
       const res = await authApi.refreshToken(refreshToken, user.userId);
+      // 登出/login 已发生：丢弃本次刷新结果，不恢复凭证
+      if (generation !== sessionGeneration) return false;
       const nextUser: AuthenticatedUser = { ...user, userId: res.userId };
       persistLogin(res.token, res.refreshToken, nextUser);
       set({ user: nextUser, token: res.token, isAuthenticated: true });
