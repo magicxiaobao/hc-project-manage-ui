@@ -142,7 +142,11 @@ export function useUnsavedChangesGuard(dirty: boolean) {
 
   /** 提交成功后调用：放行随后的程序化跳转（state 回落前的 ref 级别放行） */
   const markClean = useCallback(() => {
-    cleanRef.current = true;
+    // P2：必须按当前 dirty 置位，不能无条件 true。干净表单直接保存时 dirty
+    // 一直是 false，[dirty] 重布防 effect 不会触发；若残留 cleanRef=true，
+    // 下一次打开改字段变脏后会被误放行、失去保护。干净态本来就放行，
+    // 不需要保留豁免标记。
+    cleanRef.current = dirtyRef.current;
   }, []);
 
   const dialog = (
