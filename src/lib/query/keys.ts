@@ -33,6 +33,10 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect') {
     comments: (id: number | string, params: Record<string, unknown> = {}) => [...all, 'comments', id, params] as const,
     /** 按业务 key（项目 key 等）解析 id 的查询 */
     byKey: (key: string) => [...all, 'byKey', key] as const,
+    /** 缺陷看板数据：GET /defect/v1/board?projectId= */
+    board: (projectId: number | null = null) => [...all, 'board', projectId] as const,
+    /** 缺陷统计：GET /defect/v1/statistics?projectId= */
+    statistics: (projectId: number | null = null) => [...all, 'statistics', projectId] as const,
     /** 枚举/选项查询 */
     enums: () => [...all, 'enums'] as const,
   };

@@ -11,6 +11,7 @@ import { Button, Spinner } from "@heroui/react";
 import { EmptyHint } from "@/components/biz";
 import { BoardView } from "@/components/pm/board-view";
 import { DefectListLive } from "@/components/pm/defect-list-live";
+import { DefectViewTabs } from "@/components/pm/defect-board-live";
 import { useAuthStore } from "@/lib/api/auth-store";
 import { toUserMessage, useProjectIdByKey } from "@/lib/query";
 
@@ -56,5 +57,12 @@ function LiveDefectList({ projectKey }: { projectKey: string }) {
     );
   }
 
-  return <DefectListLive projectId={resolution.data} projectKey={projectKey} />;
+  return (
+    <div>
+      <div className="mx-auto max-w-5xl px-4 pt-4 md:px-6 md:pt-6">
+        <DefectViewTabs projectKey={projectKey} active="list" />
+      </div>
+      <DefectListLive projectId={resolution.data} projectKey={projectKey} />
+    </div>
+  );
 }

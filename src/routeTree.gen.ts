@@ -34,6 +34,7 @@ import { Route as PProjectKeyTraceRouteImport } from './routes/p/$projectKey/tra
 import { Route as PProjectKeyWorklogsRouteImport } from './routes/p/$projectKey/worklogs'
 import { Route as PProjectKeyDefectsIndexRouteImport } from './routes/p/$projectKey/defects/index'
 import { Route as PProjectKeyDefectsDefectIdRouteImport } from './routes/p/$projectKey/defects/$defectId'
+import { Route as PProjectKeyDefectsBoardRouteImport } from './routes/p/$projectKey/defects/board'
 import { Route as PProjectKeyIssuesIndexRouteImport } from './routes/p/$projectKey/issues/index'
 import { Route as PProjectKeyIssuesTaskIdRouteImport } from './routes/p/$projectKey/issues/$taskId'
 import { Route as PProjectKeyIssuesNewRouteImport } from './routes/p/$projectKey/issues/new'
@@ -167,6 +168,11 @@ const PProjectKeyDefectsDefectIdRoute =
     path: '/$defectId',
     getParentRoute: () => PProjectKeyDefectsRoute,
   } as any)
+const PProjectKeyDefectsBoardRoute = PProjectKeyDefectsBoardRouteImport.update({
+  id: '/board',
+  path: '/board',
+  getParentRoute: () => PProjectKeyDefectsRoute,
+} as any)
 const PProjectKeyIssuesIndexRoute = PProjectKeyIssuesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -225,6 +231,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey/': typeof PProjectKeyIndexRoute
   '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
+  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
   '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
   '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
   '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
@@ -254,6 +261,7 @@ export interface FileRoutesByTo {
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey': typeof PProjectKeyIndexRoute
   '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
+  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
   '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
   '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
   '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
@@ -288,6 +296,7 @@ export interface FileRoutesById {
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey/': typeof PProjectKeyIndexRoute
   '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
+  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
   '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
   '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
   '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
@@ -323,6 +332,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey/'
     | '/p/$projectKey/defects/$defectId'
+    | '/p/$projectKey/defects/board'
     | '/p/$projectKey/issues/$taskId'
     | '/p/$projectKey/issues/new'
     | '/p/$projectKey/items/$itemKey'
@@ -352,6 +362,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey'
     | '/p/$projectKey/defects/$defectId'
+    | '/p/$projectKey/defects/board'
     | '/p/$projectKey/issues/$taskId'
     | '/p/$projectKey/issues/new'
     | '/p/$projectKey/items/$itemKey'
@@ -385,6 +396,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey/'
     | '/p/$projectKey/defects/$defectId'
+    | '/p/$projectKey/defects/board'
     | '/p/$projectKey/issues/$taskId'
     | '/p/$projectKey/issues/new'
     | '/p/$projectKey/items/$itemKey'
@@ -581,6 +593,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyDefectsDefectIdRouteImport
       parentRoute: typeof PProjectKeyDefectsRoute
     }
+    '/p/$projectKey/defects/board': {
+      id: '/p/$projectKey/defects/board'
+      path: '/board'
+      fullPath: '/p/$projectKey/defects/board'
+      preLoaderRoute: typeof PProjectKeyDefectsBoardRouteImport
+      parentRoute: typeof PProjectKeyDefectsRoute
+    }
     '/p/$projectKey/issues/': {
       id: '/p/$projectKey/issues/'
       path: '/'
@@ -628,11 +647,13 @@ declare module '@tanstack/react-router' {
 
 interface PProjectKeyDefectsRouteChildren {
   PProjectKeyDefectsDefectIdRoute: typeof PProjectKeyDefectsDefectIdRoute
+  PProjectKeyDefectsBoardRoute: typeof PProjectKeyDefectsBoardRoute
   PProjectKeyDefectsIndexRoute: typeof PProjectKeyDefectsIndexRoute
 }
 
 const PProjectKeyDefectsRouteChildren: PProjectKeyDefectsRouteChildren = {
   PProjectKeyDefectsDefectIdRoute: PProjectKeyDefectsDefectIdRoute,
+  PProjectKeyDefectsBoardRoute: PProjectKeyDefectsBoardRoute,
   PProjectKeyDefectsIndexRoute: PProjectKeyDefectsIndexRoute,
 }
 

@@ -12,9 +12,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { defectApi } from '../../api/defect';
 import type {
+  DefectBoardResponse,
   DefectCreatePayload,
   DefectQueryRequest,
   DefectSeverityChangePayload,
+  DefectStatisticsResponse,
   DefectStatus,
   DefectStatusOption,
   DefectTransitionPayload,
@@ -61,6 +63,33 @@ export function useDefectStatusOptions() {
     queryKey: queryKeys.defect.enums(),
     queryFn: (): Promise<DefectStatusOption[]> => defectApi.getStatusOptions(),
     enabled: isAuthenticated,
+  });
+}
+
+/**
+ * 缺陷看板数据：走 GET /defect/v1/board?projectId=（全量，非分页），
+ * 返回 defectsByStatus（按状态分组，空状态键缺失，消费端按 Partial 处理）与
+ * columns（后端 DefectBoardColumnCatalog 给出的十列顺序/中文名/颜色）。
+ * projectId 无效时 disabled（看板始终按项目过滤）。
+ */
+export function useDefectBoard(projectId: number | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.defect.board(projectId ?? null),
+    queryFn: (): Promise<DefectBoardResponse> => defectApi.getDefectBoardData(projectId as number),
+    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+  });
+}
+
+/**
+ * 缺陷统计：走 GET /defect/v1/statistics?projectId=。
+ * 注意三种分布的 key 口径不统一（severityStats 中文标签 / priorityStats 英文
+ * identity / typeStats 原始字符串），见 defect-types.ts 说明。
+ */
+export function useDefectStatistics(projectId: number | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.defect.statistics(projectId ?? null),
+    queryFn: (): Promise<DefectStatisticsResponse> => defectApi.getDefectStatistics(projectId as number),
+    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
   });
 }
 

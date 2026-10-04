@@ -41,16 +41,14 @@ import {
 } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
 import { priorityLabel, statusLabel } from "@/lib/pm/domain";
-import { useAuthStore } from "@/lib/api/auth-store";
 import { parseOptionalPositiveInt } from "@/lib/task-create";
+import { DefectTransitionDialog } from "@/components/pm/defect-transition-dialog";
 import {
   buildDefectUpdatePayload,
   editFormFromDefect,
 } from "@/lib/defect-detail";
 import type { DefectEditFormInput } from "@/lib/defect-detail";
 import {
-  defectNeedsActor,
-  defectNeedsReason,
   defectTransitionLabel,
   defectTransitionTargets,
   toUserMessage,
@@ -58,9 +56,7 @@ import {
   useDefectDetail,
   useProjectIdByKey,
   useUpdateDefect,
-  useUpdateDefectStatus,
 } from "@/lib/query";
-import type { DefectActorField } from "@/lib/query";
 import {
   DEFECT_PRIORITIES,
   DEFECT_SEVERITIES,
@@ -68,10 +64,8 @@ import {
 import type {
   DefectSeverity,
   DefectStatus,
-  DefectTransitionPayload,
 } from "@/lib/api/defect-types";
 
-const REASON_MAX_LENGTH = 500;
 const SEVERITY_REASON_MAX_LENGTH = 500;
 
 const SEVERITY_OPTIONS = DEFECT_SEVERITIES.map((severity) => ({
@@ -83,12 +77,6 @@ const PRIORITY_OPTIONS = DEFECT_PRIORITIES.map((priority) => ({
   id: priority,
   label: priorityLabel(priority),
 }));
-
-const ACTOR_FIELD_LABELS: Record<DefectActorField, string> = {
-  assignee: "处理人用户 ID",
-  tester: "测试人用户 ID",
-  verifier: "验证人用户 ID",
-};
 
 /** 后端 createdAt/updatedAt 为秒级时间戳，转本地时间展示 */
 function formatEpochSecond(value: number | null | undefined): string {
@@ -139,21 +127,11 @@ export function DefectDetailLive({
   // 上下文里展示并允许操作其它项目的缺陷。解析中/解析失败时不误判。
   const routeProjectQuery = useProjectIdByKey(projectKey);
 
-  // →VERIFIED 的验证人恒为当前登录者：后端在 VERIFY 事件上用 operatorId
-  // 覆盖请求里的 verifierId，但 transitionDefect 的 requireVerifier 仍要求
-  // 请求携带 verifierId（fail-fast）。此处取当前登录用户 ID（与老前端
-  // actorId 语义一致），不再要求手填。
-  const sessionUserId = useAuthStore((state) => state.user?.userId);
-  const sessionVerifierId = parseOptionalPositiveInt(sessionUserId ?? "");
-
-  const transitionMutation = useUpdateDefectStatus();
   const updateMutation = useUpdateDefect();
   const severityMutation = useChangeDefectSeverity();
 
+  // 状态流转弹窗（共享 DefectTransitionDialog，预设目标 = 按钮选择的状态）
   const [transitionTarget, setTransitionTarget] = useState<DefectStatus | null>(null);
-  const [reason, setReason] = useState("");
-  const [actorInput, setActorInput] = useState("");
-  const [transitionError, setTransitionError] = useState<string | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<DefectEditFormInput | null>(null);
@@ -213,67 +191,6 @@ export function DefectDetailLive({
     : "当前无法确认该记录归属于此项目，操作区已禁用。";
 
   const targets = defectTransitionTargets(detail.status);
-  const transitionActor = transitionTarget != null ? defectNeedsActor(transitionTarget) : null;
-  const transitionReasonRequired =
-    transitionTarget != null && defectNeedsReason(detail.status, transitionTarget);
-
-  const openTransition = (toStatus: DefectStatus) => {
-    transitionMutation.reset();
-    setTransitionTarget(toStatus);
-    setReason("");
-    setActorInput("");
-    setTransitionError(null);
-  };
-
-  const submitTransition = () => {
-    if (transitionTarget == null) return;
-    if (transitionMutation.isPending) return;
-    // 弹窗打开后项目归属若变为未确认（如路由项目解析翻转），禁止提交
-    if (!projectContextVerified) {
-      setTransitionError("项目归属已变化，无法提交。请刷新页面后重试。");
-      return;
-    }
-    const payload: DefectTransitionPayload = { id: defectId, status: transitionTarget };
-
-    const trimmedReason = reason.trim();
-    if (transitionReasonRequired && !trimmedReason) {
-      setTransitionError("请填写流转原因。");
-      return;
-    }
-    if (trimmedReason.length > REASON_MAX_LENGTH) {
-      setTransitionError(`流转原因不能超过 ${REASON_MAX_LENGTH} 字符。`);
-      return;
-    }
-    if (trimmedReason) payload.reason = trimmedReason;
-
-    if (transitionActor === "verifier") {
-      // 验证人恒为当前登录者（后端覆盖），取会话用户 ID；缺失则阻断
-      if (sessionVerifierId == null) {
-        setTransitionError("无法获取当前登录用户信息，无法执行验证。");
-        return;
-      }
-      payload.verifierId = sessionVerifierId;
-    } else if (transitionActor != null) {
-      const parsed = parseOptionalPositiveInt(actorInput);
-      if (parsed == null) {
-        setTransitionError(`请填写${ACTOR_FIELD_LABELS[transitionActor]}（正整数）。`);
-        return;
-      }
-      if (transitionActor === "assignee") payload.assigneeId = parsed;
-      else payload.testerId = parsed;
-    }
-
-    setTransitionError(null);
-    transitionMutation.mutate(payload, {
-      onSuccess: () => {
-        toast.success(`缺陷已流转到${defectTransitionLabel(detail.status, transitionTarget, statusLabelOf)}`);
-        setTransitionTarget(null);
-      },
-      onError: (error) => {
-        setTransitionError(`流转失败：${toUserMessage(error)}`);
-      },
-    });
-  };
 
   const openEdit = () => {
     updateMutation.reset();
@@ -441,8 +358,7 @@ export function DefectDetailLive({
                     key={toStatus}
                     size="sm"
                     variant="primary"
-                    isDisabled={transitionMutation.isPending}
-                    onPress={() => openTransition(toStatus)}
+                    onPress={() => setTransitionTarget(toStatus)}
                   >
                     {defectTransitionLabel(detail.status, toStatus, statusLabelOf)}
                   </Button>
@@ -469,58 +385,14 @@ export function DefectDetailLive({
         </p>
       )}
 
-      <AppModal
+      <DefectTransitionDialog
+        defectId={defectId}
+        fromStatus={detail.status}
+        target={transitionTarget}
         open={transitionTarget != null}
-        title={
-          transitionTarget != null
-            ? `流转到${defectTransitionLabel(detail.status, transitionTarget, statusLabelOf)}`
-            : "状态流转"
-        }
-        size="md"
-        onClose={() => {
-          if (!transitionMutation.isPending) setTransitionTarget(null);
-        }}
-      >
-        {transitionTarget != null ? (
-          <form
-            className="flex flex-col gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitTransition();
-            }}
-          >
-            {transitionActor === "verifier" ? (
-              <p className="type-body text-default-500" aria-label="验证人">
-                验证人：当前登录用户
-                {sessionVerifierId != null ? `（ID ${sessionVerifierId}）` : "（未获取到登录信息）"}。
-                后端将以当前操作者记为验证人。
-              </p>
-            ) : transitionActor != null ? (
-              <TextField value={actorInput} onChange={setActorInput} aria-label={ACTOR_FIELD_LABELS[transitionActor]}>
-                <Label>{ACTOR_FIELD_LABELS[transitionActor]}（必填，无对应人员无法完成流转）</Label>
-                <Input placeholder="输入用户 ID（正整数）" inputMode="numeric" />
-              </TextField>
-            ) : null}
-            <TextField value={reason} onChange={setReason} aria-label="流转原因">
-              <Label>{transitionReasonRequired ? "流转原因（必填，最长 500 字符）" : "流转原因（可选，最长 500 字符）"}</Label>
-              <TextArea rows={3} placeholder="为什么流转…" />
-            </TextField>
-            {transitionError ? <p className="type-body text-danger">{transitionError}</p> : null}
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                onPress={() => setTransitionTarget(null)}
-                isDisabled={transitionMutation.isPending}
-              >
-                取消
-              </Button>
-              <Button type="submit" variant="primary" isDisabled={transitionMutation.isPending}>
-                {transitionMutation.isPending ? "流转中…" : "确认流转"}
-              </Button>
-            </div>
-          </form>
-        ) : null}
-      </AppModal>
+        projectContextVerified={projectContextVerified}
+        onClose={() => setTransitionTarget(null)}
+      />
 
       <AppModal
         open={editOpen}
