@@ -208,6 +208,46 @@ export function confirmAuthoritativeRefresh(args: {
   );
 }
 
+/** r12 P1-1：看板解锁 effect 的判定结果 */
+export type BoardUnlockDecision = "unlock" | "keep-snapshot" | "settle";
+
+/**
+ * r11 P1-1 + r12 P1-1：看板解锁 effect 的判定核心（纯函数，可单测）。
+ * 输入对应 effect 在一次渲染中观察到的查询状态；snapshot 为 effect 保留的
+ * 拉取快照（代次 + 成功计数），null 表示当前没有在观察的拉取。
+ *
+ * - 仍在拉取（isFetching）：保留快照继续观察 → "keep-snapshot"；
+ * - fetchStatus=paused：暂停不是完成——不做判定、不丢快照，等恢复后继续
+ *   用同一快照判定（r11 P1-1：暂停中的 GET 不能误判为权威成功）；
+ * - 拉取结束且有快照：status=success 且成功计数严格大于拉取开始前，且期间
+ *   代次未被推进（无乐观写入、无更新的权威刷新）→ "unlock"；
+ *   否则快照使命结束 → "settle"（不清锁，只是不再观察这次拉取）；
+ * - 无快照：无事可做 → "settle"。
+ *
+ * r12 P1-1：被取代的刷新（另一入口重试把代次推到 S+1 并取消/替换了暂停中
+ * 的请求）必须由协调器把快照代次同步跟进到 S+1；否则这里的 currentSeq ===
+ * startSeq 恒不成立，重连成功后永远判 "settle"，awaitingRefresh 与
+ * refreshSucceededSignal 永久锁死。注意 markOptimisticWrite 的推进刻意
+ * 不同步快照——乐观写入介入的拉取仍要被守卫拒绝。
+ */
+export function decideBoardUnlock(args: {
+  isFetching: boolean;
+  fetchStatus: "fetching" | "paused" | "idle";
+  status: "success" | "error" | "pending";
+  dataUpdateCount: number;
+  snapshot: { startSeq: number; countAtStart: number } | null;
+  currentSeq: number;
+}): BoardUnlockDecision {
+  if (args.isFetching) return "keep-snapshot";
+  if (args.fetchStatus === "paused") return "keep-snapshot";
+  if (args.snapshot == null) return "settle";
+  const fresh =
+    args.status === "success" &&
+    args.dataUpdateCount > args.snapshot.countAtStart &&
+    args.currentSeq === args.snapshot.startSeq;
+  return fresh ? "unlock" : "settle";
+}
+
 /**
  * r9 P2-5 + r10 P2-4：列排序失败的操作级恢复——只按快照恢复列顺序，各列的
  * 卡片（其它在途/已成功的流转结果）原样保留，不做整板快照覆盖。

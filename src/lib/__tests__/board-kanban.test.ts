@@ -11,6 +11,7 @@ import {
   buildCardTransitionContext,
   cardTransitionNeedsText,
   confirmAuthoritativeRefresh,
+  decideBoardUnlock,
   moveCardInColumns,
   parseBoardColumnsWithTasks,
   restoreColumnOrder,
@@ -284,5 +285,135 @@ describe("restoreColumnOrder", () => {
     // 不复活快照里的旧卡片 201）
     expect(restored.map((c) => c.id)).toEqual([1]);
     expect(restored[0].tasks.map((t) => t.id)).toEqual([202]);
+  });
+});
+
+describe("decideBoardUnlock（r12 P1-1：暂停→另一入口重试→重连成功）", () => {
+  // 时序复刻（代次 S=6，成功计数 C=10）：
+  // 1. 卡片流转 POST 成功后 authoritativeBoardRefresh 取号 S=6，GET 离线暂停；
+  //    effect 在拉取开始时记录快照 {startSeq:6, countAtStart:10}；paused 后保留；
+  // 2. toast 重试入口再次 authoritativeBoardRefresh：代次推到 S+1=7，取消旧的
+  //    paused fetch 并起新拉取（仍暂停）；协调器把快照代次同步为 7
+  //    （task-board-live.tsx r12 修复点；markOptimisticWrite 的推进不同步）；
+  // 3. 重连：GET 真正成功，dataUpdateCount 10→11，status=success；
+  //    effect 判定必须为 unlock（→ unlockAwaitingCards：卡片解锁 + 信号递增）。
+  function replayFixedTimeline() {
+    let currentSeq = 6;
+    let snapshot: { startSeq: number; countAtStart: number } | null = {
+      startSeq: 6,
+      countAtStart: 10,
+    };
+    // 步骤 2：另一入口重试——代次推进 + 快照代次同步（组件内行为）
+    currentSeq = 7;
+    if (snapshot != null) snapshot = { ...snapshot, startSeq: currentSeq };
+    // 步骤 3：重连成功后的判定
+    return decideBoardUnlock({
+      isFetching: false,
+      fetchStatus: "idle",
+      status: "success",
+      dataUpdateCount: 11,
+      snapshot,
+      currentSeq,
+    });
+  }
+
+  it("快照跟随被取代的拉取：重连成功后解锁（卡片解锁 + 弹窗信号可递增）", () => {
+    expect(replayFixedTimeline()).toBe("unlock");
+  });
+
+  it("旧行为对照：快照代次停留 S 不跟随 → 拒绝解锁（锁死复现）", () => {
+    // 同一时序，但快照代次仍为 6（修复前：effect 仅在快照为 null 时重捕，
+    // 重试不更新快照）→ currentSeq(7) !== startSeq(6) → settle，快照被丢弃，
+    // awaitingRefresh/refreshSucceededSignal 再无解锁机会
+    const decision = decideBoardUnlock({
+      isFetching: false,
+      fetchStatus: "idle",
+      status: "success",
+      dataUpdateCount: 11,
+      snapshot: { startSeq: 6, countAtStart: 10 },
+      currentSeq: 7,
+    });
+    expect(decision).toBe("settle");
+  });
+
+  it("r11 P1-1 不回退：paused 不是完成——保留快照、不解锁", () => {
+    // GET 因离线暂停时：isFetching=false、fetchStatus=paused、缓存仍 success、
+    // 计数未推进——必须 keep-snapshot，不能误判解锁也不能丢快照
+    expect(
+      decideBoardUnlock({
+        isFetching: false,
+        fetchStatus: "paused",
+        status: "success",
+        dataUpdateCount: 10,
+        snapshot: { startSeq: 6, countAtStart: 10 },
+        currentSeq: 6,
+      }),
+    ).toBe("keep-snapshot");
+  });
+
+  it("乐观写入守卫不放松：拉取期间有乐观写入推进代次 → 仍拒绝解锁", () => {
+    // 重试（快照已跟随到 7）后用户又拖了列 → markOptimisticWrite 把代次推到 8
+    // （刻意不同步快照）；重连成功也不能解锁（保守，避免本地写入冒充权威）
+    expect(
+      decideBoardUnlock({
+        isFetching: false,
+        fetchStatus: "idle",
+        status: "success",
+        dataUpdateCount: 11,
+        snapshot: { startSeq: 7, countAtStart: 10 },
+        currentSeq: 8,
+      }),
+    ).toBe("settle");
+  });
+
+  it("拉取中保留快照继续观察", () => {
+    expect(
+      decideBoardUnlock({
+        isFetching: true,
+        fetchStatus: "fetching",
+        status: "pending",
+        dataUpdateCount: 10,
+        snapshot: { startSeq: 7, countAtStart: 10 },
+        currentSeq: 7,
+      }),
+    ).toBe("keep-snapshot");
+  });
+
+  it("成功计数未推进（非真实 success dispatch）→ 不解锁", () => {
+    expect(
+      decideBoardUnlock({
+        isFetching: false,
+        fetchStatus: "idle",
+        status: "success",
+        dataUpdateCount: 10,
+        snapshot: { startSeq: 7, countAtStart: 10 },
+        currentSeq: 7,
+      }),
+    ).toBe("settle");
+  });
+
+  it("查询非 success → 不解锁", () => {
+    const base = {
+      isFetching: false,
+      fetchStatus: "idle" as const,
+      dataUpdateCount: 11,
+      snapshot: { startSeq: 7, countAtStart: 10 },
+      currentSeq: 7,
+    };
+    expect(decideBoardUnlock({ ...base, status: "error" })).toBe("settle");
+    expect(decideBoardUnlock({ ...base, status: "pending" })).toBe("settle");
+  });
+
+  it("无快照时不动作", () => {
+    expect(
+      decideBoardUnlock({
+        isFetching: false,
+        fetchStatus: "idle",
+        status: "success",
+        dataUpdateCount: 11,
+        snapshot: null,
+        currentSeq: 7,
+      }),
+    ).toBe("settle");
   });
 });

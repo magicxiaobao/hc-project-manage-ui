@@ -58,6 +58,7 @@ import {
   buildCardTransitionContext,
   cardTransitionNeedsText,
   confirmAuthoritativeRefresh,
+  decideBoardUnlock,
   moveCardInColumns,
   restoreColumnOrder,
   type KanbanBoardCard,
@@ -412,8 +413,23 @@ export function TaskBoardLive({
       return next;
     });
   }
+  // r11 P1-1：暂停中拉取的快照（代次 + 成功计数）；r12 P1-1 起声明前移——
+  // authoritativeBoardRefresh 取号后需要同步快照代次
+  const unlockFetchStartSeq = useRef<number | null>(null);
+  const unlockFetchStartCount = useRef(0);
   async function authoritativeBoardRefresh(): Promise<boolean> {
     const seq = ++boardRefreshSeq.current;
+    // r12 P1-1：请求被取代时同步 effect 快照的代次——若有暂停中的拉取快照
+    // （代次 S），本次重试把代次推到 S+1 并取代旧请求（cancelRefetch 默认
+    // true 会取消旧的 paused fetch 另起新拉取；refetchQueries 在 paused 时
+    // 直接 resolve，本次调用不等网络恢复），快照代次必须跟进到 S+1；
+    // 否则重连成功后 effect 仍用旧代次 S 判定（currentSeq=S+1≠S）拒绝解锁，
+    // awaitingRefresh/refreshSucceededSignal 永久锁死，卡片与弹窗关闭锁
+    // 无法恢复。注意：markOptimisticWrite 的推进刻意不同步——乐观写入介入
+    // 的拉取仍要被守卫拒绝（r11 P1-1 的保守语义不回退）。
+    if (unlockFetchStartSeq.current != null) {
+      unlockFetchStartSeq.current = seq;
+    }
     // r10 P2-3：用 dataUpdateCount（success dispatch 计数器）代替墙钟
     // dataUpdatedAt——同一毫秒/时钟精度受限/时钟回拨时真实 GET 成功也可能
     // 不满足严格递增；计数器与墙钟无关
@@ -464,9 +480,9 @@ export function TaskBoardLive({
    *   等恢复后继续用同一快照判定；
    * - 期间有乐观写入（代次推进）→ 守卫失败，不解锁（保守）。
    */
-  const unlockFetchStartSeq = useRef<number | null>(null);
-  const unlockFetchStartCount = useRef(0);
   useEffect(() => {
+    // 拉取开始：只在没有在途快照时记录代次与计数（r12 P1-1：被取代的刷新
+    // 由 authoritativeBoardRefresh 同步快照代次，这里不再重捕）
     if (columnsQuery.isFetching) {
       if (unlockFetchStartSeq.current == null) {
         unlockFetchStartSeq.current = boardRefreshSeq.current;
@@ -475,19 +491,26 @@ export function TaskBoardLive({
       }
       return;
     }
-    // r11 P1-1：paused 不是完成——保留快照，等恢复后继续观察
-    if (columnsQuery.fetchStatus === "paused") return;
-    if (unlockFetchStartSeq.current == null) return;
-    const startSeq = unlockFetchStartSeq.current;
-    const countAtStart = unlockFetchStartCount.current;
+    // r11 P1-1 + r12 P1-1：结束判定走纯函数 decideBoardUnlock（可单测）——
+    // paused 不是完成（保留快照）；success + 计数严格推进 + 期间代次未变
+    // 才解锁；其余情况快照使命结束（不再观察这次拉取）
+    const decision = decideBoardUnlock({
+      isFetching: columnsQuery.isFetching,
+      fetchStatus: columnsQuery.fetchStatus,
+      status: columnsQuery.status,
+      dataUpdateCount: queryClient.getQueryState(columnsKey)?.dataUpdateCount ?? 0,
+      snapshot:
+        unlockFetchStartSeq.current == null
+          ? null
+          : {
+              startSeq: unlockFetchStartSeq.current,
+              countAtStart: unlockFetchStartCount.current,
+            },
+      currentSeq: boardRefreshSeq.current,
+    });
+    if (decision === "keep-snapshot") return;
     unlockFetchStartSeq.current = null;
-    const state = queryClient.getQueryState(columnsKey);
-    const count = state?.dataUpdateCount ?? 0;
-    if (
-      state?.status === "success" &&
-      count > countAtStart &&
-      boardRefreshSeq.current === startSeq
-    ) {
+    if (decision === "unlock") {
       unlockAwaitingCards();
     }
   }, [
