@@ -2,9 +2,12 @@
  * 发布列表（P2：p2-release-lifecycle）。
  *
  * 登录态纯展示组件，不再引用 usePm 演示 store：
- * - 数据：POST /release/v1/findByPage（bean 走版本分支 { versionId }；
- *   未选版本时走项目分支 { projectId }；老前端 ReleaseList.vue 版本上下文口径）
- * - 筛选：版本（下拉）/ 发布状态（下拉），分页 page/pageSize
+ * - 数据：POST /release/v1/findByPage 全量拉取（useReleaseListAll 循环分页；
+ *   bean 走版本分支 { versionId }，未选版本时走项目分支 { projectId }；
+ *   老前端 ReleaseList.vue 版本上下文口径）。后端 ReleasePageRequest 无
+ *   status 字段，状态筛选只能在前端做：全量拉取后本地筛选、本地分页，
+ *   total/分页按筛选后结果重算（codex r24 P2-4；沿用 P3 useBoardListAll 先例）
+ * - 筛选：版本（下拉，全量版本，超 100 也可全选）/ 发布状态（下拉），分页 page/pageSize
  * - 新建草稿：ReleaseDraftCreateDialog（POST /release/v1/create；仅当所选版本
  *   状态为 FROZEN/RELEASED 时可创建，老前端 ReleaseDraft.vue
  *   releaseCreatable 口径）；成功后跳转发布详情
@@ -16,9 +19,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button, Spinner } from "@heroui/react";
-import { shouldClampPage } from "@/lib/pagination";
 import { EmptyHint, OptionSelect, PageHeading } from "@/components/biz";
-import { toUserMessage, useReleaseList, useVersionList } from "@/lib/query";
+import { toUserMessage, useReleaseListAll, useVersionListAll } from "@/lib/query";
 import { RELEASE_STATUSES, RELEASE_STATUS_LABELS, RELEASE_TYPE_LABELS } from "@/lib/api/release-types";
 import type { ReleaseResponse } from "@/lib/api/release-types";
 import { VERSION_STATUS_LABELS } from "@/lib/api/version-types";
@@ -52,11 +54,13 @@ export function ReleaseListLive({ projectId, projectKey }: { projectId: number; 
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
-  // 版本下拉选项（版本上下文）：取项目下最多 100 个版本
-  const versionOptionsQuery = useVersionList({ page: 1, pageSize: 100, projectId });
+  // 版本下拉选项（版本上下文）：全量拉取项目下所有版本。
+  // 后端按 ID 升序，单次 page:1/pageSize:100 会在版本超 100 时静默丢弃
+  // 第 101 个起的版本（codex r24 P2-10）——这里循环拉取全部（诚实口径）。
+  const versionOptionsQuery = useVersionListAll({ projectId });
   const versionOptions = useMemo(
     () =>
-      (versionOptionsQuery.data?.list ?? []).map((version) => ({
+      (versionOptionsQuery.data ?? []).map((version) => ({
         id: String(version.id),
         label: `${version.name}（${VERSION_STATUS_LABELS[version.status] ?? version.status}）`,
         status: version.status,
@@ -65,24 +69,35 @@ export function ReleaseListLive({ projectId, projectKey }: { projectId: number; 
   );
   const selectedVersion = versionOptions.find((option) => option.id === versionId) ?? null;
   const selectedVersionId = selectedVersion != null ? Number(selectedVersion.id) : null;
+  // 所选版本在（全量）下拉中反查失败：不静默回落项目级查询，诚实提示
+  //（codex r24 P2-10；全量拉取下只可能发生在版本被他人删除时）
+  const versionMissing =
+    versionId !== "" && selectedVersion == null && versionOptionsQuery.isSuccess;
   const creatable = isReleaseCreatable(selectedVersion?.status);
 
-  const listQuery = useReleaseList({
-    page,
-    pageSize: PAGE_SIZE,
+  // 发布全量拉取 + 本地状态筛选 + 本地分页（codex r24 P2-4）：
+  // 后端无 status 筛选字段，total/分页必须按筛选后结果重算，
+  // 否则"筛草稿后本页 0 条却显示共 100 条"是误导。
+  const listQuery = useReleaseListAll({
     projectId,
     versionId: selectedVersionId,
   });
 
-  const total = listQuery.data?.total ?? 0;
+  const filtered = useMemo(() => {
+    const list = listQuery.data ?? [];
+    if (!status) return list;
+    return list.filter((release) => release.status === status);
+  }, [listQuery.data, status]);
+
+  const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // 数据返回后若当前页已越界（他人增删导致 total 缩水），自动回退到最后一页重新查询，
-  // 避免出现"第 2 / 1 页"且空列表的误导状态（沿用 version-list-live 的钳制语义）。
+  // 筛选/数据变化后当前页越界时回退到最后一页，避免"第 2 / 1 页"空列表。
   useEffect(() => {
-    const clamped = shouldClampPage(listQuery.isSuccess, listQuery.isFetching, page, total, PAGE_SIZE);
-    if (clamped !== null) setPage(clamped);
-  }, [listQuery.isSuccess, listQuery.isFetching, page, total]);
+    if (listQuery.isSuccess && !listQuery.isFetching && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [listQuery.isSuccess, listQuery.isFetching, page, totalPages]);
 
   const resetFilters = () => {
     setVersionId("");
@@ -90,11 +105,10 @@ export function ReleaseListLive({ projectId, projectKey }: { projectId: number; 
     setPage(1);
   };
 
-  const releases = useMemo(() => {
-    const list = listQuery.data?.list ?? [];
-    if (!status) return list;
-    return list.filter((release) => release.status === status);
-  }, [listQuery.data, status]);
+  const pageItems = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
+  );
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
@@ -133,7 +147,10 @@ export function ReleaseListLive({ projectId, projectKey }: { projectId: number; 
                 label: RELEASE_STATUS_LABELS[releaseStatus],
               })),
             ]}
-            onChange={(next) => setStatus(next)}
+            onChange={(next) => {
+              setStatus(next);
+              setPage(1);
+            }}
           />
         </div>
         <Button variant="ghost" onPress={resetFilters}>
@@ -148,6 +165,12 @@ export function ReleaseListLive({ projectId, projectKey }: { projectId: number; 
           新建发布草稿
         </Button>
       </div>
+
+      {versionMissing ? (
+        <p className="type-caption text-danger" role="alert">
+          所选版本不在版本列表中（可能已被删除），当前按项目全部发布展示；请重新选择版本。
+        </p>
+      ) : null}
 
       {selectedVersionId != null && !creatable ? (
         <p className="type-caption text-default-500">
@@ -172,13 +195,13 @@ export function ReleaseListLive({ projectId, projectKey }: { projectId: number; 
         </div>
       ) : null}
 
-      {listQuery.isSuccess && releases.length === 0 ? (
+      {listQuery.isSuccess && pageItems.length === 0 ? (
         <EmptyHint>没有符合筛选条件的发布。</EmptyHint>
       ) : null}
 
-      {listQuery.isSuccess && releases.length > 0 ? (
+      {listQuery.isSuccess && pageItems.length > 0 ? (
         <div className="overflow-hidden rounded-sm border border-border bg-surface">
-          {releases.map((release) => (
+          {pageItems.map((release) => (
             <div key={release.id} className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0">
               <span className="type-caption shrink-0 text-default-400">#{release.id}</span>
               <Link

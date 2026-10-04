@@ -5,6 +5,9 @@
  * - mode=waive：POST /release/v1/{id}/waiveGate（useWaiveReleaseGate）
  * - mode=revoke：POST /release/v1/{id}/revokeWaiver（useRevokeReleaseWaiver）
  * - 请求体 { gateType, reason }（需 project:admin）；reason 必填
+ * - 门禁下拉排除不可豁免项：DIRECT_REQUIREMENT_SCOPE 恒排除（后端直接拒绝），
+ *   已通过门禁由调用方经 excludedGateTypes 传入排除（老前端
+ *   ReleaseGatePanel.vue:23 口径；codex r24 P2-5）
  * - 表单 UX 约定：dirty check（useUnsavedChangesGuard；blocker 独立于 AppModal
  *   挂载，X/遮罩/Esc/取消按钮走 guard(doClose)；成功提交前 markClean()）、
  *   必填字段 RequiredMark、校验全量收集、FieldError 挂在对应输入正下方、
@@ -23,24 +26,55 @@ import {
 import type { ReleaseWaiverInput } from "@/lib/release-form";
 import { RELEASE_GATE_TYPES, RELEASE_GATE_TYPE_LABELS } from "@/lib/api/release-types";
 
-const GATE_OPTIONS = RELEASE_GATE_TYPES.map((gateType) => ({
-  id: gateType,
-  label: RELEASE_GATE_TYPE_LABELS[gateType],
-}));
+/**
+ * 可豁免门禁选项（老前端 ReleaseGatePanel.vue:23 口径）：
+ * - 恒排除 DIRECT_REQUIREMENT_SCOPE（后端 waiveGate 直接抛 ReleaseGateBlocked）
+ * - 排除调用方传入的已通过门禁（后端同样拒绝豁免已通过门禁）
+ * - revoke 模式下若预设门禁被排除（防御性），仍保留该预设以免下拉显示空值
+ */
+function buildGateOptions(
+  excludedGateTypes: readonly string[],
+  presetGateType?: string,
+): Array<{ id: string; label: string }> {
+  const options: Array<{ id: string; label: string }> = RELEASE_GATE_TYPES.filter(
+    (gateType) => gateType !== 'DIRECT_REQUIREMENT_SCOPE' && !excludedGateTypes.includes(gateType),
+  ).map((gateType) => ({
+    id: gateType,
+    label: RELEASE_GATE_TYPE_LABELS[gateType],
+  }));
+  if (
+    presetGateType != null &&
+    !options.some((option) => option.id === presetGateType) &&
+    (RELEASE_GATE_TYPES as readonly string[]).includes(presetGateType)
+  ) {
+    options.unshift({
+      id: presetGateType,
+      label: RELEASE_GATE_TYPE_LABELS[presetGateType as keyof typeof RELEASE_GATE_TYPE_LABELS] ?? presetGateType,
+    });
+  }
+  return options;
+}
 
 export function ReleaseWaiverDialog({
   open,
   releaseId,
   mode,
   presetGateType,
+  excludedGateTypes = [],
   onClose,
 }: {
   open: boolean;
   releaseId: number;
   /** waive = 豁免门禁；revoke = 撤销豁免 */
   mode: "waive" | "revoke";
-  /** 打开撤销时预选的门禁类型；豁免模式下不传（默认首项） */
+  /** 打开时预选的门禁类型（行级"豁免/撤销豁免"入口传入；顶部入口不传） */
   presetGateType?: string;
+  /**
+   * 需从选项中排除的已通过门禁（后端拒绝豁免已通过门禁；
+   * DIRECT_REQUIREMENT_SCOPE 恒排除）。调用方按详情 gateResults /
+   * 实时预览结果传入。
+   */
+  excludedGateTypes?: string[];
   onClose: () => void;
 }) {
   const waiveMutation = useWaiveReleaseGate();
@@ -54,9 +88,13 @@ export function ReleaseWaiverDialog({
   const initialFormRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (open) {
+      const options = buildGateOptions(excludedGateTypes, mode === "revoke" ? presetGateType : undefined);
+      // 行级入口预选该行门禁（若仍可豁免）；否则默认首个可豁免项
+      //（绝不默认 DIRECT_REQUIREMENT_SCOPE，见 emptyReleaseWaiverInput）
+      const presetAvailable =
+        presetGateType != null && options.some((option) => option.id === presetGateType);
       const snapshot: ReleaseWaiverInput = {
-        gateType:
-          mode === "revoke" && presetGateType ? presetGateType : RELEASE_GATE_TYPES[0],
+        gateType: presetAvailable ? presetGateType! : (options[0]?.id ?? emptyReleaseWaiverInput().gateType),
         reason: "",
       };
       initialFormRef.current = JSON.stringify(snapshot);
@@ -131,6 +169,9 @@ export function ReleaseWaiverDialog({
       ? "确认豁免"
       : "确认撤销";
 
+  // 渲染用选项与打开时快照保持同一口径（不可豁免项恒排除）
+  const renderOptions = buildGateOptions(excludedGateTypes, mode === "revoke" ? presetGateType : undefined);
+
   return (
     <>
       {blocker}
@@ -144,7 +185,7 @@ export function ReleaseWaiverDialog({
             <OptionSelect
               label="门禁类型（必填）"
               value={form.gateType}
-              options={GATE_OPTIONS}
+              options={renderOptions}
               onChange={(next) => set({ gateType: next })}
               isDisabled={mutation.isPending}
             />

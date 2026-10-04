@@ -21,6 +21,7 @@ import type {
   ReleaseFailurePayload,
   ReleaseGateType,
   ReleasePageQuery,
+  ReleaseResponse,
   ReleaseSuccessPayload,
 } from '../../api/release-types';
 import { queryKeys } from '../keys';
@@ -68,6 +69,57 @@ export function useReleaseList(params: ReleaseListParams = {}) {
   return useQuery({
     queryKey: queryKeys.release.list(normalized),
     queryFn: () => releaseApi.findByPage(normalized),
+    enabled: hasScope,
+  });
+}
+
+/** 全量拉取的单页大小（与版本下拉现有 pageSize=100 口径一致） */
+const FETCH_ALL_PAGE_SIZE = 100;
+
+export interface ReleaseListAllParams {
+  /**
+   * 所属项目 id；与 versionId 二选一必填（后端 bean 联合口径 fail-closed，
+   * 与 useReleaseList 一致）。列表页通常按版本上下文查询（versionId）。
+   */
+  projectId?: number | null;
+  /** 版本 id；传了 versionId 则 bean 走版本分支 */
+  versionId?: number | null;
+}
+
+/**
+ * 发布全量列表（循环分页，供本地筛选+本地分页使用）：
+ * 走 POST /release/v1/findByPage（bean 只带 projectId/versionId；后端
+ * ReleasePageRequest 无 status 字段，状态筛选只能在前端做——codex r24 P2-4）。
+ * 循环拉取所有页直到某页返回不足一页（沿用 P3 useBoardListAll 先例），
+ * 返回合并后的 ReleaseResponse[]。
+ * key 用 list({ all: true, ... }) 与分页查询区分；失效走 queryKeys.release.all 全域。
+ */
+export function useReleaseListAll(params: ReleaseListAllParams = {}) {
+  const { projectId, versionId } = params;
+  const hasScope =
+    (typeof versionId === 'number' && Number.isFinite(versionId)) ||
+    (typeof projectId === 'number' && Number.isFinite(projectId));
+  const bean: ReleasePageQuery =
+    typeof versionId === 'number' && Number.isFinite(versionId)
+      ? { versionId }
+      : { projectId: projectId ?? 0 };
+  return useQuery({
+    queryKey: queryKeys.release.list({ all: true, pageSize: FETCH_ALL_PAGE_SIZE, bean }),
+    queryFn: async () => {
+      const all: ReleaseResponse[] = [];
+      let page = 1;
+      for (;;) {
+        const pageResult = await releaseApi.findByPage({
+          page,
+          pageSize: FETCH_ALL_PAGE_SIZE,
+          bean,
+        });
+        all.push(...pageResult.list);
+        if (pageResult.list.length < FETCH_ALL_PAGE_SIZE) break;
+        page += 1;
+      }
+      return all;
+    },
     enabled: hasScope,
   });
 }

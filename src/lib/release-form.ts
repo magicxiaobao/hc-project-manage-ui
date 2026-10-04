@@ -130,7 +130,7 @@ export interface ReleaseDraftEditInput {
   forceUpdate: boolean;
   compatibility: string;
   dependencies: string;
-  /** 管理员原因（代他人修改/删除时填写）：可选 */
+  /** 管理员原因：本人修改时隐藏且不发送；代他人修改时必填（后端非 owner 空原因直接拒绝） */
   adminReason: string;
 }
 
@@ -214,7 +214,15 @@ export interface ReleaseWaiverInput {
 }
 
 export function emptyReleaseWaiverInput(): ReleaseWaiverInput {
-  return { gateType: RELEASE_GATE_TYPES[0], reason: '' };
+  // 后端 waiveGate 对 DIRECT_REQUIREMENT_SCOPE 直接抛 ReleaseGateBlocked
+  //（ReleaseSubmissionService.java:103-105），默认绝不能落在该项：
+  // 取首个可豁免门禁。下拉选项同样排除它（见 ReleaseWaiverDialog）。
+  return {
+    gateType:
+      RELEASE_GATE_TYPES.find((gateType) => gateType !== 'DIRECT_REQUIREMENT_SCOPE') ??
+      RELEASE_GATE_TYPES[0],
+    reason: '',
+  };
 }
 
 /** 校验豁免表单：门禁类型必须为五项之一，原因必填 */
@@ -236,6 +244,23 @@ export function buildReleaseWaiverPayload(input: ReleaseWaiverInput): {
   reason: string;
 } {
   return { gateType: input.gateType as ReleaseGateType, reason: input.reason.trim() };
+}
+
+/**
+ * 校验草稿编辑表单（收集全部错误）：
+ * - 其余字段均可选（整包覆盖语义，空白即清空），无需校验
+ * - adminReason 条件必填：代他人修改（非 owner）时后端直接拒绝空原因
+ *   （ReleaseDraftService.java:249）；本人编辑时隐藏且不发送，不校验
+ *   （仿 testrun overrideReason r10-3 先例）
+ */
+export function validateReleaseDraftEditInput(
+  input: ReleaseDraftEditInput,
+  opts: { requireAdminReason: boolean },
+): ReleaseFormFieldError[] {
+  if (opts.requireAdminReason && input.adminReason.trim() === '') {
+    return [{ field: 'adminReason', message: '代他人修改时必须填写管理员原因' }];
+  }
+  return [];
 }
 
 /* ================= 审批原因（approve/reject/cancel 共用） ================= */

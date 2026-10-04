@@ -30,6 +30,7 @@ import {
   emptyReleaseWaiverInput,
   parseNonNegativeLong,
   validateReleaseDraftCreateInput,
+  validateReleaseDraftEditInput,
   validateReleaseReasonInput,
   validateReleaseRecordResultInput,
   validateReleaseWaiverInput,
@@ -167,6 +168,23 @@ describe('editDraftFormFromRelease / buildReleaseDraftUpdatePayload', () => {
     });
     expect(payload.adminReason).toBe('代发布人更新');
   });
+
+  it('validateReleaseDraftEditInput：adminReason 条件必填（代他人修改时）', () => {
+    const form = { ...editDraftFormFromRelease(release), adminReason: '  ' };
+    // 本人编辑：不校验
+    expect(validateReleaseDraftEditInput(form, { requireAdminReason: false })).toEqual([]);
+    // 代他人编辑：空白拒绝
+    expect(validateReleaseDraftEditInput(form, { requireAdminReason: true })).toEqual([
+      { field: 'adminReason', message: '代他人修改时必须填写管理员原因' },
+    ]);
+    // 代他人编辑：非空通过
+    expect(
+      validateReleaseDraftEditInput(
+        { ...form, adminReason: ' 代他人更新 ' },
+        { requireAdminReason: true },
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe('validateReleaseWaiverInput / buildReleaseWaiverPayload', () => {
@@ -187,6 +205,11 @@ describe('validateReleaseWaiverInput / buildReleaseWaiverPayload', () => {
 
   it('emptyReleaseWaiverInput 默认首项门禁且原因空白', () => {
     expect(emptyReleaseWaiverInput()).toMatchObject({ reason: '' });
+  });
+
+  it('emptyReleaseWaiverInput 默认绝不落在 DIRECT_REQUIREMENT_SCOPE（后端必拒）', () => {
+    expect(emptyReleaseWaiverInput().gateType).not.toBe('DIRECT_REQUIREMENT_SCOPE');
+    expect(emptyReleaseWaiverInput().gateType).toBe('REQUIRED_CASES_PASSED');
   });
 });
 

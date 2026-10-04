@@ -60,6 +60,49 @@ export function useVersionList(params: VersionListParams = {}) {
   });
 }
 
+/** 全量拉取的单页大小（与既有版本下拉 pageSize=100 口径一致） */
+const FETCH_ALL_PAGE_SIZE = 100;
+
+export interface VersionListAllParams {
+  /** 所属项目 id；null/undefined 时不发起请求（调用方等待 projectKey→id 解析） */
+  projectId?: number | null;
+}
+
+/**
+ * 版本全量列表（循环分页，供下拉选项等"必须完整"的场景使用）：
+ * 走 POST /version/v1/findByPage（bean 只带 projectId）。
+ * 后端按 ID 升序排列，单次 page:1/pageSize:100 会在版本超 100 时静默丢弃
+ * 第 101 个起的版本（codex r24 P2-10）——这里循环拉取所有页直到某页返回
+ * 不足一页（沿用 P3 useBoardListAll 先例），返回合并后的 VersionResponse[]。
+ * key 用 list({ all: true, ... }) 与分页查询区分；失效走 queryKeys.version.all 全域。
+ */
+export function useVersionListAll(params: VersionListAllParams = {}) {
+  const { projectId } = params;
+  return useQuery({
+    queryKey: queryKeys.version.list({
+      all: true,
+      pageSize: FETCH_ALL_PAGE_SIZE,
+      bean: { projectId: projectId ?? 0 },
+    }),
+    queryFn: async () => {
+      const all: VersionResponse[] = [];
+      let page = 1;
+      for (;;) {
+        const pageResult = await versionApi.findByPage({
+          page,
+          pageSize: FETCH_ALL_PAGE_SIZE,
+          bean: { projectId: projectId as number },
+        });
+        all.push(...pageResult.list);
+        if (pageResult.list.length < FETCH_ALL_PAGE_SIZE) break;
+        page += 1;
+      }
+      return all;
+    },
+    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+  });
+}
+
 /** 版本详情：走 GET /version/v1/findById/{id}；id 无效时 disabled */
 export function useVersionDetail(id: number | null | undefined) {
   return useQuery({

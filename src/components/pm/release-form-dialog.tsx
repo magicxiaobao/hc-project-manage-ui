@@ -8,7 +8,8 @@
  *   构建函数每次新建（crypto.randomUUID）
  * - ReleaseDraftEditDialog：POST /release/v1/updateDraft
  *   （useUpdateReleaseDraft；整包覆盖：空白文本字段省略 key，后端写 null，
- *   forceUpdate 按开关送，adminReason 空白省略）
+ *   forceUpdate 按开关送；adminReason 条件契约：本人编辑隐藏且不发送，
+ *   代他人编辑必填+星号+字段级错误，后端非 owner 空原因直接拒绝）
  * - 表单 UX 约定：dirty check（useUnsavedChangesGuard；blocker 独立于
  *   AppModal 挂载，X/遮罩/Esc/取消按钮走 guard(doClose)；成功提交前
  *   markClean()）、必填字段 RequiredMark、校验返回 {field,message}[] 全量
@@ -21,6 +22,7 @@ import { Button, Checkbox, Input, Label, TextArea, TextField } from "@heroui/rea
 import { toast } from "sonner";
 import { AppModal, FieldError, OptionSelect, RequiredMark, useUnsavedChangesGuard } from "@/components/biz";
 import { toUserMessage, useCreateReleaseDraft, useReleaseEnvironmentList, useUpdateReleaseDraft } from "@/lib/query";
+import { useAuthStore } from "@/lib/api/auth-store";
 import {
   buildReleaseCreatePayload,
   buildReleaseDraftUpdatePayload,
@@ -28,6 +30,7 @@ import {
   emptyReleaseDraftCreateInput,
   emptyReleaseDraftEditInput,
   validateReleaseDraftCreateInput,
+  validateReleaseDraftEditInput,
 } from "@/lib/release-form";
 import type {
   ReleaseDraftCreateInput,
@@ -347,9 +350,28 @@ export function ReleaseDraftEditDialog({
   });
   const { form, set, fieldErrors, setFieldErrors, submitError, setSubmitError } = shell;
 
+  // 管理员原因条件契约（codex r24 P2-7；仿 testrun overrideReason r10-3 先例）：
+  // 后端 updateDraft 规定非 owner 且 adminReason 为空直接拒绝
+  //（ReleaseDraftService.java:249）——本人编辑时字段隐藏且不发送；
+  // 代他人编辑时必填 + 必填星号 + 字段级错误。owner 未知时按代他人处理。
+  // userId 为规范十进制字符串（hydrate 时校验），draftOwnerId 为 number，
+  // 用 String() 归一化后比较。
+  const currentUserId = useAuthStore((s) => s.user?.userId ?? null);
+  const isSelfEdit =
+    currentUserId != null &&
+    release.draftOwnerId != null &&
+    String(release.draftOwnerId) === currentUserId;
+
   const handleSubmit = () => {
     if (updateMutation.isPending) return;
-    // 整包覆盖：各字段均可选，无必填校验
+    // 整包覆盖：各字段均可选，无必填校验；adminReason 仅代他人修改时必填
+    const errors = validateReleaseDraftEditInput(form, { requireAdminReason: !isSelfEdit });
+    if (errors.length > 0) {
+      const nextFieldErrors: Record<string, string> = {};
+      for (const error of errors) nextFieldErrors[error.field] = error.message;
+      setFieldErrors(nextFieldErrors);
+      return;
+    }
     setFieldErrors({});
     setSubmitError("");
     updateMutation.mutate(buildReleaseDraftUpdatePayload(release.id, form), {
@@ -443,14 +465,23 @@ export function ReleaseDraftEditDialog({
             </Checkbox>
           </div>
 
-          <MultilineField
-            label="管理员原因（代他人修改时填写）"
-            value={form.adminReason}
-            onChange={(next) => set({ adminReason: next })}
-            disabled={updateMutation.isPending}
-            error={fieldErrors.adminReason}
-            placeholder="选填：代他人修改草稿时说明原因"
-          />
+          {/* 管理员原因：本人编辑时隐藏（且不发送）；代他人编辑时必填 */}
+          {isSelfEdit ? null : (
+            <div>
+              <TextField
+                value={form.adminReason}
+                onChange={(next) => set({ adminReason: next })}
+                aria-label="管理员原因（必填）"
+                isDisabled={updateMutation.isPending}
+              >
+                <Label>
+                  管理员原因<RequiredMark />
+                </Label>
+                <TextArea placeholder="代他人修改草稿时说明原因" />
+              </TextField>
+              <FieldError message={fieldErrors.adminReason} />
+            </div>
+          )}
 
           {submitError ? <p className="type-body text-danger">{submitError}</p> : null}
 

@@ -19,22 +19,24 @@
  *
  * 未登录时不使用本组件（路由层渲染登录提示）。
  */
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button, Label, Spinner, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
-import { AppModal, EmptyHint, PageHeading, useUnsavedChangesGuard } from "@/components/biz";
+import { AppModal, EmptyHint, FieldError, PageHeading, RequiredMark, useUnsavedChangesGuard } from "@/components/biz";
 import {
   toUserMessage,
   useCancelRelease,
   useCopyReleaseAsDraft,
   useDeleteReleaseDraft,
   usePreviewReleaseGates,
+  useProjectIdByKey,
   useRejectRelease,
   useReleaseDetail,
   useRollbackReleaseAsDraft,
   useSubmitRelease,
 } from "@/lib/query";
+import { useAuthStore } from "@/lib/api/auth-store";
 import {
   RELEASE_GATE_TYPE_LABELS,
   RELEASE_STATUS_LABELS,
@@ -77,27 +79,44 @@ function StatusChip({ status }: { status: ReleaseStatus }) {
   );
 }
 
-/** 删除草稿确认弹窗：管理员原因可选（老前端 ReleaseDraftActionPanel 口径） */
+/**
+ * 删除草稿确认弹窗。
+ *
+ * 管理员原因条件契约（codex r24 P2-7；仿 testrun overrideReason r10-3 先例）：
+ * 后端 deleteDraft 规定非 owner 且 adminReason 为空直接拒绝
+ * （ReleaseDraftService.java:292）——本人删除时字段隐藏且不发送；
+ * 代他人删除时必填 + 必填星号 + 字段级错误。owner 未知时按代他人处理。
+ */
 function DeleteDraftDialog({
   open,
   releaseId,
+  draftOwnerId,
   onClose,
   onDeleted,
 }: {
   open: boolean;
   releaseId: number;
+  draftOwnerId: number | null;
   onClose: () => void;
   /** 删除成功回调：调用方跳回发布列表（已删除的详情不应再展示） */
   onDeleted: () => void;
 }) {
   const deleteMutation = useDeleteReleaseDraft();
   const [adminReason, setAdminReason] = useState("");
+  const [adminReasonError, setAdminReasonError] = useState("");
+
+  const currentUserId = useAuthStore((s) => s.user?.userId ?? null);
+  const isSelfDelete =
+    currentUserId != null &&
+    draftOwnerId != null &&
+    String(draftOwnerId) === currentUserId;
 
   const initialRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (open) {
       initialRef.current = JSON.stringify("");
       setAdminReason("");
+      setAdminReasonError("");
     }
   }, [open ]);
 
@@ -116,6 +135,11 @@ function DeleteDraftDialog({
   const handleConfirm = () => {
     if (deleteMutation.isPending) return;
     const trimmed = adminReason.trim();
+    if (!isSelfDelete && trimmed === "") {
+      setAdminReasonError("代他人删除时必须填写管理员原因");
+      return;
+    }
+    setAdminReasonError("");
     deleteMutation.mutate(
       { releaseId, adminReason: trimmed ? trimmed : undefined },
       {
@@ -139,17 +163,25 @@ function DeleteDraftDialog({
         {dialog}
         <div className="flex flex-col gap-4">
           <p className="type-body text-danger">删除后不可恢复，确认删除该发布草稿？</p>
-          <div>
-            <TextField
-              value={adminReason}
-              onChange={setAdminReason}
-              aria-label="管理员原因"
-              isDisabled={deleteMutation.isPending}
-            >
-              <Label>管理员原因（选填）</Label>
-              <TextArea placeholder="选填：代他人删除时说明原因" />
-            </TextField>
-          </div>
+          {isSelfDelete ? null : (
+            <div>
+              <TextField
+                value={adminReason}
+                onChange={(next) => {
+                  setAdminReason(next);
+                  setAdminReasonError("");
+                }}
+                aria-label="管理员原因（必填）"
+                isDisabled={deleteMutation.isPending}
+              >
+                <Label>
+                  管理员原因<RequiredMark />
+                </Label>
+                <TextArea placeholder="代他人删除时说明原因" />
+              </TextField>
+              <FieldError message={adminReasonError} />
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onPress={close} isDisabled={deleteMutation.isPending}>
               取消
@@ -226,80 +258,216 @@ export function ReleaseDetailLive({
     );
   };
 
+  const detail = detailQuery.data ?? null;
+
+  // 路由项目归属守卫（仿 version-detail-live r20-1 先例；codex r24 P1-3）：
+  // 路由里的 projectKey 必须解析出项目并与记录的 projectId 精确一致，
+  // 否则跨项目链接会在错误的项目上下文里展示并允许操作其它项目的发布。
+  // 解析中/解析失败时不误判：只读展示，写操作区隐藏。
+  const routeProjectQuery = useProjectIdByKey(projectKey);
+  const routeProjectId = routeProjectQuery.data;
+  const projectContextVerified =
+    typeof routeProjectId === "number" &&
+    detail != null &&
+    detail.release.projectId === routeProjectId;
+  const projectMismatch =
+    typeof routeProjectId === "number" &&
+    detail != null &&
+    detail.release.projectId !== routeProjectId;
+
+  // 已通过门禁（提交快照 + 实时预览）从豁免下拉排除（codex r24 P2-5；
+  // DIRECT_REQUIREMENT_SCOPE 由弹窗恒排除）
+  const excludedGateTypes = useMemo(() => {
+    const excluded = new Set<string>();
+    for (const gate of detail?.gateResults ?? []) {
+      if (gate.passed) excluded.add(gate.gateType);
+    }
+    for (const decision of gatesPreviewQuery.data ?? []) {
+      if (decision.passed) excluded.add(decision.gateType);
+    }
+    return [...excluded];
+  }, [detail, gatesPreviewQuery.data]);
+
+  // 弹窗 keyed 实例在早返回之外声明：pending/error/not-found/成功四个分支
+  // 共用同一实例；后台重取失败（isError 但保留缓存 data）时错误分支只在
+  // 顶部加横幅、不卸载子树，编辑/豁免/原因/结果弹窗的脏草稿得以保留
+  //（仿 version-detail-live r19-2 约定；codex r24 P1-1）。
+  // detail 为 null 时弹窗没有可打开的入口（按钮依赖详情数据），渲染 null。
+  const editDialog = detail ? (
+    <ReleaseDraftEditDialog
+      key={`edit-${releaseId}`}
+      open={editOpen}
+      release={detail.release}
+      onClose={() => setEditOpen(false)}
+    />
+  ) : null;
+  const deleteDialog = detail ? (
+    <DeleteDraftDialog
+      key={`delete-${releaseId}`}
+      open={deleteOpen}
+      releaseId={releaseId}
+      draftOwnerId={detail.release.draftOwnerId}
+      onClose={() => setDeleteOpen(false)}
+      onDeleted={() => {
+        void navigate({
+          to: "/p/$projectKey/releases",
+          params: { projectKey },
+        });
+      }}
+    />
+  ) : null;
+  const waiverDialog = (
+    <ReleaseWaiverDialog
+      key={`waiver-${releaseId}`}
+      open={waiverMode != null}
+      releaseId={releaseId}
+      mode={waiverMode ?? "waive"}
+      presetGateType={waiverGateType}
+      excludedGateTypes={excludedGateTypes}
+      onClose={() => setWaiverMode(null)}
+    />
+  );
+  const reasonDialog = (
+    <ReleaseReasonDialog
+      key={`reason-${releaseId}`}
+      open={reasonAction != null}
+      releaseId={releaseId}
+      action={reasonAction ?? "approve"}
+      onClose={() => setReasonAction(null)}
+    />
+  );
+  const resultDialog = (
+    <ReleaseResultDialog
+      key={`result-${releaseId}`}
+      open={resultMode != null}
+      releaseId={releaseId}
+      mode={resultMode ?? "released"}
+      onClose={() => setResultMode(null)}
+    />
+  );
+  const dialogs = (
+    <>
+      {editDialog}
+      {deleteDialog}
+      {waiverDialog}
+      {reasonDialog}
+      {resultDialog}
+    </>
+  );
+
+  const release: ReleaseResponse | null = detail?.release ?? null;
+  const status = release?.status;
+  const isDraft = status === "DRAFT";
+  const isPendingApproval = status === "PENDING_APPROVAL";
+  const isApproved = status === "APPROVED";
+  const isTerminal = status != null && TERMINAL_STATUSES.includes(status);
+
+  const detailContent =
+    detail && release && status ? (
+      <ReleaseDetailContent
+        detail={detail}
+        release={release}
+        projectKey={projectKey}
+        status={status}
+        isDraft={isDraft}
+        isPendingApproval={isPendingApproval}
+        isApproved={isApproved}
+        isTerminal={isTerminal}
+        canWrite={projectContextVerified}
+        projectMismatch={projectMismatch}
+        operating={operating}
+        gatesPreviewQuery={gatesPreviewQuery}
+        setEditOpen={setEditOpen}
+        setDeleteOpen={setDeleteOpen}
+        setWaiverMode={setWaiverMode}
+        setWaiverGateType={setWaiverGateType}
+        setResultMode={setResultMode}
+        handleSubmit={handleSubmit}
+        handleClone={handleClone}
+        submitPending={submitMutation.isPending}
+        cancelPending={cancelMutation.isPending}
+        rejectPending={rejectMutation.isPending}
+        onCancel={() => setReasonAction("cancel")}
+        onReject={() => setReasonAction("reject")}
+        onApprove={() => setReasonAction("approve")}
+      />
+    ) : null;
+
   if (detailQuery.isPending) {
     return (
-      <div className="mx-auto flex max-w-5xl items-center gap-2 p-4 md:p-6">
-        <Spinner size="sm" />
-        <span className="text-sm text-default-500">正在加载发布详情…</span>
-      </div>
+      <>
+        <div className="mx-auto flex max-w-5xl items-center gap-2 p-4 md:p-6">
+          <Spinner size="sm" />
+          <span className="text-sm text-default-500">正在加载发布详情…</span>
+        </div>
+        {dialogs}
+      </>
     );
   }
 
   if (detailQuery.isError) {
+    if (detailContent) {
+      // 后台重取失败但有缓存数据：顶部横幅提示，不卸载子树（弹窗草稿保留）
+      return (
+        <>
+          <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pt-4 md:px-6 md:pt-6">
+            <div
+              role="alert"
+              className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
+            >
+              <p className="type-body text-danger">
+                发布详情刷新失败：{toUserMessage(detailQuery.error)}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onPress={() => void detailQuery.refetch()}
+              >
+                重试
+              </Button>
+            </div>
+          </div>
+          {detailContent}
+          {dialogs}
+        </>
+      );
+    }
     return (
       <div className="mx-auto flex max-w-5xl flex-col items-start gap-3 p-4 md:p-6">
         <p className="type-body text-danger">发布详情加载失败：{toUserMessage(detailQuery.error)}</p>
         <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
           重试
         </Button>
+        {dialogs}
       </div>
     );
   }
 
-  const detail = detailQuery.data;
-  if (!detail) {
+  if (!detailContent) {
     return (
       <div className="mx-auto max-w-5xl p-4 md:p-6">
         <EmptyHint>未找到该发布。</EmptyHint>
+        {dialogs}
       </div>
     );
   }
 
-  const release: ReleaseResponse = detail.release;
-  const status = release.status;
-  const isDraft = status === "DRAFT";
-  const isPendingApproval = status === "PENDING_APPROVAL";
-  const isApproved = status === "APPROVED";
-  const isTerminal = TERMINAL_STATUSES.includes(status);
-
   return (
-    <ReleaseDetailContent
-      detail={detail}
-      release={release}
-      projectKey={projectKey}
-      status={status}
-      isDraft={isDraft}
-      isPendingApproval={isPendingApproval}
-      isApproved={isApproved}
-      isTerminal={isTerminal}
-      operating={operating}
-      gatesPreviewQuery={gatesPreviewQuery}
-      editOpen={editOpen}
-      setEditOpen={setEditOpen}
-      deleteOpen={deleteOpen}
-      setDeleteOpen={setDeleteOpen}
-      waiverMode={waiverMode}
-      setWaiverMode={setWaiverMode}
-      waiverGateType={waiverGateType}
-      setWaiverGateType={setWaiverGateType}
-      reasonAction={reasonAction}
-      setReasonAction={setReasonAction}
-      resultMode={resultMode}
-      setResultMode={setResultMode}
-      handleSubmit={handleSubmit}
-      handleClone={handleClone}
-      submitPending={submitMutation.isPending}
-      cancelPending={cancelMutation.isPending}
-      rejectPending={rejectMutation.isPending}
-      onCancel={() => setReasonAction("cancel")}
-      onReject={() => setReasonAction("reject")}
-      onApprove={() => setReasonAction("approve")}
-    />
+    <>
+      {detailContent}
+      {dialogs}
+    </>
   );
 }
 
 /**
  * 详情内容（数据就绪后渲染；拆出子组件避免条件返回后 hooks 顺序漂移）。
+ *
+ * 写操作区（草稿操作/门禁操作/审批/结果记录/生命周期）只有在路由项目
+ * 解析成功且与记录的 projectId 精确一致时才渲染（canWrite；仿
+ * version-detail-live r20-1 先例）。解析中/解析失败/归属不符时只读展示，
+ * 归属不符另在顶部挂横幅提示。
  */
 function ReleaseDetailContent({
   detail,
@@ -310,19 +478,14 @@ function ReleaseDetailContent({
   isPendingApproval,
   isApproved,
   isTerminal,
+  canWrite,
+  projectMismatch,
   operating,
   gatesPreviewQuery,
-  editOpen,
   setEditOpen,
-  deleteOpen,
   setDeleteOpen,
-  waiverMode,
   setWaiverMode,
-  waiverGateType,
   setWaiverGateType,
-  reasonAction,
-  setReasonAction,
-  resultMode,
   setResultMode,
   handleSubmit,
   handleClone,
@@ -341,19 +504,16 @@ function ReleaseDetailContent({
   isPendingApproval: boolean;
   isApproved: boolean;
   isTerminal: boolean;
+  /** 路由 projectKey 解析出的项目与记录 projectId 精确一致（写操作总开关） */
+  canWrite: boolean;
+  /** 路由项目已解析但与记录 projectId 不符（顶部横幅提示） */
+  projectMismatch: boolean;
   operating: boolean;
   gatesPreviewQuery: ReturnType<typeof usePreviewReleaseGates>;
-  editOpen: boolean;
   setEditOpen: (open: boolean) => void;
-  deleteOpen: boolean;
   setDeleteOpen: (open: boolean) => void;
-  waiverMode: "waive" | "revoke" | null;
   setWaiverMode: (mode: "waive" | "revoke" | null) => void;
-  waiverGateType: string | undefined;
   setWaiverGateType: (gateType: string | undefined) => void;
-  reasonAction: ReleaseReasonAction | null;
-  setReasonAction: (action: ReleaseReasonAction | null) => void;
-  resultMode: ReleaseRecordMode | null;
   setResultMode: (mode: ReleaseRecordMode | null) => void;
   handleSubmit: () => void;
   handleClone: (kind: "copy" | "rollback") => void;
@@ -364,7 +524,6 @@ function ReleaseDetailContent({
   onReject: () => void;
   onApprove: () => void;
 }) {
-  const navigate = useNavigate();
   const artifact = detail.artifact;
   const approval = detail.approval;
 
@@ -374,6 +533,17 @@ function ReleaseDetailContent({
         title={`发布 #${release.id}`}
         hint={`真实后端数据（GET /release/v1/findById/${release.id}）。默认展示提交快照；实时门禁仅在草稿预览时显示。`}
       />
+
+      {projectMismatch ? (
+        <div
+          role="alert"
+          className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
+        >
+          <p className="type-body text-danger">
+            该发布不属于当前项目，仅可查看，无法在此操作。请切换到正确的项目后重试。
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
         <Link
@@ -422,8 +592,8 @@ function ReleaseDetailContent({
         ) : null}
       </section>
 
-      {/* 草稿操作 */}
-      {isDraft ? (
+      {/* 草稿操作（仅路由项目归属校验通过时可写） */}
+      {isDraft && canWrite ? (
         <section className="rounded-sm border border-border bg-surface p-4">
           <h2 className="type-body mb-3 font-medium">草稿操作</h2>
           <div className="flex flex-wrap gap-2">
@@ -445,15 +615,17 @@ function ReleaseDetailContent({
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <h2 className="type-body font-medium">门禁</h2>
           <span className="flex-1" />
-          <Button
-            size="sm"
-            variant="ghost"
-            onPress={() => void gatesPreviewQuery.refetch()}
-            isDisabled={gatesPreviewQuery.isFetching || operating}
-          >
-            {gatesPreviewQuery.isFetching ? "预览中…" : "预览实时门禁"}
-          </Button>
-          {isDraft ? (
+          {isDraft && canWrite ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onPress={() => void gatesPreviewQuery.refetch()}
+              isDisabled={gatesPreviewQuery.isFetching || operating}
+            >
+              {gatesPreviewQuery.isFetching ? "预览中…" : "预览实时门禁"}
+            </Button>
+          ) : null}
+          {isDraft && canWrite ? (
             <Button
               size="sm"
               variant="ghost"
@@ -491,9 +663,11 @@ function ReleaseDetailContent({
           </p>
         ) : null}
 
-        {detail.gateResults.length === 0 ? (
+        {detail.gateResults.length === 0 && detail.waivers.length === 0 ? (
           <p className="type-caption text-default-500">暂无门禁裁决记录。</p>
-        ) : (
+        ) : null}
+
+        {detail.gateResults.length > 0 ? (
           <div className="overflow-hidden rounded-sm border border-border">
             {detail.gateResults.map((gate) => (
               <div
@@ -512,7 +686,7 @@ function ReleaseDetailContent({
                   </span>
                 ) : null}
                 <span className="flex-1" />
-                {isDraft && !operating ? (
+                {isDraft && canWrite && !operating ? (
                   gate.waived ? (
                     <Button
                       size="sm"
@@ -524,7 +698,9 @@ function ReleaseDetailContent({
                     >
                       撤销豁免
                     </Button>
-                  ) : (
+                  ) : !gate.passed && gate.gateType !== "DIRECT_REQUIREMENT_SCOPE" ? (
+                    // 已通过门禁与 DIRECT_REQUIREMENT_SCOPE 后端拒绝豁免
+                    //（ReleaseSubmissionService.waiveGate），不提供入口
                     <Button
                       size="sm"
                       variant="ghost"
@@ -535,12 +711,51 @@ function ReleaseDetailContent({
                     >
                       豁免
                     </Button>
-                  )
+                  ) : null
                 ) : null}
               </div>
             ))}
           </div>
-        )}
+        ) : null}
+
+        {/* 已有豁免（codex r24 P2-2 / pi P1-1）：后端草稿详情的 gateResults
+            恒为空，持久化豁免走独立的 waivers 字段；这里渲染已有豁免并在
+            草稿态提供撤销入口（revokeWaiver 仅 DRAFT 可调） */}
+        {detail.waivers.length > 0 ? (
+          <div className="mt-3">
+            <p className="type-caption mb-2 text-default-500">
+              已豁免门禁{isDraft ? "（草稿态可撤销）" : ""}
+            </p>
+            <div className="overflow-hidden rounded-sm border border-border">
+              {detail.waivers.map((waiver) => (
+                <div
+                  key={waiver.gateType}
+                  className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 last:border-b-0"
+                >
+                  <span className="type-body min-w-32">
+                    {RELEASE_GATE_TYPE_LABELS[waiver.gateType] ?? waiver.gateType}
+                  </span>
+                  <span className="type-caption text-default-500">
+                    已豁免{waiver.reason ? `：${waiver.reason}` : ""}
+                  </span>
+                  <span className="flex-1" />
+                  {isDraft && canWrite && !operating ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onPress={() => {
+                        setWaiverGateType(waiver.gateType);
+                        setWaiverMode("revoke");
+                      }}
+                    >
+                      撤销豁免
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {/* 审批面板 */}
@@ -556,7 +771,7 @@ function ReleaseDetailContent({
         ) : (
           <p className="type-caption mb-3 text-default-500">暂无审批记录。</p>
         )}
-        {isPendingApproval ? (
+        {isPendingApproval && canWrite ? (
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" onPress={onApprove} isDisabled={operating}>
               审批通过
@@ -583,7 +798,7 @@ function ReleaseDetailContent({
         ) : (
           <p className="type-caption mb-3 text-default-500">暂无制品证据记录。</p>
         )}
-        {isApproved ? (
+        {isApproved && canWrite ? (
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" onPress={() => setResultMode("released")} isDisabled={operating}>
               记录发布成功
@@ -595,8 +810,8 @@ function ReleaseDetailContent({
         ) : null}
       </section>
 
-      {/* 生命周期操作 */}
-      {isPendingApproval || isApproved || isTerminal ? (
+      {/* 生命周期操作（仅路由项目归属校验通过时可写） */}
+      {(isPendingApproval || isApproved || isTerminal) && canWrite ? (
         <section className="rounded-sm border border-border bg-surface p-4">
           <h2 className="type-body mb-3 font-medium">发布操作</h2>
           <div className="flex flex-wrap gap-2">
@@ -629,51 +844,6 @@ function ReleaseDetailContent({
             ) : null}
           </div>
         </section>
-      ) : null}
-
-      {/* 弹窗 */}
-      {isDraft ? (
-        <ReleaseDraftEditDialog
-          open={editOpen}
-          release={release}
-          onClose={() => setEditOpen(false)}
-        />
-      ) : null}
-      <DeleteDraftDialog
-        open={deleteOpen}
-        releaseId={release.id}
-        onClose={() => setDeleteOpen(false)}
-        onDeleted={() => {
-          void navigate({
-            to: "/p/$projectKey/releases",
-            params: { projectKey },
-          });
-        }}
-      />
-      {waiverMode != null ? (
-        <ReleaseWaiverDialog
-          open
-          releaseId={release.id}
-          mode={waiverMode}
-          presetGateType={waiverGateType}
-          onClose={() => setWaiverMode(null)}
-        />
-      ) : null}
-      {reasonAction != null ? (
-        <ReleaseReasonDialog
-          open
-          releaseId={release.id}
-          action={reasonAction}
-          onClose={() => setReasonAction(null)}
-        />
-      ) : null}
-      {resultMode != null ? (
-        <ReleaseResultDialog
-          open
-          releaseId={release.id}
-          mode={resultMode}
-          onClose={() => setResultMode(null)}
-        />
       ) : null}
     </div>
   );
