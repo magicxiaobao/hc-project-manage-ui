@@ -1631,12 +1631,10 @@ describe('测试用例契约（P2）', () => {
     expect(JSON.parse(init.body as string)).toEqual(payload);
   });
 
-  it('POST /testCase/v1/updateTestCase，载荷含 id 的字段级更新', async () => {
+  it('POST /testCase/v1/updateTestCase，字段级更新：仅传 id + 变更字段', async () => {
     const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
     const res = await testCaseApi.updateTestCase({
       id: 401,
-      projectId: 7,
-      title: '登录接口返回异常（修订）',
       priority: '中',
     });
 
@@ -1646,8 +1644,6 @@ describe('测试用例契约（P2）', () => {
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({
       id: 401,
-      projectId: 7,
-      title: '登录接口返回异常（修订）',
       priority: '中',
     });
   });
@@ -1778,7 +1774,7 @@ describe('测试套件契约（P2）', () => {
       suiteName: '登录模块回归套件',
       projectId: 7,
       description: '登录/鉴权相关回归用例集合',
-      suiteType: '回归测试',
+      suiteType: '回归测试' as const,
       status: 'DRAFT' as const,
     };
     const id = await testSuiteApi.createTestSuite(payload);
@@ -1790,12 +1786,11 @@ describe('测试套件契约（P2）', () => {
     expect(JSON.parse(init.body as string)).toEqual(payload);
   });
 
-  it('POST /testSuite/v1/updateTestSuite，载荷含 id 的字段级更新', async () => {
+  it('POST /testSuite/v1/updateTestSuite，字段级更新：仅传 id + 变更字段', async () => {
     const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
     const res = await testSuiteApi.updateTestSuite({
       id: 501,
-      suiteName: '登录模块回归套件（v2）',
-      projectId: 7,
+      status: 'PAUSED',
     });
 
     expect(res).toBe('success');
@@ -1804,8 +1799,7 @@ describe('测试套件契约（P2）', () => {
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({
       id: 501,
-      suiteName: '登录模块回归套件（v2）',
-      projectId: 7,
+      status: 'PAUSED',
     });
   });
 

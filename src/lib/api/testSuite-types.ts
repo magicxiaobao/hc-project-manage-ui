@@ -41,14 +41,29 @@ export const TEST_SUITE_STATUS_LABELS: Record<TestSuiteStatus, string> = {
   CLOSED: '已关闭',
 };
 
+/** 测试套件类型（老前端 TestSuiteTypeSelector 选项，前端常量；后端为 String 不校验） */
+export const TEST_SUITE_TYPES = [
+  '冒烟测试',
+  '回归测试',
+  '集成测试',
+  '系统测试',
+  '性能测试',
+  '安全测试',
+] as const;
+export type TestSuiteType = (typeof TEST_SUITE_TYPES)[number];
+
+/** 测试套件优先级（系统惯例：与缺陷/用例一致的三档中文；后端为 String 不校验） */
+export const TEST_SUITE_PRIORITIES = ['高', '中', '低'] as const;
+export type TestSuitePriority = (typeof TEST_SUITE_PRIORITIES)[number];
+
 /** 新建套件载荷（忠实于后端 TestSuiteCreateRequest） */
 export interface TestSuiteCreatePayload {
   suiteName: string;
   projectId: number;
   description?: string;
-  suiteType?: string;
+  suiteType?: TestSuiteType;
   status?: TestSuiteStatus;
-  priority?: string;
+  priority?: TestSuitePriority;
   estimatedTime?: number;
   actualTime?: number;
   passRate?: number;
@@ -58,22 +73,52 @@ export interface TestSuiteCreatePayload {
   skippedCases?: number;
 }
 
-/** 更新套件载荷（忠实于后端 TestSuiteUpdateRequest；id 必传） */
-export interface TestSuiteUpdatePayload extends TestSuiteCreatePayload {
+/**
+ * 更新套件载荷（忠实于后端 TestSuiteUpdateRequest；id 必传）。
+ * 字段级更新：除 id 外全可选。后端 BaseTestSuiteUpdater 只应用非空字段，
+ * suiteName/projectId 均可省略（提供 projectId 时必须与存储一致）。
+ */
+export interface TestSuiteUpdatePayload
+  extends Omit<TestSuiteCreatePayload, 'suiteName' | 'projectId'> {
   id: number;
-}
-
-/** 测试套件（忠实于后端 TestSuiteResponse） */
-export interface TestSuiteResponse extends TestSuiteCreatePayload {
-  id: number;
-  createdBy?: number;
-  updatedBy?: number;
-}
-
-/** 套件查询条件（忠实于后端 TestSuiteQueryRequest） */
-export interface TestSuiteQueryRequest {
   suiteName?: string;
   projectId?: number;
-  suiteType?: string;
+}
+
+/**
+ * 测试套件（忠实于后端 TestSuiteResponse + AbstractResponse）。
+ * 独立定义：响应含 AbstractResponse 的 createdAt/updatedAt（秒级 Long），
+ * 各标量字段可为 null（Jackson 透出 null），与 DefectResponse 建模惯例一致。
+ */
+export interface TestSuiteResponse {
+  id: number;
+  createdAt: number | null;
+  updatedAt: number | null;
+  suiteName: string;
+  projectId: number;
+  description: string | null;
+  suiteType: TestSuiteType | null;
+  status: TestSuiteStatus;
+  priority: TestSuitePriority | null;
+  estimatedTime: number | null;
+  actualTime: number | null;
+  passRate: number | null;
+  totalCases: number | null;
+  passedCases: number | null;
+  failedCases: number | null;
+  skippedCases: number | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+}
+
+/**
+ * 套件查询条件（忠实于后端 TestSuiteQueryRequest）。
+ * projectId 必填：后端 TestSuiteServiceImpl.findByPage 显式校验
+ * （"测试套件分页查询必须指定项目"，ParamSetIllegal）。
+ */
+export interface TestSuiteQueryRequest {
+  suiteName?: string;
+  projectId: number;
+  suiteType?: TestSuiteType;
   status?: TestSuiteStatus;
 }

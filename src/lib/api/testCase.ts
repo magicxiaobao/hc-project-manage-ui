@@ -7,8 +7,9 @@
  *   “删除”类操作也用 POST）
  * - findById 为 GET
  * - findByPage 的 bean 必须带有效 projectId（后端 validatePageRequest 业务码校验）
- * - 批量删除（batchDeleteTestCase）与高级搜索导出（advancedSearchExport/xlsx）
- *   为 P2 明确排除项，不建模
+ * - 批量删除（batchDeleteTestCase）与高级搜索导出（advancedSearchExport，
+ *   返回 JSON Result<List<TestCaseResponse>>，非 xlsx 文件）为 P2 明确排除项，
+ *   不建模
  */
 import { api } from './client';
 import type { PageRequest, PageResult } from './types';
