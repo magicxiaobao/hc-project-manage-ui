@@ -41,9 +41,12 @@ import {
   type SprintStatus,
 } from "@/lib/sprint-form";
 import {
+  applyRetroSaveSuccess,
+  applyRetroServerSync,
   buildBurndownGeometry,
   normalizeBurndownData,
   summarizeBurndown,
+  type RetroEditorSyncState,
 } from "@/lib/sprint-detail";
 import type { SprintResponse } from "@/lib/api/sprint-types";
 import {
@@ -267,18 +270,27 @@ export function SprintDetailLive({
   const [draft, setDraft] = useState<string | null>(null);
   const [savedText, setSavedText] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState("");
-  // 已同步为草稿/基线的服务端文本版本。后台重取返回新文本时：草稿不脏
-  // 才用新文本重设基线（r16-2）；脏草稿一律保留，避免静默覆盖用户输入。
+  // 回顾编辑器同步状态机（@/lib/sprint-detail）：已同步的服务端文本版本 +
+  // 保存抑制标记。后台重取返回新文本时：草稿不脏才用新文本重设基线
+  //（r16-2）；脏草稿一律保留，避免静默覆盖用户输入。保存成功后在服务端
+  // 回显到达前抑制同步，避免旧缓存把已保存草稿回退（r17-1）。
   const syncedServerTextRef = useRef<string | null>(null);
+  const pendingSaveRef = useRef<RetroEditorSyncState["pendingSave"]>(null);
   useEffect(() => {
-    if (!retro.isSuccess) return;
-    const isDirty = draft !== null && savedText !== null && draft !== savedText;
-    if (draft === null || (!isDirty && serverText !== syncedServerTextRef.current)) {
-      syncedServerTextRef.current = serverText;
-      setDraft(serverText);
-      setSavedText(serverText);
-    }
-  }, [retro.isSuccess, serverText, draft, savedText]);
+    const next = applyRetroServerSync(
+      {
+        draft,
+        savedText,
+        syncedServerText: syncedServerTextRef.current,
+        pendingSave: pendingSaveRef.current,
+      },
+      { isSuccess: retro.isSuccess, serverText, dataUpdatedAt: retro.dataUpdatedAt },
+    );
+    syncedServerTextRef.current = next.syncedServerText;
+    pendingSaveRef.current = next.pendingSave;
+    if (next.draft !== draft) setDraft(next.draft);
+    if (next.savedText !== savedText) setSavedText(next.savedText);
+  }, [retro.isSuccess, retro.dataUpdatedAt, serverText, draft, savedText]);
   const dirty = draft !== null && savedText !== null && draft !== savedText;
   // 整页表单守卫：blocker/dialog 必须在 early return 分支之上渲染，
   // 否则加载页/错误页切换时守卫离线（表单 UX 约定）。
@@ -293,15 +305,33 @@ export function SprintDetailLive({
 
   const handleSave = () => {
     if (draft === null || updateRetro.isPending) return;
+    // 捕获保存发起时的 draft：onSuccess 闭包用该值推进同步版本，
+    // 避免读到保存后用户又改了的 draft（r17-1）。
+    const savingText = draft;
     setSubmitError("");
     updateRetro.mutate(
-      { sprintId, retrospective: draft },
+      { sprintId, retrospective: savingText },
       {
         onSuccess: () => {
           toast.success("冲刺回顾已保存");
           // 成功 = 已授权离开：同步置位 cleanRef，避免守卫拦截后续导航
           markClean();
-          setSavedText(draft);
+          // r17-1：同步版本推进到保存基线，并立起保存抑制标记——在服务端
+          // 回显到达前同步 effect 一律跳过，防止旧缓存把已保存的草稿回退
+          //（run188-codex-P3-r17-1）
+          const next = applyRetroSaveSuccess(
+            {
+              draft,
+              savedText,
+              syncedServerText: syncedServerTextRef.current,
+              pendingSave: pendingSaveRef.current,
+            },
+            savingText,
+            retro.dataUpdatedAt,
+          );
+          syncedServerTextRef.current = next.syncedServerText;
+          pendingSaveRef.current = next.pendingSave;
+          setSavedText(next.savedText);
         },
         onError: (error) => {
           setSubmitError(`保存失败：${toUserMessage(error)}`);

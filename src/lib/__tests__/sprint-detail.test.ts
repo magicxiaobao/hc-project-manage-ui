@@ -8,10 +8,15 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  applyRetroSaveSuccess,
+  applyRetroServerSync,
   buildBurndownGeometry,
   formatBurndownDayLabel,
+  initialRetroEditorSyncState,
   normalizeBurndownData,
   summarizeBurndown,
+  type RetroEditorSyncState,
+  type RetroServerSnapshot,
 } from "../sprint-detail";
 
 describe("normalizeBurndownData", () => {
@@ -222,5 +227,83 @@ describe("summarizeBurndown", () => {
       windowCompleted: 0,
       totalHours: 0,
     });
+  });
+});
+
+describe("回顾编辑器同步状态机（r17-1 回归）", () => {
+  const snap = (
+    serverText: string,
+    dataUpdatedAt: number,
+    isSuccess = true,
+  ): RetroServerSnapshot => ({ isSuccess, serverText, dataUpdatedAt });
+
+  it("脏草稿 C → 后台返回 B（保留 C）→ 保存 C 成功 → 缓存仍为 B 时 draft 不回退为 B", () => {
+    // 1. 初始载入 A：草稿/基线/同步版本对齐
+    let s: RetroEditorSyncState = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100));
+    expect(s).toEqual({
+      draft: "A",
+      savedText: "A",
+      syncedServerText: "A",
+      pendingSave: null,
+    });
+    // 2. 用户编辑为 C（脏）
+    s = { ...s, draft: "C" };
+    // 3. 后台重取返回 B：脏草稿保留，不静默覆盖
+    s = applyRetroServerSync(s, snap("B", 200));
+    expect(s.draft).toBe("C");
+    expect(s.savedText).toBe("A");
+    expect(s.syncedServerText).toBe("A");
+    // 4. 保存 C 成功：invalidateQueries 不等待重取，查询缓存仍是 B（dataUpdatedAt=200）
+    s = applyRetroSaveSuccess(s, "C", 200);
+    expect(s.savedText).toBe("C");
+    expect(s.syncedServerText).toBe("C");
+    expect(s.pendingSave).toEqual({ text: "C", dataUpdatedAt: 200 });
+    // 5. 同步 effect 再次执行（脏态消失触发）：缓存仍为旧 B → 不回退
+    //    旧实现（无抑制标记）此处会把 draft/savedText 重置为 B
+    s = applyRetroServerSync(s, snap("B", 200));
+    expect(s.draft).toBe("C");
+    expect(s.savedText).toBe("C");
+    // 6. 服务端回显到达（查询推进到 C）：放行，草稿保持 C，标记清除
+    s = applyRetroServerSync(s, snap("C", 300));
+    expect(s.draft).toBe("C");
+    expect(s.savedText).toBe("C");
+    expect(s.syncedServerText).toBe("C");
+    expect(s.pendingSave).toBeNull();
+  });
+
+  it("无抑制标记时：干净草稿随后台新文本重对齐（r16-2 行为保持）", () => {
+    let s = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100));
+    s = applyRetroServerSync(s, snap("B", 200));
+    expect(s).toEqual({
+      draft: "B",
+      savedText: "B",
+      syncedServerText: "B",
+      pendingSave: null,
+    });
+  });
+
+  it("脏草稿在后台返回新文本时始终保留（r16-2 行为保持）", () => {
+    let s = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100));
+    s = { ...s, draft: "C" };
+    s = applyRetroServerSync(s, snap("B", 200));
+    expect(s.draft).toBe("C");
+    expect(s.savedText).toBe("A");
+  });
+
+  it("查询未成功时状态不变", () => {
+    const s = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100, false));
+    expect(s).toBe(initialRetroEditorSyncState);
+  });
+
+  it("保存成功后用户继续编辑（变脏），回显到达时不覆盖新草稿", () => {
+    let s = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100));
+    s = { ...s, draft: "C" };
+    s = applyRetroSaveSuccess(s, "C", 100);
+    // 保存后用户又编辑为 D（脏），此时回显到达
+    s = { ...s, draft: "D" };
+    s = applyRetroServerSync(s, snap("C", 200));
+    expect(s.draft).toBe("D");
+    expect(s.savedText).toBe("C");
+    expect(s.pendingSave).toBeNull();
   });
 });

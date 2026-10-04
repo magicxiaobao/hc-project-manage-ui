@@ -250,3 +250,95 @@ export function summarizeBurndown(
     totalHours: round2(data.dailyHours.reduce((sum, hours) => sum + hours, 0)),
   };
 }
+
+/**
+ * 冲刺回顾编辑器同步状态机（r17-1）。
+ *
+ * 背景：回顾查询的缓存失效（invalidateQueries）不等待重取完成，保存成功瞬间
+ * 查询缓存仍是旧文本；同步 effect 若此时放行，会把已保存的草稿回退到旧缓存
+ * （run188-codex-P3-r17-1：toast 弹"已保存"，编辑器却回退到保存前文本，
+ * 用户继续编辑再保存会用旧文本覆盖服务端已有的新文本）。
+ *
+ * 后端实读（SprintServiceImpl:507-517）：getRetrospective 直接返回
+ * retrospective_summary 列，updateRetrospective 原样写入，无任何变换，
+ * 故服务端回显文本恒等于保存文本，可作为"回显到达"的判断依据之一。
+ *
+ * 状态机把"保存抑制标记"显式建模：保存成功后记录当时的 dataUpdatedAt，
+ * 同步 effect 在查询数据推进（服务端回显到达）前一律跳过。
+ */
+export interface RetroEditorSyncState {
+  /** 编辑器草稿；null 表示尚未从服务端载入 */
+  draft: string | null;
+  /** 上次载入/保存的基线；dirty = draft 与 savedText 偏离 */
+  savedText: string | null;
+  /** 已同步为草稿/基线的服务端文本版本 */
+  syncedServerText: string | null;
+  /** 保存成功后、服务端回显到达前的抑制标记 */
+  pendingSave: { text: string; dataUpdatedAt: number } | null;
+}
+
+export interface RetroServerSnapshot {
+  isSuccess: boolean;
+  serverText: string;
+  dataUpdatedAt: number;
+}
+
+export const initialRetroEditorSyncState: RetroEditorSyncState = {
+  draft: null,
+  savedText: null,
+  syncedServerText: null,
+  pendingSave: null,
+};
+
+/**
+ * 同步 effect 的纯决策（r16-2 的"后台重取新文本时干净草稿重对齐" +
+ * r17-1 的"保存抑制"）。
+ * - 查询未成功 → 状态不变
+ * - 存在保存抑制标记且查询数据未推进（仍是保存前的旧缓存）→ 状态不变，
+ *   已保存的草稿不回退
+ * - 否则清除标记；draft 为 null 或（草稿不脏且服务端文本有新版本）→
+ *   用服务端文本重设草稿与基线；脏草稿一律保留，避免静默覆盖用户输入
+ */
+export function applyRetroServerSync(
+  state: RetroEditorSyncState,
+  snapshot: RetroServerSnapshot,
+): RetroEditorSyncState {
+  if (!snapshot.isSuccess) return state;
+  // r17-1：保存成功后查询数据尚未推进（旧缓存）→ 跳过，不回退已保存草稿
+  if (state.pendingSave && snapshot.dataUpdatedAt <= state.pendingSave.dataUpdatedAt) {
+    return state;
+  }
+  const isDirty =
+    state.draft !== null && state.savedText !== null && state.draft !== state.savedText;
+  // r16-2：草稿不脏且服务端有新版本 → 用新文本重设草稿与基线
+  if (
+    state.draft === null ||
+    (!isDirty && snapshot.serverText !== state.syncedServerText)
+  ) {
+    return {
+      draft: snapshot.serverText,
+      savedText: snapshot.serverText,
+      syncedServerText: snapshot.serverText,
+      pendingSave: null,
+    };
+  }
+  return { ...state, pendingSave: null };
+}
+
+/**
+ * 保存成功时的状态推进（r17-1）：同步版本与保存基线对齐，并立起抑制标记
+ * 等待服务端回显。调用方须传入保存发起时捕获的 draft 值（避免闭包读到
+ * 保存后用户又改了的 draft）。
+ */
+export function applyRetroSaveSuccess(
+  state: RetroEditorSyncState,
+  savedText: string,
+  dataUpdatedAt: number,
+): RetroEditorSyncState {
+  return {
+    ...state,
+    savedText,
+    syncedServerText: savedText,
+    pendingSave: { text: savedText, dataUpdatedAt },
+  };
+}
