@@ -87,52 +87,62 @@ export function VersionDetailLive({
   const [transitionEvent, setTransitionEvent] = useState<VersionEvent | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
+  // 弹窗实例在早返回之外声明：pending/error/not-found/成功四个分支共用同一
+  // keyed 实例；后台重取失败（isError 但保留缓存 data）时错误分支只在顶部加
+  // 横幅、不卸载子树，编辑/流转弹窗的脏草稿得以保留
+  //（仿 testsuite-detail-live 约定；r19 P2 真问题）。
+  // detail 为 null 时弹窗没有可打开的入口（按钮依赖详情数据），渲染 null。
+  const routeProjectId = routeProjectQuery.data;
+  // 写操作区（状态流转/编辑）只有在路由项目解析成功且与记录的 projectId
+  // 精确一致时才渲染。解析中/解析失败（无可用数据）时只读展示。
+  const projectContextVerified =
+    typeof routeProjectId === "number" &&
+    detail != null &&
+    detail.projectId != null &&
+    detail.projectId === routeProjectId;
+  const transitionDialog = detail ? (
+    <VersionTransitionDialog
+      key={`transition-${versionId}`}
+      versionId={versionId}
+      fromStatus={detail.status}
+      event={transitionEvent}
+      open={transitionEvent != null}
+      projectContextVerified={projectContextVerified}
+      onClose={() => setTransitionEvent(null)}
+    />
+  ) : null;
+  const editDialog = detail ? (
+    <VersionFormDialog
+      key={`edit-${detail.id}`}
+      open={editOpen}
+      projectId={detail.projectId ?? 0}
+      version={detail}
+      // 编辑成功后 useUpdateVersion 的 onSuccess 已 toast 并失效版本域缓存，
+      // 详情自动重取；取消关闭无需额外提示
+      onClose={() => setEditOpen(false)}
+    />
+  ) : null;
+
   if (detailQuery.isPending) {
     return (
       <div className="flex items-center gap-2 px-4 py-8 text-sm text-default-500">
         <Spinner size="sm" />
         正在加载版本详情…
+        {transitionDialog}
+        {editDialog}
       </div>
     );
-  }
-  if (detailQuery.isError) {
-    return (
-      <div className="flex flex-col items-start gap-3 px-4 py-8">
-        <p className="type-body text-danger">版本详情加载失败：{toUserMessage(detailQuery.error)}</p>
-        <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
-          重试
-        </Button>
-      </div>
-    );
-  }
-  if (!detail) {
-    return <EmptyHint>{`没有找到这个版本（id=${versionId}）。`}</EmptyHint>;
   }
 
-  const routeProjectId = routeProjectQuery.data;
-  if (
-    typeof routeProjectId === "number" &&
-    detail.projectId != null &&
-    detail.projectId !== routeProjectId
-  ) {
-    return (
-      <EmptyHint>{`版本 #${versionId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
-    );
-  }
-  // 写操作区（状态流转/编辑）只有在路由项目解析成功且与记录的 projectId
-  // 精确一致时才渲染。解析中/解析失败（无可用数据）时只读展示。
-  const projectContextVerified =
-    typeof routeProjectId === "number" &&
-    detail.projectId != null &&
-    detail.projectId === routeProjectId;
   const projectContextNotice = routeProjectQuery.isPending
     ? "正在确认项目归属，操作区稍后可用…"
     : "当前无法确认该记录归属于此项目，操作区已禁用。";
 
-  const deprecated = detail.status === "DEPRECATED";
-  const events = deprecated ? [] : versionTransitionEvents(detail.status);
+  const deprecated = detail?.status === "DEPRECATED";
+  const events = !detail || deprecated ? [] : versionTransitionEvents(detail.status);
 
-  return (
+  // 有缓存数据时的详情主内容：成功分支与"后台刷新失败"分支共用，不卸载子树
+  const detailContent = detail ? (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
       <div>
         <Link
@@ -222,23 +232,78 @@ export function VersionDetailLive({
         </p>
       )}
 
-      <VersionTransitionDialog
-        versionId={versionId}
-        fromStatus={detail.status}
-        event={transitionEvent}
-        open={transitionEvent != null}
-        projectContextVerified={projectContextVerified}
-        onClose={() => setTransitionEvent(null)}
-      />
-
-      <VersionFormDialog
-        open={editOpen}
-        projectId={detail.projectId ?? 0}
-        version={detail}
-        // 编辑成功后 useUpdateVersion 的 onSuccess 已 toast 并失效版本域缓存，
-        // 详情自动重取；取消关闭无需额外提示
-        onClose={() => setEditOpen(false)}
-      />
     </div>
+  ) : null;
+
+  if (detailQuery.isError) {
+    if (detail) {
+      // 后台重取失败但有缓存数据：顶部横幅提示，不卸载子树（弹窗草稿保留）
+      return (
+        <>
+          <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 pt-4 md:px-6 md:pt-6">
+            <div
+              role="alert"
+              className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
+            >
+              <p className="type-body text-danger">
+                版本详情刷新失败：{toUserMessage(detailQuery.error)}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2"
+                onPress={() => void detailQuery.refetch()}
+              >
+                重试
+              </Button>
+            </div>
+          </div>
+          {detailContent}
+          {transitionDialog}
+          {editDialog}
+        </>
+      );
+    }
+    return (
+      <div className="flex flex-col items-start gap-3 px-4 py-8">
+        <p className="type-body text-danger">版本详情加载失败：{toUserMessage(detailQuery.error)}</p>
+        <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
+          重试
+        </Button>
+        {transitionDialog}
+        {editDialog}
+      </div>
+    );
+  }
+  if (!detail) {
+    return (
+      <div className="px-4 py-8">
+        <EmptyHint>{`没有找到这个版本（id=${versionId}）。`}</EmptyHint>
+        {transitionDialog}
+        {editDialog}
+      </div>
+    );
+  }
+
+  if (
+    typeof routeProjectId === "number" &&
+    detail.projectId != null &&
+    detail.projectId !== routeProjectId
+  ) {
+    return (
+      <div className="px-4 py-8">
+        <EmptyHint>{`版本 #${versionId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
+        {transitionDialog}
+        {editDialog}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {detailContent}
+      {transitionDialog}
+      {editDialog}
+    </>
   );
 }

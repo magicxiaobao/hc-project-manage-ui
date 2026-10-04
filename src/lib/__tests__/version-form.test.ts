@@ -167,6 +167,17 @@ describe('buildVersionCreatePayload 载荷构建', () => {
     const payload = buildVersionCreatePayload(form({ versionType: '大版本' }), 7);
     expect(payload.versionType).toBe('次版本');
   });
+
+  it('日精度日期归一为 YYYY-MM-DDTHH:mm:ss（后端 LocalDateTime 口径，老前端 toWireDate 同款）', () => {
+    const payload = buildVersionCreatePayload(
+      form({ plannedStartDate: '2026-10-01', plannedReleaseDate: '2026-11-15T10:00:00' }),
+      7,
+    );
+    expect(payload.plannedStartDate).toBe('2026-10-01T00:00:00');
+    expect(payload.plannedEndDate).toBeUndefined();
+    // 带 T 的时间串原样透传
+    expect(payload.plannedReleaseDate).toBe('2026-11-15T10:00:00');
+  });
 });
 
 describe('buildVersionUpdatePayload 字段级更新', () => {
@@ -183,14 +194,16 @@ describe('buildVersionUpdatePayload 字段级更新', () => {
     });
   });
 
-  it('填写的字段原样发送（trim 后）', () => {
+  it('填写的字段原样发送（trim 后）；日精度日期归一为 T00:00:00', () => {
     const payload = buildVersionUpdatePayload(
       3101,
       form({ description: ' 调整了范围 ', assigneeId: '12', plannedStartDate: '2026-10-01' }),
     );
     expect(payload.description).toBe('调整了范围');
     expect(payload.assigneeId).toBe(12);
-    expect(payload.plannedStartDate).toBe('2026-10-01');
+    // 后端 LocalDateTime 不接受 date-only：载荷归一为 'YYYY-MM-DDTHH:mm:ss'
+    //（老前端 toWireDate 同款；原断言 '2026-10-01' 固化了 r19 P1 bug）
+    expect(payload.plannedStartDate).toBe('2026-10-01T00:00:00');
   });
 
   it('projectId 不出现在更新载荷中（项目归属不允许变更）', () => {

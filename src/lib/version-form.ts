@@ -9,7 +9,10 @@
  *   后端为 String 不做白名单校验）
  * - plannedEndDate 不能早于 plannedStartDate（老前端日精度口径）
  * - 日期用 'YYYY-MM-DDTHH:mm:ss' 字符串（LocalDateTime 序列化口径）；
- *   非空日期必须形如 YYYY-MM-DD 或带 T 的时间串且为合法日期
+ *   非空日期必须形如 YYYY-MM-DD 或带 T 的时间串且为合法日期；
+ *   日精度输入在载荷构建时归一为 'YYYY-MM-DDTHH:mm:ss'（补 T00:00:00，
+ *   与老前端 toWireDate 的 startOf('day') 一致）——后端 LocalDateTime 无
+ *   Jackson 定制（默认 ISO_LOCAL_DATE_TIME），date-only 反序列化失败 → 400
  *
  * 更新载荷沿用缺陷编辑的 null-skip 语义（lib/defect-detail.ts），但以前端
  * 契约测试的"局部更新"口径实现：空白的可选字段在载荷里**省略**（undefined，
@@ -204,6 +207,23 @@ const nullIfBlank = (value: string) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+/**
+ * 线上口径归一：日精度输入（YYYY-MM-DD）补 'T00:00:00' 后发送。
+ * 后端 planned*Date 为 LocalDateTime 且无 Jackson 定制（默认 ISO_LOCAL_DATE_TIME），
+ * date-only 反序列化失败 → 400；老前端 toWireDate 恒发 T00:00:00（startOf('day')）。
+ * 带 T 的时间串原样透传（秒可缺省，Jackson ISO_LOCAL_DATE_TIME 可解析）。
+ */
+export function normalizeWireDateTime(value: string): string {
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00:00` : trimmed;
+}
+
+/** 非空日期归一为线上口径；空白 → undefined（JSON 序列化时丢弃） */
+const optionalWireDateTime = (value: string): string | undefined => {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? normalizeWireDateTime(trimmed) : undefined;
+};
+
 /** 由表单输入构建 VersionCreatePayload。调用前应先跑 validateVersionFormInput。 */
 export function buildVersionCreatePayload(
   input: VersionFormInput,
@@ -218,9 +238,9 @@ export function buildVersionCreatePayload(
       ? (input.versionType as VersionType)
       : '次版本',
     assigneeId: parseOptionalPositiveInt(input.assigneeId) ?? undefined,
-    plannedStartDate: nullIfBlank(input.plannedStartDate) ?? undefined,
-    plannedEndDate: nullIfBlank(input.plannedEndDate) ?? undefined,
-    plannedReleaseDate: nullIfBlank(input.plannedReleaseDate) ?? undefined,
+    plannedStartDate: optionalWireDateTime(input.plannedStartDate),
+    plannedEndDate: optionalWireDateTime(input.plannedEndDate),
+    plannedReleaseDate: optionalWireDateTime(input.plannedReleaseDate),
     tags: nullIfBlank(input.tags) ?? undefined,
   };
 }
@@ -249,9 +269,9 @@ export function buildVersionUpdatePayload(
       ? (input.versionType as VersionType)
       : undefined,
     assigneeId: parseOptionalPositiveInt(input.assigneeId) ?? undefined,
-    plannedStartDate: undefinedIfBlank(input.plannedStartDate),
-    plannedEndDate: undefinedIfBlank(input.plannedEndDate),
-    plannedReleaseDate: undefinedIfBlank(input.plannedReleaseDate),
+    plannedStartDate: optionalWireDateTime(input.plannedStartDate),
+    plannedEndDate: optionalWireDateTime(input.plannedEndDate),
+    plannedReleaseDate: optionalWireDateTime(input.plannedReleaseDate),
     tags: undefinedIfBlank(input.tags),
   };
 }
