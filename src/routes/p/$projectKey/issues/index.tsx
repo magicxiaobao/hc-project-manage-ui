@@ -4,7 +4,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Button, Spinner } from "@heroui/react";
 import { EmptyHint } from "@/components/biz";
+import { ListView } from "@/components/pm/list-view";
 import { TaskListLive } from "@/components/pm/task-list-live";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { toUserMessage, useProjectIdByKey } from "@/lib/query";
 
 export const Route = createFileRoute("/p/$projectKey/issues/")({
@@ -13,6 +15,10 @@ export const Route = createFileRoute("/p/$projectKey/issues/")({
 
 function Page() {
   const { projectKey } = Route.useParams();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  // Codex review 4175631821：未登录时 index 路由保留演示列表；
+  // 深链接子路由（$taskId/new）走各自的登录守卫，不再被布局路由的演示分支吞掉。
+  if (!isAuthenticated) return <ListView projectKey={projectKey} />;
   return <LiveTaskList projectKey={projectKey} />;
 }
 

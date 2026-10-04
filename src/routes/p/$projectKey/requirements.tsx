@@ -1,20 +1,20 @@
 /**
  * requirements 布局路由（P1：修复 requirements.$requirementId 子路由不可达）。
  *
- * 登录态：仅渲染子路由 Outlet（requirements/index 需求列表 / requirements/$requirementId 需求详情）。
- * 未登录：保留演示需求树（RequirementsView）。
+ * 始终渲染子路由 Outlet：未登录时的分支下沉到各子路由自行处理——
+ * requirements/index 渲染演示需求树（RequirementsView），
+ * requirements.$requirementId 渲染登录提示。
+ *
+ * Codex review 4175631821：此前父路由在未登录时直接返回 RequirementsView，
+ * 导致深链接 /p/<key>/requirements/123 的子路由登录守卫永远不可达，
+ * 未登录用户看到的是无关的演示需求树而非登录提示。
  */
 import { Outlet, createFileRoute } from "@tanstack/react-router";
-import { RequirementsView } from "@/components/pm/requirements-view";
-import { useAuthStore } from "@/lib/api/auth-store";
 
 export const Route = createFileRoute("/p/$projectKey/requirements")({
   component: Page,
 });
 
 function Page() {
-  const { projectKey } = Route.useParams();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  if (!isAuthenticated) return <RequirementsView projectKey={projectKey} />;
   return <Outlet />;
 }

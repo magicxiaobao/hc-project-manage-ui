@@ -413,6 +413,7 @@ export function TaskDetailLive({
                     type="button"
                     className="type-caption ml-auto text-default-500 underline-offset-2 hover:underline"
                     onClick={() => setReplyTo(comment)}
+                    disabled={commentMutation.isPending}
                   >
                     回复
                   </button>
@@ -438,12 +439,20 @@ export function TaskDetailLive({
                 type="button"
                 className="ml-2 underline-offset-2 hover:underline"
                 onClick={() => setReplyTo(null)}
+                disabled={commentMutation.isPending}
               >
                 取消回复
               </button>
             </p>
           ) : null}
-          <TextField value={draft} onChange={setDraft} aria-label="发表评论">
+          {/* Codex review 4175631827：发送在途时禁用评论输入与回复目标切换，
+              避免成功回调无条件清空草稿时吞掉用户刚写下的新输入。 */}
+          <TextField
+            value={draft}
+            onChange={setDraft}
+            aria-label="发表评论"
+            isDisabled={commentMutation.isPending}
+          >
             <Label className="sr-only">评论</Label>
             <TextArea rows={3} placeholder="写下评论…" />
           </TextField>

@@ -75,6 +75,20 @@ function LiveCreateProject() {
   const [managerIdText, setManagerIdText] = useState(
     user && isCanonicalUserId(user.userId) ? user.userId : "",
   );
+  // Codex review 4175631825：跨 tab 切换账号后 hydrate() 会把 store 用户从 A 切到 B，
+  // 但本组件的 useState 初始化器只在挂载时读了一次 A 的 userId，表单会残留 A 的
+  // 经理 ID 并被 B 静默建出项目。跟踪初始化时的账号：账号变化且用户未手动改过
+  // 该字段时，跟随新账号重置默认值；用户已手动编辑则保留其输入。
+  const initUserIdRef = useRef(
+    user && isCanonicalUserId(user.userId) ? user.userId : "",
+  );
+  const defaultManagerId = user && isCanonicalUserId(user.userId) ? user.userId : "";
+  useEffect(() => {
+    if (defaultManagerId !== initUserIdRef.current) {
+      if (managerIdText === initUserIdRef.current) setManagerIdText(defaultManagerId);
+      initUserIdRef.current = defaultManagerId;
+    }
+  }, [defaultManagerId, managerIdText]);
   const [description, setDescription] = useState("");
   const [keyExists, setKeyExists] = useState<boolean | null>(null);
   const [checkingKey, setCheckingKey] = useState(false);

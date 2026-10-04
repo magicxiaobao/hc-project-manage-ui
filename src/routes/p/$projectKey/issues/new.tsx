@@ -1,13 +1,15 @@
 /**
  * 任务新建路由（P1：p1-task-create）。
  *
- * issues 布局路由的子路由（登录态才可达）：projectKey → id 解析后渲染
+ * issues 布局路由的子路由：projectKey → id 解析后渲染
  * TaskCreateLive（真实后端创建），提交成功后跳回任务列表。
+ * 未登录时渲染登录提示（Codex review 4175631821：布局路由不再拦截，由本页守卫）。
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { Button, Spinner } from "@heroui/react";
 import { EmptyHint } from "@/components/biz";
 import { TaskCreateLive } from "@/components/pm/task-create-live";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { toUserMessage, useProjectIdByKey } from "@/lib/query";
 
 export const Route = createFileRoute("/p/$projectKey/issues/new")({
@@ -16,6 +18,11 @@ export const Route = createFileRoute("/p/$projectKey/issues/new")({
 
 function Page() {
   const { projectKey } = Route.useParams();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  // Codex review 4175631821：布局路由不再做登录拦截，深链接可达时此处自行守卫。
+  if (!isAuthenticated) {
+    return <EmptyHint>{"登录后新建任务。"}</EmptyHint>;
+  }
   return <LiveTaskCreate projectKey={projectKey} />;
 }
 
