@@ -7,7 +7,11 @@
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
+<<<<<<< HEAD
 function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board') {
+=======
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'board' | 'sprint') {
+>>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
   const all = ['hc', domain] as const;
   return {
     all,
@@ -58,4 +62,5 @@ export const queryKeys = {
   releaseEnvironment: domainKeys('releaseEnvironment'),
   release: domainKeys('release'),
   board: domainKeys('board'),
+  sprint: domainKeys('sprint'),
 };

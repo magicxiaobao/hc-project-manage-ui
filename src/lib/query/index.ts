@@ -151,3 +151,16 @@ export {
   useSetDefaultBoard,
   useUpdateBoard,
 } from './hooks/useBoards';
+export {
+  normalizeSprintListParams,
+  useCancelSprint,
+  useCompleteSprint,
+  useCreateSprint,
+  useInvalidSprint,
+  usePlanningSprints,
+  useSprintDetail,
+  useSprintList,
+  useStartSprint,
+  useUpdateSprint,
+} from './hooks/useSprints';
+export type { SprintListParams } from './hooks/useSprints';
