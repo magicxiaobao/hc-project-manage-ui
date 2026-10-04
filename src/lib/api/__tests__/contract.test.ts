@@ -59,6 +59,18 @@
  *   （batchDeleteTestCase/advancedSearchExport 为 P2 明确排除项；
  *    老前端遗留路径 /test-suite/* 在后端 testSuite/v1 无对应端点，不建模）
  *
+ * 测试轮/执行契约（P2；来自后端 TestRunController/TestExecutionController + 老前端）：
+ * - POST /testRun/v1/full-regressions、ad-hoc-runs、targeted-retests，三种建轮，返回轮摘要
+ * - POST /testRun/v1/{testRunId}/start 与 complete，id 拼在路径上，无请求体
+ * - POST /testRun/v1/{testRunId}/cancel，请求体 { reason }（reason 先 trim）
+ * - GET /testRun/v1/{testRunId}，返回 run + cases 轮详情
+ * - POST /testRun/v1/findByPage，请求体 { page, pageSize, bean }（projectId/versionId 至少其一）
+ * - GET /testRun/v1/{testRunId}/report，返回 run + summary + resultCounts + cases + defects
+ *   （report/export 为导出能力，P2 明确排除，不建模）
+ * - POST /testExecution/v1/{executionId}/start（无请求体）、complete（字段级可选载荷）、
+ *   retry（请求体 { reason }，先 trim）、defects（执行中建缺陷）、defect-links（关联已有缺陷）
+ *   （老前端 frontend/src/api/testRun.ts 混入的五个执行能力拆分到 testExecutionApi）
+ *
  * 运行：npm run test:contract（需先 npm install）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -71,6 +83,8 @@ import { taskApi } from '../task';
 import { defectApi } from '../defect';
 import { testCaseApi } from '../testCase';
 import { testSuiteApi } from '../testSuite';
+import { testRunApi } from '../testRun';
+import { testExecutionApi } from '../testExecution';
 import type { ProjectCreatePayload, ProjectUpdatePayload } from '../types';
 
 const memStore = new Map<string, string>();
@@ -1856,5 +1870,302 @@ describe('测试套件契约（P2）', () => {
       pageSize: 20,
       bean: { projectId: 7, status: 'ACTIVE' },
     });
+  });
+});
+
+describe('测试轮/执行 API 契约', () => {
+  it('POST /testRun/v1/full-regressions，按版本建轮，返回轮摘要', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 901, runName: 'v2.1 全量回归', runType: 'FULL_REGRESSION', status: 'CREATED' } } },
+    ]);
+    const run = await testRunApi.createFullRegression({
+      versionId: 21,
+      runName: 'v2.1 全量回归',
+      environment: 'staging',
+    });
+
+    expect(run.id).toBe(901);
+    expect(run.runType).toBe('FULL_REGRESSION');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/full-regressions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      versionId: 21,
+      runName: 'v2.1 全量回归',
+      environment: 'staging',
+    });
+  });
+
+  it('POST /testRun/v1/ad-hoc-runs，即席建轮带选择项', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 902, runName: '登录冒烟', runType: 'AD_HOC', status: 'CREATED' } } },
+    ]);
+    const run = await testRunApi.createAdHocRun({
+      projectId: 7,
+      runName: '登录冒烟',
+      selections: [
+        { selectionType: 'TEST_SUITE', id: 501 },
+        { selectionType: 'TEST_CASE', id: 611 },
+      ],
+    });
+
+    expect(run.id).toBe(902);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/ad-hoc-runs');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      projectId: 7,
+      runName: '登录冒烟',
+      selections: [
+        { selectionType: 'TEST_SUITE', id: 501 },
+        { selectionType: 'TEST_CASE', id: 611 },
+      ],
+    });
+  });
+
+  it('POST /testRun/v1/targeted-retests，基于旧轮+用例选择建轮', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 903, runName: '复测#901', runType: 'TARGETED_RETEST', status: 'CREATED' } } },
+    ]);
+    const run = await testRunApi.createTargetedRetest({
+      sourceRunId: 901,
+      sourceRunCaseIds: [3101, 3102],
+      runName: '复测#901',
+    });
+
+    expect(run.id).toBe(903);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/targeted-retests');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      sourceRunId: 901,
+      sourceRunCaseIds: [3101, 3102],
+      runName: '复测#901',
+    });
+  });
+
+  it('POST /testRun/v1/{id}/start 与 /complete，id 拼路径，无请求体', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 901, status: 'RUNNING' } } },
+      { body: { code: 1, msg: 'ok', result: { id: 901, status: 'COMPLETED' } } },
+    ]);
+    await testRunApi.startRun(901);
+    await testRunApi.completeRun(901);
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/testRun/v1/901/start');
+    expect(init1.method).toBe('POST');
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/testRun/v1/901/complete');
+    expect(init2.method).toBe('POST');
+  });
+
+  it('POST /testRun/v1/{id}/cancel，reason 先 trim 再发送', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 901, status: 'CANCELLED', cancellationReason: '环境被占用' } } },
+    ]);
+    const run = await testRunApi.cancelRun(901, { reason: '  环境被占用  ' });
+
+    expect(run.status).toBe('CANCELLED');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/901/cancel');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ reason: '环境被占用' });
+  });
+
+  it('GET /testRun/v1/{id}，返回 run + cases 轮详情', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            run: { id: 901, runName: 'v2.1 全量回归', status: 'RUNNING' },
+            cases: [
+              {
+                runCaseId: 3101,
+                testCaseId: 611,
+                snapshot: { title: '登录成功用例' },
+                attempts: [],
+                defects: [],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    const detail = await testRunApi.getDetail(901);
+
+    expect(detail.run.id).toBe(901);
+    expect(detail.cases).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/901');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /testRun/v1/findByPage，请求体 { page, pageSize, bean }', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 901, runName: 'v2.1 全量回归' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testRunApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'RUNNING' },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'RUNNING' },
+    });
+  });
+
+  it('GET /testRun/v1/{id}/report，返回 summary + resultCounts + cases + defects', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            run: { id: 901, runName: 'v2.1 全量回归', status: 'COMPLETED' },
+            summary: { runCaseCount: 4, executedCaseCount: 4, passRate: 0.75, versionEvidenceState: 'OFFICIAL' },
+            resultCounts: { passed: 3, failed: 1, blocked: 0, skipped: 0 },
+            cases: [],
+            defects: [{ defectId: 801, title: '登录 500', liveStatus: '已分配', severity: '严重' }],
+            generatedAt: '2026-10-04T05:00:00Z',
+          },
+        },
+      },
+    ]);
+    const report = await testRunApi.getReport(901);
+
+    expect(report.resultCounts.passed).toBe(3);
+    expect(report.summary.passRate).toBe(0.75);
+    expect(report.defects).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/901/report');
+    expect(init.method).toBe('GET');
+  });
+});
+
+describe('执行记录 API 契约', () => {
+  it('POST /testExecution/v1/{id}/start，无请求体', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 5101, runCaseId: 3101, attemptNo: 1, status: 'RUNNING' } } },
+    ]);
+    const exec = await testExecutionApi.startExecution(5101);
+
+    expect(exec.status).toBe('RUNNING');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/start');
+    expect(init.method).toBe('POST');
+  });
+
+  it('POST /testExecution/v1/{id}/complete，字段级可选载荷', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 5101, status: 'COMPLETED', result: 'FAILED' } } },
+    ]);
+    const exec = await testExecutionApi.completeExecution(5101, {
+      actualResult: '登录报 500',
+      failureMessage: 'NullPointerException at LoginService:42',
+      executionNotes: 'staging 环境复现',
+    });
+
+    expect(exec.result).toBe('FAILED');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/complete');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      actualResult: '登录报 500',
+      failureMessage: 'NullPointerException at LoginService:42',
+      executionNotes: 'staging 环境复现',
+    });
+  });
+
+  it('POST /testExecution/v1/{id}/retry，reason 先 trim 再发送', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 5102, runCaseId: 3101, attemptNo: 2, status: 'NOT_STARTED' } } },
+    ]);
+    const exec = await testExecutionApi.retryExecution(5101, { reason: ' 环境抖动重跑 ' });
+
+    expect(exec.attemptNo).toBe(2);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/retry');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ reason: '环境抖动重跑' });
+  });
+
+  it('POST /testExecution/v1/{id}/defects，执行中建缺陷，返回 operation 三态', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            executionId: 5101,
+            operation: 'CREATED',
+            defect: { id: 801, title: '登录 500', status: 'NEW', severity: '严重', assigneeId: null },
+            relation: null,
+            occurredAt: '2026-10-04T05:00:00Z',
+          },
+        },
+      },
+    ]);
+    const res = await testExecutionApi.createDefectFromExecution(5101, {
+      title: '登录 500',
+      severity: '严重',
+      priority: '高',
+      reproductionSteps: '输入账号密码点登录',
+      expectedResult: '进入首页',
+      actualResult: '报 500',
+      environment: 'staging',
+    });
+
+    expect(res.operation).toBe('CREATED');
+    expect(res.defect.id).toBe(801);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/defects');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    expect(body.title).toBe('登录 500');
+    expect(body.severity).toBe('严重');
+    // 项目/报告人由服务端可信事实填充，前端不传
+    expect(body).not.toHaveProperty('projectId');
+    expect(body).not.toHaveProperty('reporterId');
+  });
+
+  it('POST /testExecution/v1/{id}/defect-links，关联已有缺陷', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            executionId: 5101,
+            operation: 'LINKED',
+            defect: { id: 802, title: '已知的登录缺陷', status: 'ASSIGNED', severity: '一般', assigneeId: 3 },
+            relation: { relationType: 'EXECUTION_DEFECT' },
+            occurredAt: '2026-10-04T05:10:00Z',
+          },
+        },
+      },
+    ]);
+    const res = await testExecutionApi.linkExistingDefect(5101, { defectId: 802 });
+
+    expect(res.operation).toBe('LINKED');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/defect-links');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ defectId: 802 });
   });
 });
