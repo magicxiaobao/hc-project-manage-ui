@@ -510,7 +510,7 @@ describe('刷新失效归因（Codex review 4175724992）', () => {
     memStore.set('userInfo', '{}');
     let unauthorized = 0;
     let generation = 0;
-    let invalidatedGen: number | null = null;
+    const invalidatedGen: number | null = null;
     const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
     client.setSessionGenerationReader(() => generation);
     client.setRefreshInvalidationReader(() => invalidatedGen);
