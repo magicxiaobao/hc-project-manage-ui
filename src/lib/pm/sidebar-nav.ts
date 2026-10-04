@@ -22,7 +22,10 @@ export function moduleFromProjectPath(pathname: string, projectKey: string): Sid
   const root = `/p/${projectKey}`;
   if (path === root) return "board";
   if (!path.startsWith(`${root}/`)) return undefined;
-  return SEGMENTS[path.slice(root.length + 1)];
+  // Codex review 4175510489：嵌套路由（/p/<key>/issues/123、/issues/new、
+  // /requirements/123 等）整体不在 SEGMENTS 里——取首段判定，让详情/新建页
+  // 高亮归属的父模块；未知首段仍返回 undefined。
+  return SEGMENTS[path.slice(root.length + 1).split("/")[0]];
 }
 
 export function highlightedModule(pathname: string, projectKey: string, origin: unknown): SidebarModule | undefined {

@@ -52,3 +52,12 @@ it("extracts the live project key from a /p/<key> path", () => {
   assert.equal(projectKeyFromPath("/"), null);
   assert.equal(projectKeyFromPath("/p/"), null);
 });
+
+it("highlights the parent module on nested live routes (Codex review 4175510489)", () => {
+  assert.equal(highlightedModule("/p/OPS2/issues/123", "OPS2", undefined), "issues");
+  assert.equal(highlightedModule("/p/OPS2/issues/new", "OPS2", undefined), "issues");
+  assert.equal(highlightedModule("/p/OPS2/requirements/123", "OPS2", undefined), "requirements");
+  assert.equal(highlightedModule("/p/OPS2/trace/a/b", "OPS2", undefined), "trace");
+  assert.equal(highlightedModule("/p/OPS2/issues/123?x=1#y", "OPS2", undefined), "issues");
+  assert.equal(highlightedModule("/p/OPS2/nope/123", "OPS2", undefined), undefined);
+});

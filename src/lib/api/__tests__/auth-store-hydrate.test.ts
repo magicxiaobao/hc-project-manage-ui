@@ -87,3 +87,63 @@ describe('hydrate 账号变化时清查询缓存', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
   });
 });
+
+describe('hydrate 跨 tab 登出时清会话（Codex review 4175510484）', () => {
+  let backing: Record<string, string>;
+
+  beforeEach(() => {
+    backing = {};
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => (key in backing ? backing[key] : null),
+      setItem: (key: string, value: string) => {
+        backing[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete backing[key];
+      },
+    });
+    useAuthStore.setState({ user: null, token: null, isAuthenticated: false });
+    setQueryCacheClearer(null);
+  });
+
+  it('内存用户 A、三个存储项全被删（另一 tab 登出）：清缓存并重置内存态', () => {
+    const userA = makeUser('1001', 'alice');
+    useAuthStore.setState({ user: userA, token: 'token-of-1001', isAuthenticated: true });
+    // 另一 tab 的 logout 把三个存储项全部删掉 → backing 保持空
+    const clearer = vi.fn();
+    setQueryCacheClearer(clearer);
+
+    useAuthStore.getState().hydrate();
+
+    expect(clearer).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it('内存用户 A、存储只有残缺凭证：内存态重置且残留凭证被清', () => {
+    const userA = makeUser('1001', 'alice');
+    useAuthStore.setState({ user: userA, token: 'token-of-1001', isAuthenticated: true });
+    backing = { [TOKEN_STORAGE_KEY]: 'stale-token' }; // 缺 refreshToken 与 userInfo
+    const clearer = vi.fn();
+    setQueryCacheClearer(clearer);
+
+    useAuthStore.getState().hydrate();
+
+    expect(clearer).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(backing).toEqual({});
+  });
+
+  it('内存无用户、存储全空（未登录正常刷新）：不动缓存不动内存态', () => {
+    const clearer = vi.fn();
+    setQueryCacheClearer(clearer);
+
+    useAuthStore.getState().hydrate();
+
+    expect(clearer).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+});

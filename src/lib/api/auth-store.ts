@@ -136,6 +136,19 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // “已登录但永远刷不出新令牌”的僵尸会话——access token 过期后每次请求
     // 失败，而客户端会把“凭证仍在”判为瞬时故障、保留会话永不跳转登录页。
     // 因此缺 refreshToken 时拒绝恢复并清理残留凭证。
+    // Codex review 4175510484：跨 tab 登出（另一 tab 的 logout 把 token、refresh
+    // token、userInfo 三个存储项全部删掉）时，既走不到上面的成功分支（持久会话
+    // 已无从比较），也走不到下面的残留清理分支（无任何凭证残留），内存态里的已
+    // 认证用户、会话代际和查询缓存会原封不动——/projects、/projects/new 等显式
+    // 调 hydrate() 的页面会继续渲染已登出账号的新鲜缓存数据。
+    // 同 tab 的 logout 本来就会清内存态，所以“内存有用户 + 持久会话缺失”只能来
+    // 自另一 tab 的登出，此时把内存态按已登出处理：递增代际（丢弃在途刷新结果）、
+    // 清查询缓存、重置 store。页面初始加载时内存无用户，不会误触发。
+    if (get().user && (!token || !refreshToken || !user)) {
+      sessionGeneration += 1;
+      clearQueryCache();
+      set({ user: null, token: null, isAuthenticated: false });
+    }
     if (token || refreshToken || user) {
       clearStoredAuth();
     }
