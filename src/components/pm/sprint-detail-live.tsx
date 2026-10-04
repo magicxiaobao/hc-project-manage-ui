@@ -22,6 +22,7 @@
  * 登录态由路由层守卫（未登录渲染 EmptyHint）；本组件只处理已登录分支。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Button, Label, ProgressBar, Spinner, Tabs, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ import {
 } from "@/lib/sprint-detail";
 import type { SprintResponse } from "@/lib/api/sprint-types";
 import {
+  queryKeys,
   toUserMessage,
   useSprintBurndown,
   useSprintDetail,
@@ -262,6 +264,7 @@ export function SprintDetailLive({
   const detail = useSprintDetail(sprintId);
   const retro = useSprintRetrospective(sprintId);
   const updateRetro = useUpdateRetrospective();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<DetailTab>("burndown");
 
   // 回顾编辑器状态：draft=null 表示尚未从服务端载入；savedText 为上次
@@ -319,6 +322,17 @@ export function SprintDetailLive({
           // r17-1：同步版本推进到保存基线，并立起保存抑制标记——在服务端
           // 回显到达前同步 effect 一律跳过，防止旧缓存把已保存的草稿回退
           //（run188-codex-P3-r17-1）
+          // r18-1：抑制阈值必须取保存成功时刻的缓存 dataUpdatedAt，不能直接用
+          // 保存发起时闭包捕获的 retro.dataUpdatedAt。保存期间后台重取可能先
+          // 落地旧文本 B 并推进 dataUpdatedAt；旧值 t_old < 当前 t_new 会使
+          // 抑制立即解除，旧缓存 B 回退草稿（与 r17-1 同一数据丢失路径，
+          // run189-codex-pi-P3-r18-1）。onSuccess 内同步读查询缓存取最新值。
+          const freshDataUpdatedAt =
+            queryClient.getQueryState([
+              ...queryKeys.sprint.all,
+              "retrospective",
+              sprintId,
+            ])?.dataUpdatedAt ?? retro.dataUpdatedAt;
           const next = applyRetroSaveSuccess(
             {
               draft,
@@ -327,7 +341,7 @@ export function SprintDetailLive({
               pendingSave: pendingSaveRef.current,
             },
             savingText,
-            retro.dataUpdatedAt,
+            freshDataUpdatedAt,
           );
           syncedServerTextRef.current = next.syncedServerText;
           pendingSaveRef.current = next.pendingSave;

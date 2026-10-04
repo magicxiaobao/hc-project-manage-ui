@@ -295,6 +295,49 @@ describe("回顾编辑器同步状态机（r17-1 回归）", () => {
     expect(s).toBe(initialRetroEditorSyncState);
   });
 
+  it("r18-1：保存期间后台缓存先于成功回调到达（B@t200）→ 抑制阈值取成功时刻最新 dataUpdatedAt", () => {
+    // 1. 初始载入 A（t=100）
+    let s: RetroEditorSyncState = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100));
+    // 2. 用户编辑为 C（脏），点击保存（闭包捕获的 dataUpdatedAt 仍是 t=100）
+    s = { ...s, draft: "C" };
+    // 3. 保存期间后台重取落地旧文本 B（t=200）：脏草稿保留，不静默覆盖
+    s = applyRetroServerSync(s, snap("B", 200));
+    expect(s.draft).toBe("C");
+    expect(s.savedText).toBe("A");
+    expect(s.pendingSave).toBeNull();
+    // 4. onSuccess 必须用成功时刻缓存的最新 dataUpdatedAt（=200）建抑制标记，
+    //    而不是发起时闭包的旧值（=100）——旧接线此处正是数据丢失路径
+    s = applyRetroSaveSuccess(s, "C", 200);
+    expect(s.pendingSave).toEqual({ text: "C", dataUpdatedAt: 200 });
+    // 5. 同步 effect 重跑（缓存仍是 B@t200）：抑制生效，不回退已保存草稿
+    s = applyRetroServerSync(s, snap("B", 200));
+    expect(s.draft).toBe("C");
+    expect(s.savedText).toBe("C");
+    expect(s.syncedServerText).toBe("C");
+    expect(s.pendingSave).not.toBeNull();
+    // 6. 服务端回显到达（C@t300）：放行，标记清除，草稿保持 C
+    s = applyRetroServerSync(s, snap("C", 300));
+    expect(s.pendingSave).toBeNull();
+    expect(s.draft).toBe("C");
+    expect(s.savedText).toBe("C");
+    expect(s.syncedServerText).toBe("C");
+  });
+
+  it("r18-1 反例：若抑制阈值仍取发起时旧值（=100），B@t200 会立即解除抑制并回退草稿", () => {
+    // 与上一个测试相同的交错时序，但第 4 步按 r17-1 旧接线取 t=100
+    let s: RetroEditorSyncState = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100));
+    s = { ...s, draft: "C" };
+    s = applyRetroServerSync(s, snap("B", 200));
+    s = applyRetroSaveSuccess(s, "C", 100); // ← 旧 bug：保存发起时的旧时间戳
+    // effect 重跑：200 <= 100 不成立 → 抑制立即解除；草稿已不脏且 B ≠ C → 重置为 B
+    s = applyRetroServerSync(s, snap("B", 200));
+    expect(s.draft).toBe("B");
+    expect(s.savedText).toBe("B");
+    expect(s.syncedServerText).toBe("B");
+    expect(s.pendingSave).toBeNull();
+    // 这正是 r18-1 要堵住的丢失路径：后续保存会以 B 覆盖服务端 C
+  });
+
   it("保存成功后用户继续编辑（变脏），回显到达时不覆盖新草稿", () => {
     let s = applyRetroServerSync(initialRetroEditorSyncState, snap("A", 100));
     s = { ...s, draft: "C" };
