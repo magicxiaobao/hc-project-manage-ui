@@ -10,7 +10,8 @@
  *   超过单页大小时的静默漏数。
  * - 筛选：看板名称（文本）/ 看板类型（老前端五类）/ 状态（活跃/归档/暂停/维护中）
  * - 新建/编辑：BoardFormDialog（POST createBoard/updateBoard），成功后列表缓存已失效
- * - 行操作：编辑（弹窗）、设为默认（POST setDefault/{id}，仅非默认显示）、
+ * - 行操作：打开看板（跳 /p/$projectKey/boards/$boardId 任务看板，P3 p3-board-kanban）、
+ *   编辑（弹窗）、设为默认（POST setDefault/{id}，仅非默认显示）、
  *   复制（POST copy/{id}?newBoardName=，弹窗输入新名称；后端 copyBoard 是 TODO
  *   空壳返回 null，前端校验返回 id 有效才算成功）、
  *   归档（POST archive/{id}，确认框确认，仅"活跃"显示）、
@@ -26,6 +27,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, Label, Spinner, TextField } from "@heroui/react";
+import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -68,7 +70,7 @@ function toSelectOptions(options: { id: string; label: string }[]) {
   return [{ id: "", label: "全部" }, ...options];
 }
 
-export function BoardListLive({ projectId }: { projectId: number; projectKey: string }) {
+export function BoardListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
   const [nameInput, setNameInput] = useState("");
   const [appliedName, setAppliedName] = useState("");
   const [boardType, setBoardType] = useState("");
@@ -327,6 +329,15 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
                 {item.status ?? "-"}
               </span>
               <span className="flex shrink-0 gap-1">
+                {/* P3 p3-board-kanban：任务看板（列配置 + 卡片跨列拖拽流转） */}
+                <Link
+                  to="/p/$projectKey/boards/$boardId"
+                  params={{ projectKey, boardId: String(item.id) }}
+                  className="type-link inline-flex min-h-8 items-center rounded-sm px-2 py-1 hover:bg-default/10"
+                  aria-label={`打开看板 ${item.id} 的任务看板`}
+                >
+                  打开看板
+                </Link>
                 <Button
                   size="sm"
                   variant="ghost"

@@ -128,6 +128,16 @@ export {
   useWaiveReleaseGate,
 } from './hooks/useReleases';
 export type { ReleaseListParams, ReleaseListAllParams } from './hooks/useReleases';
+export {
+  invalidateBoardDomain,
+  normalizeBoardColumnsParams,
+  useBoardColumnsWithTasks,
+  useCreateBoardColumn,
+  useDeleteBoardColumn,
+  useReorderBoardColumns,
+  useUpdateBoardColumn,
+} from './hooks/useBoardColumns';
+export {
   normalizeBoardListParams,
   useActivateBoard,
   useArchiveBoard,
