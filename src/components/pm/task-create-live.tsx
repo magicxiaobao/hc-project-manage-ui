@@ -21,6 +21,7 @@ import { toUserMessage, useCreateTask, useRequirementList } from "@/lib/query";
 import {
   buildTaskCreatePayload,
   emptyTaskCreateFormInput,
+  parseRequiredPositiveInt,
   validateTaskCreateInput,
 } from "@/lib/task-create";
 import { TASK_PRIORITIES } from "@/lib/api/task-types";
@@ -85,6 +86,13 @@ function RequirementPicker({
   const [searchInput, setSearchInput] = useState("");
   const [appliedTitle, setAppliedTitle] = useState("");
   const [idInput, setIdInput] = useState("");
+  // Codex review 4175583406：直输 ID 栏的非法 token 不再静默丢弃；任一非法就
+  // 报错并保留输入，防止用户以为全部关联成功（输入变化时清除报错）。
+  const [idError, setIdError] = useState("");
+  const handleIdInputChange = (value: string) => {
+    setIdInput(value);
+    setIdError("");
+  };
 
   const listQuery = useRequirementList({
     projectId,
@@ -99,13 +107,18 @@ function RequirementPicker({
   };
   const applySearch = () => setAppliedTitle(searchInput.trim());
   const addByIds = () => {
-    const ids = idInput
+    const tokens = idInput
       .split(/[,，\s]+/)
       .map((part) => part.trim())
-      .filter((part) => /^\d+$/.test(part))
-      .map(Number)
-      .filter((id) => Number.isSafeInteger(id) && id > 0);
+      .filter((part) => part.length > 0);
+    const invalid = tokens.filter((token) => parseRequiredPositiveInt(token) === null);
+    if (invalid.length > 0) {
+      setIdError(`以下 ID 格式非法，请只输入逗号分隔的正整数 ID：${invalid.join("、")}`);
+      return;
+    }
+    const ids = tokens.map((token) => Number(token));
     if (ids.length === 0) return;
+    setIdError("");
     const merged = new Set([...selected, ...ids]);
     onChange([...merged]);
     setIdInput("");
@@ -199,7 +212,7 @@ function RequirementPicker({
         }}
       >
         <div className="flex-1">
-          <TextField value={idInput} onChange={setIdInput} aria-label="按 ID 直接添加需求">
+          <TextField value={idInput} onChange={handleIdInputChange} aria-label="按 ID 直接添加需求">
             <Input placeholder="按 ID 直接添加，逗号分隔，如 12,34" />
           </TextField>
         </div>
@@ -207,6 +220,7 @@ function RequirementPicker({
           添加
         </Button>
       </div>
+      {idError ? <p className="type-body text-danger">{idError}</p> : null}
     </div>
   );
 }

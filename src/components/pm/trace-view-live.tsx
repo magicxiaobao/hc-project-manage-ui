@@ -51,6 +51,13 @@ export function TraceViewLive({ projectId, projectKey }: { projectId: number; pr
   const [tab, setTab] = useState<TraceTab>("graph");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
+  // Codex review 4175583402：在 /p/<key>/trace 之间切换时路由可能复用本组件，
+  // selectedId 会残留上个项目选中的需求 id，而追溯图/影响范围按 id 直接取数，
+  // 会在新项目下展示旧项目的需求数据。按 projectId 变化重置选择。
+  useEffect(() => {
+    setSelectedId(null);
+  }, [projectId]);
+
   // Codex review 4175337083：追溯图 / 影响范围共用需求选择器支持标题搜索 +
   // 分页（登录态门控），不再局限于需求列表第一页前 100 条。
   const [selectorTitleInput, setSelectorTitleInput] = useState("");

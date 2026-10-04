@@ -33,6 +33,20 @@ function LiveProjectList() {
     pageSize: PROJECT_PAGE_SIZE,
   });
 
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PROJECT_PAGE_SIZE));
+  // Codex review 4175402475：页码越界（删除/权限变化导致当前页变空）时自动回到
+  // 最后一页；空的越界页仍渲染分页器，避免用户被困在"暂无项目"无处可回。
+  // Codex review 4175583399（P1）：此 effect 必须在所有 early return 之前调用——
+  // 首屏 isLoading 时组件早返回，若 effect 写在早返回之后，首屏 hook 数与恢复后
+  // 的 hook 数不一致，违反 hooks 顺序（Rendered more hooks than during the
+  // previous render）。无条件调用，内部用 isLoading/total 门控跳过。
+  useEffect(() => {
+    if (!isLoading && total > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isLoading, total, totalPages, page]);
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-default-500">
@@ -59,15 +73,6 @@ function LiveProjectList() {
     );
   }
   const projects = data?.list ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PROJECT_PAGE_SIZE));
-  // Codex review 4175402475：页码越界（删除/权限变化导致当前页变空）时自动回到
-  // 最后一页；空的越界页仍渲染分页器，避免用户被困在"暂无项目"无处可回。
-  useEffect(() => {
-    if (!isLoading && total > 0 && page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [isLoading, total, totalPages, page]);
   if (projects.length === 0 && total === 0) {
     return <p className="py-8 text-sm text-default-500">暂无项目</p>;
   }
