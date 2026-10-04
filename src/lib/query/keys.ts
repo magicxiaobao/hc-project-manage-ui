@@ -7,7 +7,7 @@
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
-function domainKeys(domain: 'project' | 'requirement' | 'task') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -42,4 +42,5 @@ export const queryKeys = {
   project: domainKeys('project'),
   requirement: domainKeys('requirement'),
   task: domainKeys('task'),
+  defect: domainKeys('defect'),
 };
