@@ -10,7 +10,7 @@
  * 未登录走演示看板（BoardView）时不使用本组件。缺陷详情页在 p2-defect-detail-flow
  * 接入，本列表暂不深链（行渲染为纯信息行）。
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, SeverityChip, StatusChip } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
@@ -78,6 +78,12 @@ export function DefectListLive({ projectId }: { projectId: number }) {
 
   const total = listQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // 数据返回后若当前页已越界（他人增删导致 total 缩水），自动回退到最后一页重新查询，
+  // 避免出现"第 2 / 1 页"且空列表的误导状态
+  useEffect(() => {
+    if (listQuery.isSuccess && page > totalPages) setPage(totalPages);
+  }, [listQuery.isSuccess, page, totalPages]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">

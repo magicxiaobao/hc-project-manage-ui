@@ -15,7 +15,7 @@ import { renderToString } from 'react-dom/server';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '../client';
 import { queryKeys } from '../keys';
-import { useCreateDefect, useDefectList, useDefectStatusOptions } from '../hooks/useDefects';
+import { normalizeListParams, useCreateDefect, useDefectList, useDefectStatusOptions } from '../hooks/useDefects';
 import { useAuthStore } from '../../api/auth-store';
 import { api } from '../../api/client';
 import { defectApi } from '../../api/defect';
@@ -66,50 +66,44 @@ function pageResult(list: DefectResponse[]): PageResult<DefectResponse> {
   return { list, total: list.length, pageNumber: 1, pageSize: 20 };
 }
 
-describe('useDefectList 请求契约', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('走 POST /defect/v1/findByPage，参数归一化（默认 page=1、pageSize=20）', async () => {
-    const postSpy = vi.spyOn(api, 'post').mockResolvedValue(pageResult([defect({ id: 3 })]));
-    const client = createQueryClient();
-    const params = { page: 1, pageSize: 20, bean: { projectId: 7 } };
-    const data = await client.fetchQuery({
-      queryKey: queryKeys.defect.list(params),
-      queryFn: () => defectApi.findByPage(params),
-    });
-    expect(data.list[0]?.id).toBe(3);
-    expect(postSpy).toHaveBeenCalledWith('/defect/v1/findByPage', {
+describe('useDefectList 参数归一化（走 hook 内部 normalizeListParams）', () => {
+  it('默认值：page=1、pageSize=20、bean.projectId 落位', () => {
+    expect(normalizeListParams({ projectId: 7 })).toEqual({
       page: 1,
       pageSize: 20,
       bean: { projectId: 7 },
     });
   });
 
-  it('筛选条件 title/状态/严重度/优先级全部进入 bean', async () => {
-    const postSpy = vi.spyOn(api, 'post').mockResolvedValue(pageResult([]));
-    const client = createQueryClient();
-    const params = {
-      page: 2,
-      pageSize: 20,
-      bean: {
+  it('筛选条件 title/状态/严重度/优先级全部进入 bean', () => {
+    expect(
+      normalizeListParams({
+        page: 2,
+        pageSize: 20,
+        bean: { title: '崩溃', status: 'NEW', severity: 'CRITICAL', priority: 'HIGH' },
         projectId: 7,
-        title: '崩溃',
-        status: 'NEW' as const,
-        severity: 'CRITICAL' as const,
-        priority: 'HIGH' as const,
-      },
-    };
-    await client.fetchQuery({
-      queryKey: queryKeys.defect.list(params),
-      queryFn: () => defectApi.findByPage(params),
-    });
-    expect(postSpy).toHaveBeenCalledWith('/defect/v1/findByPage', {
+      }),
+    ).toEqual({
       page: 2,
       pageSize: 20,
       bean: { projectId: 7, title: '崩溃', status: 'NEW', severity: 'CRITICAL', priority: 'HIGH' },
     });
+  });
+
+  it('projectId 缺省 → bean.projectId=0（hook 的 enabled 门控会拦截请求）', () => {
+    expect(normalizeListParams().bean.projectId).toBe(0);
+  });
+
+  it('defectApi.findByPage 走 POST /defect/v1/findByPage，请求体即归一化参数', async () => {
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue(pageResult([defect({ id: 3 })]));
+    const client = createQueryClient();
+    const params = normalizeListParams({ projectId: 7 });
+    const data = await client.fetchQuery({
+      queryKey: queryKeys.defect.list(params),
+      queryFn: () => defectApi.findByPage(params),
+    });
+    expect(data.list[0]?.id).toBe(3);
+    expect(postSpy).toHaveBeenCalledWith('/defect/v1/findByPage', params);
   });
 
   it("queryKey 形状为 ['hc', 'defect', 'list', params]", () => {
@@ -246,6 +240,34 @@ describe('defect-create 表单纯函数', () => {
     expect(payload.severity).toBe('NORMAL');
     expect(payload.priority).toBe('MEDIUM');
   });
+
+  it('标题超过 200 字符 → 校验失败（后端 VARCHAR(200)）', () => {
+    const input = { ...emptyDefectCreateFormInput(), title: 'x'.repeat(201) };
+    expect(validateDefectCreateInput(input)).toContain('标题不能超过200个字符（后端 VARCHAR(200)）');
+  });
+
+  it('关联 ID 每侧超过 200 → 校验失败（后端 AlmBatchLimitExceeded）', () => {
+    const many = Array.from({ length: 201 }, (_, i) => String(i + 1)).join(',');
+    const input = {
+      ...emptyDefectCreateFormInput(),
+      title: '崩溃',
+      affectedRequirementIdsText: many,
+      foundInTaskIdsText: many,
+    };
+    const errors = validateDefectCreateInput(input);
+    expect(errors).toContain('关联需求不能超过200个（后端约束）');
+    expect(errors).toContain('关联任务不能超过200个（后端约束）');
+  });
+
+  it('载荷构建：关联 ID 去重（本次输入内部重复也要消掉）', () => {
+    const input = {
+      ...emptyDefectCreateFormInput(),
+      title: 'x',
+      affectedRequirementIdsText: '12,12,34',
+    };
+    const payload = buildDefectCreatePayload(input, 7);
+    expect(payload.affectedRequirementIds).toEqual([12, 34]);
+  });
 });
 
 describe('useCreateDefect 数据链路（mock api.post）', () => {
@@ -253,7 +275,7 @@ describe('useCreateDefect 数据链路（mock api.post）', () => {
     vi.restoreAllMocks();
   });
 
-  it('提交载荷并返回新建 id，成功后缺陷域缓存被失效', async () => {
+  it('提交载荷并返回新建 id，成功后缺陷域与需求域缓存均被失效', async () => {
     const payload: DefectCreatePayload = {
       title: '登录页崩溃',
       defectType: '功能',
@@ -268,6 +290,9 @@ describe('useCreateDefect 数据链路（mock api.post）', () => {
     // 预置列表缓存，验证失效确实命中缺陷域
     const listKey = queryKeys.defect.list({ page: 1, pageSize: 20, bean: { projectId: 7 } });
     client.setQueryData(listKey, pageResult([]));
+    // 预置需求追溯缓存：缺陷的新建/关联会改变追溯图，必须一并失效
+    const traceKey = queryKeys.requirement.enums();
+    client.setQueryData(traceKey, []);
     let mutateAsync: ((data: DefectCreatePayload) => Promise<number>) | null = null;
     function SmokeCreate() {
       const mutation = useCreateDefect();
@@ -284,5 +309,6 @@ describe('useCreateDefect 数据链路（mock api.post）', () => {
     expect(id).toBe(42);
     expect(postSpy).toHaveBeenCalledWith('/defect/v1/createDefect', payload);
     expect(client.getQueryState(listKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(traceKey)?.isInvalidated).toBe(true);
   });
 });

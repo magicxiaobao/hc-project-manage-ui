@@ -26,7 +26,7 @@ export interface DefectListParams {
   projectId?: number | null;
 }
 
-function normalizeListParams(params: DefectListParams = {}) {
+export function normalizeListParams(params: DefectListParams = {}) {
   return {
     page: params.page ?? 1,
     pageSize: params.pageSize ?? 20,
@@ -62,6 +62,8 @@ export function useDefectStatusOptions() {
 /**
  * 创建缺陷：走 POST /defect/v1/createDefect（后端返回新建缺陷 id）。
  * 成功后失效缺陷域全部缓存（列表变脏，下次读取即出现新缺陷）。
+ * Codex review 4175337096（任务侧先例）：新建并关联需求后，需求追溯图/影响范围/矩阵
+ * 要看到新缺陷，一并失效需求域；否则 30 秒 stale 窗口内追溯页展示旧图。
  */
 export function useCreateDefect() {
   const queryClient = useQueryClient();
@@ -69,6 +71,7 @@ export function useCreateDefect() {
     mutationFn: (data: DefectCreatePayload) => defectApi.createDefect(data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.defect.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
     },
   });
 }

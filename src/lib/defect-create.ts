@@ -6,9 +6,9 @@ import type { DefectCreatePayload } from './api/defect-types';
  *
  * 纯函数，可独立测试。契约忠实于后端 DefectCreateRequest
  * （见 src/lib/api/defect-types.ts DefectCreatePayload）：
- * - title 必填（去空白后非空）；severity/priority 走前端常量六档/三档
+ * - title 必填（去空白后非空）且 ≤200 字符；severity/priority 走前端常量六档/三档
  * - affectedRequirementIds/foundInTaskIds 为逗号分隔的正整数 ID（逗号/中文逗号/空白分隔）；
- *   格式非法时校验报错，parseRequiredPositiveInt 复用 task-create 的安全整数回绕校验
+ *   每侧上限 200（后端约束），格式非法或超限时校验报错，parseRequiredPositiveInt 复用 task-create 的安全整数回绕校验
  * - 未填写的可选字段传 null（老前端 DefectForm 同一口径）
  */
 
@@ -77,19 +77,30 @@ function parsePositiveIntStrict(text: string): number | null {
   return parseRequiredPositiveInt(text);
 }
 
+/** 关联 ID 上限：后端 normalizeRelationIds 对 >200 抛 AlmBatchLimitExceeded；与老前端/任务侧一致，前置校验而非静默截断 */
+export const MAX_RELATION_IDS = 200;
+/** 缺陷标题上限：DB title VARCHAR(200)，老前端 DefectForm.vue 同一口径 */
+export const MAX_TITLE_LENGTH = 200;
+
 /** 校验表单输入，返回错误文案列表（空表示通过） */
 export function validateDefectCreateInput(input: DefectCreateFormInput): string[] {
   const errors: string[] = [];
-  if (!input.title.trim()) errors.push('标题不能为空');
+  const title = input.title.trim();
+  if (!title) errors.push('标题不能为空');
+  else if (title.length > MAX_TITLE_LENGTH) errors.push(`标题不能超过${MAX_TITLE_LENGTH}个字符（后端 VARCHAR(200)）`);
   if (!input.severity.trim()) errors.push('严重度不能为空');
   if (!input.priority.trim()) errors.push('优先级不能为空');
   const requirementIds = parseIdListText(input.affectedRequirementIdsText);
   if (requirementIds.invalid.length > 0) {
     errors.push(`关联需求 ID 格式非法：${requirementIds.invalid.join('、')}`);
+  } else if (new Set(requirementIds.ids).size > MAX_RELATION_IDS) {
+    errors.push(`关联需求不能超过${MAX_RELATION_IDS}个（后端约束）`);
   }
   const taskIds = parseIdListText(input.foundInTaskIdsText);
   if (taskIds.invalid.length > 0) {
     errors.push(`关联任务 ID 格式非法：${taskIds.invalid.join('、')}`);
+  } else if (new Set(taskIds.ids).size > MAX_RELATION_IDS) {
+    errors.push(`关联任务不能超过${MAX_RELATION_IDS}个（后端约束）`);
   }
   return errors;
 }
@@ -115,8 +126,8 @@ export function buildDefectCreatePayload(
   const priority = (priorities as readonly string[]).includes(input.priority)
     ? (input.priority as (typeof priorities)[number])
     : 'MEDIUM';
-  const requirementIds = parseIdListText(input.affectedRequirementIdsText).ids;
-  const taskIds = parseIdListText(input.foundInTaskIdsText).ids;
+  const requirementIds = [...new Set(parseIdListText(input.affectedRequirementIdsText).ids)];
+  const taskIds = [...new Set(parseIdListText(input.foundInTaskIdsText).ids)];
   return {
     title: input.title.trim(),
     description: nullIfBlank(input.description),
