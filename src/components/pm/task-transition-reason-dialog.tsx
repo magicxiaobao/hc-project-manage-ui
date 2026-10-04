@@ -17,6 +17,13 @@
  * 必填星号（RequiredMark）；空文本在字段下方 FieldError 提示（编辑即清）。
  * 文本为空时确认按钮禁用并提示，前端先拦截省一次后端往返。
  *
+ * r9 P1-1：动态代操作守卫——showAssignee 收集到的执行人 ≠ 当前操作人
+ * （actorId）时，原因必填（后端 TaskGuardEvaluator.operationalActor：
+ * 代理操作需管理权限 + 非空原因，否则 MISSING_REASON；任务详情页
+ * task-detail-live:161 同款守卫）。
+ * r9 P1-2：onConfirm 返回三态——区分"提交失败"与"提交成功但刷新失败"；
+ * 后者禁用重复提交，只提供"重试刷新"，成功后关闭弹窗并清错误。
+ *
  * 父组件按 open/key 重挂载本弹窗（与 BoardFormDialog 同一模式）。
  */
 import { useRef, useState } from "react";
@@ -30,7 +37,20 @@ import {
 import { statusLabel } from "@/lib/pm/domain";
 import { parseOptionalPositiveInt } from "@/lib/task-create";
 import type { TaskStatus } from "@/lib/api/task-types";
-import { transitionTextMaxLength, validateTransitionText } from "@/lib/board-kanban";
+import { taskNeedsActorReason } from "@/lib/query";
+import { transitionTextMaxLength } from "@/lib/board-kanban";
+
+/**
+ * r9 P1-2：流转提交的三态结果——调用方必须区分"提交失败"与
+ * "提交成功但看板权威刷新失败"：
+ * - success：提交成功（含权威刷新），弹窗可关闭；
+ * - submitFailed：POST 未成功，文本保留在弹窗内，可修改后重试提交；
+ * - refreshFailed：POST 已成功、仅刷新失败——禁止重复提交，只允许重试刷新。
+ */
+export type TransitionConfirmResult =
+  | { kind: "success" }
+  | { kind: "submitFailed"; message?: string }
+  | { kind: "refreshFailed" };
 
 export function TaskTransitionReasonDialog({
   open,
@@ -40,8 +60,11 @@ export function TaskTransitionReasonDialog({
   isPending,
   showAssignee = false,
   textRequired = true,
+  actorId = null,
+  cardAssigneeId = null,
   onCancel,
   onConfirm,
+  onRetryRefresh,
 }: {
   open: boolean;
   taskTitle: string;
@@ -59,24 +82,48 @@ export function TaskTransitionReasonDialog({
    * 仍受长度上限约束。
    */
   textRequired?: boolean;
+  /**
+   * r9 P1-1：当前登录用户 id（数字）。showAssignee 收集到的执行人 ≠ actorId
+   * 时原因动态变为必填（代操作审计），与任务详情页 taskNeedsActorReason 同口径。
+   * 传 null 表示未知，此时不做动态判定。
+   */
+  actorId?: number | null;
+  /**
+   * r9 P1-1：卡片当前执行人 id（未收集执行人场景下动态守卫的比对基准；
+   * showAssignee 收集到执行人时优先用收集值）。
+   */
+  cardAssigneeId?: number | null;
   onCancel: () => void;
   /**
-   * r7 F9：返回 Promise<boolean>——请求期间弹窗与文本保留；
-   * 成功（true）时弹窗 markClean 后关闭，失败（false）时文本保留在弹窗内
-   * 并展示提交错误，可修改后重试。
+   * r7 F9：请求期间弹窗与文本保留；r9 P1-2 起返回三态结果：
+   * - success → 弹窗 markClean 后关闭；
+   * - submitFailed → 文本保留并展示提交错误，可修改后重试；
+   * - refreshFailed → 展示"已提交、刷新失败"，禁用重复提交，只提供重试刷新。
    * r8 P1-1：第二个参数为收集到的执行人 ID（未收集时为 null）。
    */
-  onConfirm: (text: string, assigneeId: number | null) => Promise<boolean>;
+  onConfirm: (text: string, assigneeId: number | null) => Promise<TransitionConfirmResult>;
+  /**
+   * r9 P1-2：仅刷新重试（不重发 POST）。refreshFailed 状态下弹窗渲染
+   * "重试刷新"按钮调用它；返回 true 表示权威刷新成功。
+   */
+  onRetryRefresh?: () => Promise<boolean>;
 }) {
   const [text, setText] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [assigneeInput, setAssigneeInput] = useState("");
   const [assigneeError, setAssigneeError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // r9 P1-2："提交成功但刷新失败"状态——禁用重复提交，只允许重试刷新。
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   // 本地提交中：confirm 异步化后，父组件 transitionBusy 的首次渲染有空隙，
   // 快速双击会重复提交；本地 guard 补上这道缝。
   const [submitting, setSubmitting] = useState(false);
+  // r9 P1-2：重试刷新中
+  const [refreshing, setRefreshing] = useState(false);
   const busy = isPending || submitting;
+  // 刷新失败态：输入锁定（提交已完成，改文本无意义），只保留取消与重试刷新
+  const inputLocked = busy || refreshFailed || refreshing;
 
   const isDeliverables = to === "COMPLETED";
   const fieldLabel = isDeliverables ? "交付物或完成说明" : "流转原因";
@@ -91,12 +138,22 @@ export function TaskTransitionReasonDialog({
   const isDirty = text !== initialRef.current || assigneeInput !== initialRef.current;
   const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(open && isDirty);
 
+  // r9 P1-1：动态代操作守卫——用"弹窗收集到的执行人（若有），否则卡片当前
+  // 执行人"为基准判定：执行人 ≠ 当前操作人时原因必填。后端 operationalActor
+  // 要求代理操作有管理权限 + 非空原因，否则 MISSING_REASON。
+  const parsedAssigneeId = showAssignee ? parseOptionalPositiveInt(assigneeInput) : null;
+  const effectiveAssigneeId = parsedAssigneeId ?? cardAssigneeId ?? null;
+  const actorReasonRequired = taskNeedsActorReason(to, effectiveAssigneeId, actorId);
+  const reasonRequired = textRequired || actorReasonRequired;
+
   const doClose = () => {
     setText("");
     setFieldError(null);
     setAssigneeInput("");
     setAssigneeError(null);
     setSubmitError(null);
+    setRefreshFailed(false);
+    setRefreshError(null);
     onCancel();
   };
 
@@ -106,12 +163,12 @@ export function TaskTransitionReasonDialog({
   };
 
   const confirm = async () => {
-    if (busy) return;
-    // r8 P1-1：执行人必填（正整数严格解析）；流转文本按 textRequired 决定
-    // 是否必填，长度上限始终约束。
+    if (busy || refreshFailed) return;
+    // r8 P1-1：执行人必填（正整数严格解析）；流转文本按 reasonRequired 决定
+    // 是否必填（r9 P1-1：动态代操作守卫并入），长度上限始终约束。
     let assigneeId: number | null = null;
     if (showAssignee) {
-      assigneeId = parseOptionalPositiveInt(assigneeInput);
+      assigneeId = parsedAssigneeId;
       if (assigneeId == null) {
         setAssigneeError("请填写执行人 ID（正整数）：开始未分配的任务必须指定执行人");
         return;
@@ -119,30 +176,58 @@ export function TaskTransitionReasonDialog({
       setAssigneeError(null);
     }
     const trimmed = text.trim();
-    if (textRequired) {
-      const error = validateTransitionText(text, maxLength);
-      setFieldError(error);
-      if (error) return;
-    } else if (trimmed.length > maxLength) {
+    if (reasonRequired && !trimmed) {
+      setFieldError(
+        actorReasonRequired
+          ? "请填写流转原因：执行人不是本人时，代操作需要原因进行审计"
+          : "请填写流转说明",
+      );
+      return;
+    }
+    if (trimmed.length > maxLength) {
       setFieldError(`流转说明不能超过 ${maxLength} 个字符`);
       return;
-    } else {
-      setFieldError(null);
     }
+    setFieldError(null);
     setSubmitError(null);
     // r7 F9：校验通过不再提前 markClean/卸载；请求落定前弹窗与文本保留，
     // 失败时展示提交错误并允许重试，成功后才授权离开并关闭。
+    // r9 P1-2：按三态结果分别处理——refreshFailed 时禁用重复提交，
+    // 只展示重试刷新入口。
     setSubmitting(true);
     try {
-      const ok = await onConfirm(trimmed, assigneeId);
-      if (ok) {
+      const result = await onConfirm(trimmed, assigneeId);
+      if (result.kind === "success") {
         markClean();
         doClose();
+      } else if (result.kind === "refreshFailed") {
+        setRefreshFailed(true);
+        setRefreshError(null);
       } else {
-        setSubmitError("提交失败，文本已保留，可修改后重试（详情见右下角提示）");
+        setSubmitError(
+          result.message
+            ? `提交失败：${result.message}。文本已保留，可修改后重试`
+            : "提交失败，文本已保留，可修改后重试（详情见右下角提示）",
+        );
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  /** r9 P1-2：仅重试看板权威刷新（不重发 POST）；成功后关闭弹窗并清错误 */
+  const retryRefresh = async () => {
+    if (refreshing || !onRetryRefresh) return;
+    setRefreshing(true);
+    try {
+      if (await onRetryRefresh()) {
+        markClean();
+        doClose();
+      } else {
+        setRefreshError("看板刷新仍未成功，可继续重试");
+      }
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -169,7 +254,7 @@ export function TaskTransitionReasonDialog({
                   setAssigneeError(null);
                   setSubmitError(null);
                 }}
-                isDisabled={busy}
+                isDisabled={inputLocked}
                 aria-label="执行人 ID"
               >
                 <Label>
@@ -189,11 +274,11 @@ export function TaskTransitionReasonDialog({
                 setFieldError(null);
                 setSubmitError(null);
               }}
-              isDisabled={busy}
+              isDisabled={inputLocked}
             >
               <Label>
                 {fieldLabel}
-                {textRequired ? <RequiredMark /> : null}
+                {reasonRequired ? <RequiredMark /> : null}
               </Label>
               <TextArea
                 placeholder={
@@ -206,6 +291,21 @@ export function TaskTransitionReasonDialog({
               />
             </TextField>
             <FieldError message={fieldError} />
+            {actorReasonRequired && !textRequired ? (
+              <p className="type-caption mt-1 text-default-500">
+                执行人不是本人：代操作审计要求流转原因必填
+              </p>
+            ) : null}
+            {refreshFailed ? (
+              <p role="alert" className="mt-1 text-sm text-warning">
+                流转请求已成功提交，但看板数据刷新失败。请勿重复提交，点击「重试刷新」仅重新拉取看板数据。
+              </p>
+            ) : null}
+            {refreshError ? (
+              <p role="alert" className="mt-1 text-sm text-danger">
+                {refreshError}
+              </p>
+            ) : null}
             {submitError ? (
               <p role="alert" className="mt-1 text-sm text-danger">
                 {submitError}
@@ -213,13 +313,28 @@ export function TaskTransitionReasonDialog({
             ) : null}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onPress={close} isDisabled={busy}>
+            <Button variant="ghost" onPress={close} isDisabled={busy || refreshing}>
               取消
             </Button>
-            <Button variant="primary" onPress={() => void confirm()} isDisabled={busy}>
-              {busy ? <Spinner size="sm" /> : null}
-              确认流转
-            </Button>
+            {refreshFailed ? (
+              <Button
+                variant="primary"
+                onPress={() => void retryRefresh()}
+                isDisabled={refreshing || !onRetryRefresh}
+              >
+                {refreshing ? <Spinner size="sm" /> : null}
+                重试刷新
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onPress={() => void confirm()}
+                isDisabled={busy}
+              >
+                {busy ? <Spinner size="sm" /> : null}
+                确认流转
+              </Button>
+            )}
           </div>
         </div>
       </AppModal>

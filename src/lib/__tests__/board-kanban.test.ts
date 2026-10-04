@@ -10,8 +10,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildCardTransitionContext,
   cardTransitionNeedsText,
+  confirmAuthoritativeRefresh,
   moveCardInColumns,
   parseBoardColumnsWithTasks,
+  restoreColumnOrder,
   transitionTextMaxLength,
   validateTransitionText,
   type KanbanBoardColumn,
@@ -213,5 +215,62 @@ describe("parseBoardColumnsWithTasks 防御", () => {
     expect(parseBoardColumnsWithTasks(undefined)).toEqual([]);
     expect(parseBoardColumnsWithTasks({})).toEqual([]);
     expect(parseBoardColumnsWithTasks("oops")).toEqual([]);
+  });
+});
+
+describe("confirmAuthoritativeRefresh", () => {
+  const base = {
+    status: "success" as const,
+    dataUpdatedAt: 2000,
+    updatedAtBefore: 1000,
+    seq: 3,
+    currentSeq: 3,
+  };
+
+  it("r9 P2-4：代次未推进 + success + 时间戳推进 → 确认权威成功", () => {
+    expect(confirmAuthoritativeRefresh(base)).toBe(true);
+  });
+
+  it("r9 P2-4 ①：刷新开始前的乐观写入时间戳不能冒充权威成功（dataUpdatedAt 未推进）", () => {
+    // 列排序失败恢复路径：setQueryData(previous) 与刷新开始同 tick，
+    // 被取消的 refetch 不更新 dataUpdatedAt → 严格大于不成立 → false
+    expect(
+      confirmAuthoritativeRefresh({ ...base, dataUpdatedAt: 1000, updatedAtBefore: 1000 }),
+    ).toBe(false);
+  });
+
+  it("r9 P2-4 ①：期间有乐观写入推进代次 → 不计成功", () => {
+    expect(confirmAuthoritativeRefresh({ ...base, currentSeq: 4 })).toBe(false);
+  });
+
+  it("r9 P2-4：被取代的代次（旧 seq）不计成功", () => {
+    expect(confirmAuthoritativeRefresh({ ...base, seq: 2, currentSeq: 3 })).toBe(false);
+  });
+
+  it("r9 P2-4：查询非 success 不计成功", () => {
+    expect(confirmAuthoritativeRefresh({ ...base, status: "error" })).toBe(false);
+    expect(confirmAuthoritativeRefresh({ ...base, status: "pending" })).toBe(false);
+  });
+});
+
+describe("restoreColumnOrder", () => {
+  it("r9 P2-5：只恢复列顺序，各列卡片原样保留（不覆盖并发操作成果）", () => {
+    // 快照：列顺序 [1,2]，列 2 含卡片 201（流转前）
+    const snapshot = [makeColumn(1, "TODO", []), makeColumn(2, "TODO", [201])];
+    // 当前：用户拖拽后顺序 [2,1]；期间卡片 201 已流转成功（权威 GET 落定，
+    // 卡片已不在列 2——此处用卡片 202 在列 1 模拟"当前卡片状态更新"）
+    const current = [makeColumn(2, "TODO", []), makeColumn(1, "TODO", [202])];
+    const restored = restoreColumnOrder(current, snapshot);
+    // 顺序回到快照 [1,2]，但卡片取当前值：列 1 含 202、列 2 为空
+    expect(restored.map((c) => c.id)).toEqual([1, 2]);
+    expect(restored[0].tasks.map((t) => t.id)).toEqual([202]);
+    expect(restored[1].tasks.map((t) => t.id)).toEqual([]);
+  });
+
+  it("r9 P2-5：快照中没有的新列追加到末尾", () => {
+    const snapshot = [makeColumn(1, "TODO", [])];
+    const current = [makeColumn(2, "TODO", [201]), makeColumn(1, "TODO", [])];
+    const restored = restoreColumnOrder(current, snapshot);
+    expect(restored.map((c) => c.id)).toEqual([1, 2]);
   });
 });

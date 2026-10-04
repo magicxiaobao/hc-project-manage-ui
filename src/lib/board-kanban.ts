@@ -173,6 +173,53 @@ export function cardTransitionNeedsText(from: TaskStatus, to: TaskStatus): boole
   return taskNeedsReason(to) || taskNeedsReopenReason(from, to);
 }
 
+/**
+ * r9 P2-4：看板权威刷新成功判定（纯函数，协调器用）。
+ *
+ * 旧条件 `dataUpdatedAt >= startedAt` 会被同 tick 的乐观 setQueryData 满足
+ * （setQueryData 同步更新 dataUpdatedAt；列排序失败恢复路径实测 GET 无成功
+ * 响应却返回 true，导致提前解锁）。新条件要求三者同时成立：
+ * - 代次未被推进（currentSeq === seq）：期间无新的权威刷新、也无乐观写入
+ *   （调用方每次乐观 setQueryData 都推进代次，把本地写入标记为非权威）；
+ * - 查询状态确为 success；
+ * - dataUpdatedAt 严格大于刷新开始前快照（updatedAtBefore）：刷新开始前已
+ *   存在的乐观写入时间戳不能再被计作权威凭据；被 cancel 取消的 refetch 不
+ *   更新 dataUpdatedAt，自然判 false。
+ */
+export function confirmAuthoritativeRefresh(args: {
+  status: "success" | "error" | "pending";
+  dataUpdatedAt: number;
+  /** 本次刷新开始前该查询的 dataUpdatedAt 快照 */
+  updatedAtBefore: number;
+  /** 本次刷新取号 */
+  seq: number;
+  /** 判定时刻的最新代次 */
+  currentSeq: number;
+}): boolean {
+  return (
+    args.currentSeq === args.seq &&
+    args.status === "success" &&
+    args.dataUpdatedAt > args.updatedAtBefore
+  );
+}
+
+/**
+ * r9 P2-5：列排序失败的操作级恢复——只按快照恢复列顺序，各列的卡片
+ * （其它在途/已成功的流转结果）原样保留，不做整板快照覆盖。
+ * 快照中没有的新列追加到末尾。
+ */
+export function restoreColumnOrder(
+  current: KanbanBoardColumn[],
+  snapshot: KanbanBoardColumn[],
+): KanbanBoardColumn[] {
+  const currentById = new Map(current.map((column) => [column.id, column]));
+  const snapshotIds = new Set(snapshot.map((column) => column.id));
+  return [
+    ...snapshot.map((column) => currentById.get(column.id) ?? column),
+    ...current.filter((column) => !snapshotIds.has(column.id)),
+  ];
+}
+
 /** 流转上下文：目标 COMPLETED 填 deliverables，其余填 reason（后端 dispatch 口径） */
 export function buildCardTransitionContext(
   to: TaskStatus,
