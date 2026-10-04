@@ -29,6 +29,19 @@
  * - GET /project/v1/enums，返回类型/状态/优先级选项
  * - POST /project/v1/updateProject，请求体 ProjectUpdatePayload
  *
+ * 缺陷契约（P2；来自后端 DefectController + 老前端 frontend/src/types/defect.ts）：
+ * - POST /defect/v1/createDefect，请求体 DefectCreatePayload，返回新建缺陷 id
+ * - POST /defect/v1/updateDefect，字段级更新；严重度与状态流转不在此入口
+ * - POST /defect/v1/{defectId}/severity，CAS 旧值校验 + reason 先裁空白，返回重定级结果
+ * - POST /defect/v1/updateStatus，请求体 { id, status, reason?, comment?, assigneeId?, testerId?, verifierId? }
+ * - GET /defect/v1/findById/{id}，返回缺陷详情
+ * - POST /defect/v1/findByPage，请求体 { page, pageSize, bean }
+ * - GET /defect/v1/statistics?projectId=（缺省时无参数），返回统计 + 三维分布
+ * - GET /defect/v1/board?projectId=，返回 defectsByStatus 分组 + columns 列配置
+ * - GET /defect/v1/statusOptions，返回十态枚举元数据（value=枚举名）
+ * - POST /defect/v1/advancedSearch，请求体 { page, pageSize, bean: DefectAdvancedQuery }
+ *   （batch/batchUpdateStatus/advancedSearchList/xlsx 导出为 P2 明确排除项）
+ *
  * 运行：npm run test:contract（需先 npm install）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,6 +51,7 @@ import { authApi } from '../auth';
 import { projectApi } from '../project';
 import { requirementApi } from '../requirement';
 import { taskApi } from '../task';
+import { defectApi } from '../defect';
 import type { ProjectCreatePayload, ProjectUpdatePayload } from '../types';
 
 const memStore = new Map<string, string>();
@@ -1273,5 +1287,265 @@ describe('任务契约（P1）', () => {
     expect(init1.method).toBe('POST');
     expect(JSON.parse(init1.body as string)).toEqual({ page: 1, pageSize: 20 });
     expect(fetchMock.mock.calls[2][0]).toBe('/api/comment/v1/invalid/601');
+  });
+});
+
+describe('缺陷契约（P2）', () => {
+  it('POST /defect/v1/createDefect，返回新建缺陷 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 301 } }]);
+    const payload = {
+      title: '登录按钮无响应',
+      description: '点击登录按钮后页面无反应',
+      defectType: '功能缺陷',
+      severity: 'MAJOR' as const,
+      priority: 'HIGH' as const,
+      projectId: 7,
+      reporterId: 3,
+      assigneeId: 5,
+      foundDate: '2026-10-04T09:30:00',
+      reproductionSteps: '1. 打开登录页；2. 点击登录',
+      affectedRequirementIds: [101],
+      foundInTaskIds: [201],
+    };
+    const id = await defectApi.createDefect(payload);
+
+    expect(id).toBe(301);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/createDefect');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it('POST /defect/v1/updateDefect，字段级更新；严重度与状态流转不在此入口', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await defectApi.updateDefect({
+      id: 301,
+      priority: 'MEDIUM',
+      environment: 'staging',
+      reproductionSteps: '1. 打开登录页；2. 点击登录；3. 无反应',
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/updateDefect');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 301,
+      priority: 'MEDIUM',
+      environment: 'staging',
+      reproductionSteps: '1. 打开登录页；2. 点击登录；3. 无反应',
+    });
+  });
+
+  it('POST /defect/v1/{defectId}/severity，CAS 旧值校验；reason 先裁空白', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { defectId: 301, previousSeverity: 'MAJOR', currentSeverity: 'CRITICAL' } } },
+    ]);
+    const result = await defectApi.changeSeverity(301, {
+      expectedSeverity: 'MAJOR',
+      targetSeverity: 'CRITICAL',
+      reason: '  阻塞主流程  ',
+    });
+
+    expect(result.defectId).toBe(301);
+    expect(result.previousSeverity).toBe('MAJOR');
+    expect(result.currentSeverity).toBe('CRITICAL');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/301/severity');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      expectedSeverity: 'MAJOR',
+      targetSeverity: 'CRITICAL',
+      reason: '阻塞主流程',
+    });
+  });
+
+  it('POST /defect/v1/updateStatus，流转上下文 id/status/reason/comment/三角色 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await defectApi.updateStatus({
+      id: 301,
+      status: 'ASSIGNED',
+      reason: '转交后端处理',
+      comment: '请优先处理',
+      assigneeId: 5,
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/updateStatus');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 301,
+      status: 'ASSIGNED',
+      reason: '转交后端处理',
+      comment: '请优先处理',
+      assigneeId: 5,
+    });
+  });
+
+  it('GET /defect/v1/findById/{id}，返回缺陷详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 301, title: '登录按钮无响应', status: 'NEW', severity: 'MAJOR', priority: 'HIGH' } } },
+    ]);
+    const detail = await defectApi.findById(301);
+
+    expect(detail.id).toBe(301);
+    expect(detail.title).toBe('登录按钮无响应');
+    expect(detail.status).toBe('NEW');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/findById/301');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /defect/v1/findByPage，请求体 { page, pageSize, bean }', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 301, title: '登录按钮无响应', status: 'NEW' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await defectApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'NEW', severity: 'MAJOR' },
+    });
+
+    expect(page.total).toBe(1);
+    expect(page.list[0].id).toBe(301);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'NEW', severity: 'MAJOR' },
+    });
+  });
+
+  it('getDefectList 默认第 1 页每页 100 条，空查询条件', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { list: [], total: 0, pageNumber: 1, pageSize: 100 } } },
+    ]);
+    await defectApi.getDefectList({ bean: { projectId: 7 } });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/findByPage');
+    expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 100, bean: { projectId: 7 } });
+  });
+
+  it('GET /defect/v1/statistics，projectId 拼查询参数；缺省时不带参数', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { totalDefects: 5, openDefects: 3, severityStats: { MAJOR: 2 } } } },
+      { body: { code: 1, msg: 'ok', result: { totalDefects: 5, openDefects: 3 } } },
+    ]);
+    const stats = await defectApi.getDefectStatistics(7);
+    await defectApi.getDefectStatistics();
+
+    expect(stats.totalDefects).toBe(5);
+    expect(stats.openDefects).toBe(3);
+    const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url0).toBe('/api/defect/v1/statistics?projectId=7');
+    expect(init0.method).toBe('GET');
+    const [url1] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url1).toBe('/api/defect/v1/statistics');
+  });
+
+  it('GET /defect/v1/board，返回分组缺陷与看板列', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            defectsByStatus: { NEW: [{ id: 301, title: '登录按钮无响应' }] },
+            columns: [{ id: 'NEW', name: '新建', status: 'NEW', color: '#999', count: 1 }],
+          },
+        },
+      },
+    ]);
+    const board = await defectApi.getDefectBoardData(7);
+
+    expect(board.defectsByStatus.NEW[0].id).toBe(301);
+    expect(board.columns[0].name).toBe('新建');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/board?projectId=7');
+    expect(init.method).toBe('GET');
+  });
+
+  it('GET /defect/v1/statusOptions，返回十态元数据（value=枚举名）', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: [
+            { value: 'NEW', label: '新建' },
+            { value: 'ASSIGNED', label: '已分配' },
+            { value: 'IN_PROGRESS', label: '处理中' },
+            { value: 'PENDING_VERIFICATION', label: '待验证' },
+            { value: 'RESOLVED', label: '已解决' },
+            { value: 'CLOSED', label: '已关闭' },
+            { value: 'REOPEN', label: '重新打开' },
+            { value: 'REJECTED', label: '已拒绝' },
+            { value: 'VERIFIED', label: '已验证' },
+            { value: 'TESTING', label: '测试中' },
+          ],
+        },
+      },
+    ]);
+    const options = await defectApi.getStatusOptions();
+
+    expect(options).toHaveLength(10);
+    expect(options[0]).toEqual({ value: 'NEW', label: '新建' });
+    expect(options.map((o) => o.value)).toContain('REOPEN');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/statusOptions');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /defect/v1/advancedSearch，高级查询条件拼在 bean 内', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 301, title: '登录按钮无响应' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await defectApi.advancedSearch({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        projectId: 7,
+        keyword: '登录',
+        status: ['NEW', 'ASSIGNED'],
+        severity: ['MAJOR', 'CRITICAL'],
+        priority: ['HIGH'],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/advancedSearch');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        projectId: 7,
+        keyword: '登录',
+        status: ['NEW', 'ASSIGNED'],
+        severity: ['MAJOR', 'CRITICAL'],
+        priority: ['HIGH'],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
   });
 });

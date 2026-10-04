@@ -9,9 +9,11 @@
 export * from './types';
 export * from './requirement-types';
 export * from './task-types';
+export * from './defect-types';
 export * from './client';
 export { authApi } from './auth';
 export { projectApi } from './project';
 export { requirementApi } from './requirement';
 export { taskApi } from './task';
+export { defectApi } from './defect';
 export { useAuthStore } from './auth-store';
