@@ -6,11 +6,12 @@
  * - 筛选：标题（文本）/ 状态（statusOptions 驱动十态）/ 严重度六档 / 优先级三档
  * - 新建：DefectCreateDialog（POST /defect/v1/createDefect），成功后列表缓存已失效
  * - 状态：加载 / 错误（重试）/ 空 / 列表 + 分页
+ * - 行标题深链到 /p/$projectKey/defects/$defectId（p2-defect-detail-flow）
  *
- * 未登录走演示看板（BoardView）时不使用本组件。缺陷详情页在 p2-defect-detail-flow
- * 接入，本列表暂不深链（行渲染为纯信息行）。
+ * 未登录走演示看板（BoardView）时不使用本组件。
  */
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { shouldClampPage } from "@/lib/pagination";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, SeverityChip, StatusChip } from "@/components/biz";
@@ -40,7 +41,7 @@ const PRIORITY_FILTER_OPTIONS = DEFECT_PRIORITIES.map((priority) => ({
   label: priorityLabel(priority),
 }));
 
-export function DefectListLive({ projectId }: { projectId: number }) {
+export function DefectListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
   const [titleInput, setTitleInput] = useState("");
   const [appliedTitle, setAppliedTitle] = useState("");
   const [status, setStatus] = useState("");
@@ -172,7 +173,13 @@ export function DefectListLive({ projectId }: { projectId: number }) {
           {listQuery.data!.list.map((item) => (
             <div key={item.id} className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0">
               <span className="type-caption shrink-0 text-default-400">#{item.id}</span>
-              <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>
+              <Link
+                to="/p/$projectKey/defects/$defectId"
+                params={{ projectKey, defectId: String(item.id) }}
+                className="type-body min-w-0 flex-1 truncate underline-offset-2 hover:underline"
+              >
+                {item.title}
+              </Link>
               <span className="hidden shrink-0 sm:inline-flex">
                 <SeverityChip severity={item.severity} />
               </span>

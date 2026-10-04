@@ -1,5 +1,6 @@
 /**
- * 缺陷域 react-query hooks（P2：p2-defect-list-create 垂直切片）。
+ * 缺陷域 react-query hooks（P2：p2-defect-list-create 垂直切片；
+ * p2-defect-detail-flow 追加详情/流转/严重度/更新）。
  *
  * 约定（沿用 useRequirements.ts / useTasks.ts）：
  * - queryKey 一律走 queryKeys.defect.*，不手写数组
@@ -13,7 +14,11 @@ import { defectApi } from '../../api/defect';
 import type {
   DefectCreatePayload,
   DefectQueryRequest,
+  DefectSeverityChangePayload,
+  DefectStatus,
   DefectStatusOption,
+  DefectTransitionPayload,
+  DefectUpdatePayload,
 } from '../../api/defect-types';
 import { useAuthStore } from '../../api/auth-store';
 import { queryKeys } from '../keys';
@@ -73,5 +78,140 @@ export function useCreateDefect() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.defect.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
     },
+  });
+}
+
+/**
+ * 缺陷状态流转拓扑（纯函数，可独立测试）。
+ *
+ * 忠实于后端 DefectStateMachineConfig（拓扑唯一权威）与老前端
+ * frontend/src/types/defect.ts 的 DEFECT_TRANSITIONS_BY_STATUS（两者一致）：
+ * - 指派边（→ASSIGNED / →NEW）：必需 assigneeId（后端 fail-fast），原因可选
+ * - IN_PROGRESS→TESTING：必需 testerId；→VERIFIED：必需 verifierId
+ * - 原因必填：→REJECTED / →REOPEN / →CLOSED / →PENDING_VERIFICATION /
+ *   →RESOLVED，以及 TESTING→IN_PROGRESS（返回开发原因）
+ */
+export const DEFECT_TRANSITIONS_BY_STATUS: Record<DefectStatus, DefectStatus[]> = {
+  NEW: ['ASSIGNED', 'REJECTED'],
+  ASSIGNED: ['IN_PROGRESS'],
+  IN_PROGRESS: ['PENDING_VERIFICATION', 'TESTING'],
+  PENDING_VERIFICATION: ['RESOLVED', 'REJECTED'],
+  TESTING: ['RESOLVED', 'REJECTED', 'IN_PROGRESS'],
+  RESOLVED: ['CLOSED', 'VERIFIED', 'REOPEN'],
+  CLOSED: ['REOPEN'],
+  REOPEN: ['IN_PROGRESS'],
+  VERIFIED: ['CLOSED', 'REOPEN'],
+  REJECTED: ['REOPEN', 'NEW'],
+};
+
+/** 从 from 状态可达的目标状态（未知状态 → 空列表，不渲染流转按钮） */
+export function defectTransitionTargets(from: string | null | undefined): DefectStatus[] {
+  if (from == null) return [];
+  return (DEFECT_TRANSITIONS_BY_STATUS as Record<string, DefectStatus[]>)[from] ?? [];
+}
+
+/**
+ * 流转原因必填规则（忠实于后端 DefectWorkflowService.transitionDefect）：
+ * →REJECTED/→REOPEN/→CLOSED/→PENDING_VERIFICATION/→RESOLVED 必填，
+ * TESTING→IN_PROGRESS（返回开发）必填；指派边（→ASSIGNED/→NEW）原因可选。
+ */
+const DEFECT_REASON_STATUSES: ReadonlySet<DefectStatus> = new Set([
+  'REJECTED',
+  'REOPEN',
+  'CLOSED',
+  'PENDING_VERIFICATION',
+  'RESOLVED',
+]);
+
+export function defectNeedsReason(from: string, to: string): boolean {
+  return DEFECT_REASON_STATUSES.has(to as DefectStatus) ||
+    (to === 'IN_PROGRESS' && from === 'TESTING');
+}
+
+/** 流转目标需要的执行人字段（忠实于后端 requireAssignee/requireTester/requireVerifier） */
+export type DefectActorField = 'assignee' | 'tester' | 'verifier';
+
+export function defectNeedsActor(to: string): DefectActorField | null {
+  if (to === 'ASSIGNED' || to === 'NEW') return 'assignee';
+  if (to === 'TESTING') return 'tester';
+  if (to === 'VERIFIED') return 'verifier';
+  return null;
+}
+
+/**
+ * 流转按钮文案（忠实于老前端 getDefectTransitionLabel）：
+ * NEW→ASSIGNED=分配、→REJECTED=拒绝、→IN_PROGRESS=开始处理/重新处理、
+ * →PENDING_VERIFICATION=提交验证、→TESTING=开始测试、→RESOLVED=解决、
+ * →CLOSED=关闭、→VERIFIED=验证、→REOPEN=重新打开、→NEW=重新新建。
+ */
+export function defectTransitionLabel(
+  from: string,
+  to: DefectStatus,
+  fallback: (status: string) => string,
+): string {
+  if (from === 'NEW' && to === 'ASSIGNED') return '分配';
+  if (to === 'REJECTED') return '拒绝';
+  if (to === 'IN_PROGRESS') return from === 'REOPEN' || from === 'TESTING' ? '重新处理' : '开始处理';
+  if (to === 'PENDING_VERIFICATION') return '提交验证';
+  if (to === 'TESTING') return '开始测试';
+  if (to === 'RESOLVED') return '解决';
+  if (to === 'CLOSED') return '关闭';
+  if (to === 'VERIFIED') return '验证';
+  if (to === 'REOPEN') return '重新打开';
+  if (to === 'NEW') return '重新新建';
+  return fallback(to);
+}
+
+/** 缺陷详情：走 GET /defect/v1/findById/{id}；id 无效时 disabled */
+export function useDefectDetail(id: number | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.defect.detail(id ?? 0),
+    queryFn: () => defectApi.findById(id as number),
+    enabled: typeof id === 'number' && Number.isFinite(id) && id > 0,
+  });
+}
+
+/** 缺陷域变更的缓存失效：缺陷域 + 需求域（追溯图/影响范围/矩阵里嵌了缺陷关联与状态） */
+function invalidateDefectDomain(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.defect.all });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
+}
+
+/**
+ * 更新缺陷字段：走 POST /defect/v1/updateDefect。
+ * 严重度与状态流转不在此入口（专用 CAS 端点 {defectId}/severity 与 updateStatus）。
+ */
+export function useUpdateDefect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DefectUpdatePayload) => defectApi.updateDefect(data),
+    onSuccess: () => invalidateDefectDomain(queryClient),
+  });
+}
+
+/**
+ * 缺陷状态流转：走 POST /defect/v1/updateStatus
+ * （{ id, status, reason?, comment?, assigneeId?, testerId?, verifierId? }）。
+ * 非法流转由后端状态机拒绝并经 toUserMessage 展示。
+ */
+export function useUpdateDefectStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DefectTransitionPayload) => defectApi.updateStatus(data),
+    onSuccess: () => invalidateDefectDomain(queryClient),
+  });
+}
+
+/**
+ * 重新评定缺陷严重度：走 POST /defect/v1/{defectId}/severity（CAS 命令，
+ * expectedSeverity 为客户端已读取的旧值，远端已变更时后端拒绝并经
+ * toUserMessage 展示，调用方应重试）。
+ */
+export function useChangeDefectSeverity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ defectId, data }: { defectId: number; data: DefectSeverityChangePayload }) =>
+      defectApi.changeSeverity(defectId, data),
+    onSuccess: () => invalidateDefectDomain(queryClient),
   });
 }

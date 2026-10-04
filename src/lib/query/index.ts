@@ -14,8 +14,8 @@ export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey,
 export type { ProjectListParams } from './hooks/useProjects';
 export { useRequirementList, useRequirementOptions } from './hooks/useRequirements';
 export type { RequirementListParams, RequirementOptions } from './hooks/useRequirements';
-export { useDefectList, useDefectStatusOptions, useCreateDefect } from './hooks/useDefects';
-export type { DefectListParams } from './hooks/useDefects';
+export { useDefectList, useDefectStatusOptions, useCreateDefect, useDefectDetail, useUpdateDefect, useUpdateDefectStatus, useChangeDefectSeverity, DEFECT_TRANSITIONS_BY_STATUS, defectTransitionTargets, defectNeedsReason, defectNeedsActor, defectTransitionLabel } from './hooks/useDefects';
+export type { DefectListParams, DefectActorField } from './hooks/useDefects';
 export { useTaskList } from './hooks/useTasks';
 export type { TaskListParams } from './hooks/useTasks';
 export {
