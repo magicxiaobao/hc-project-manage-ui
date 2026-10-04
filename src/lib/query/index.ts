@@ -20,11 +20,14 @@ export { useTaskList } from './hooks/useTasks';
 export type { TaskListParams } from './hooks/useTasks';
 export {
   TASK_TRANSITIONS_BY_STATUS,
+  filterBacklogTasks,
   useAssignTask,
   useCreateTask,
   useCreateTaskComment,
+  useProjectAllTasks,
   useTaskComments,
   useTaskDetail,
+  useUpdateTaskSprint,
   useUpdateTaskStatus,
   taskNeedsActorReason,
   taskNeedsAssigneeConfirm,
@@ -152,12 +155,15 @@ export {
   useUpdateBoard,
 } from './hooks/useBoards';
 export {
+  filterMountableSprints,
   normalizeSprintListParams,
+  sortMountableSprints,
   useCancelSprint,
   useCompleteSprint,
   useCreateSprint,
   useInvalidSprint,
   usePlanningSprints,
+  useProjectAllSprints,
   useSprintBurndown,
   useSprintDetail,
   useSprintList,

@@ -232,3 +232,62 @@ export function useInvalidSprint() {
     onSuccess: () => invalidateSprintDomain(queryClient),
   });
 }
+
+/**
+ * 项目全部冲刺（全页循环，供 Backlog 规划等需要全量口径的页面使用）：
+ * POST /sprint/v1/project/{projectId}/findByPage 循环拉取（pageSize=200，
+ * 直到某页不足一页，避免 total 超单页时静默漏数）。
+ * bean 的 status 只有单值 eq，无法表达多状态，因此不带 status 条件，
+ * 可挂载过滤在前端完成（见 filterMountableSprints）。
+ */
+const ALL_SPRINTS_FETCH_PAGE_SIZE = 200;
+
+/** 可挂载状态：后端 TaskServiceImpl.validateMountTarget 只允许挂载到这两种状态 */
+const MOUNTABLE_STATUSES = new Set(['PLANNING', 'ACTIVE']);
+
+/** 拉取项目全部冲刺（分页循环，供测试与 hook 共用）。 */
+export async function fetchAllProjectSprints(projectId: number): Promise<SprintResponse[]> {
+  const all: SprintResponse[] = [];
+  let page = 1;
+  for (;;) {
+    const pageResult = await sprintApi.findByProject(projectId, {
+      page,
+      pageSize: ALL_SPRINTS_FETCH_PAGE_SIZE,
+      bean: { projectId },
+    });
+    all.push(...pageResult.list);
+    if (pageResult.list.length < ALL_SPRINTS_FETCH_PAGE_SIZE) break;
+    page += 1;
+  }
+  return all;
+}
+
+export function useProjectAllSprints(params: { projectId?: number | null }) {
+  const { projectId } = params;
+  return useQuery({
+    queryKey: queryKeys.sprint.list({
+      allSprints: true,
+      pageSize: ALL_SPRINTS_FETCH_PAGE_SIZE,
+      projectId: projectId ?? 0,
+    }),
+    queryFn: () => fetchAllProjectSprints(projectId as number),
+    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+  });
+}
+
+/**
+ * 可挂载冲刺（供 Backlog 规划选择目标使用）：status ∈ {PLANNING, ACTIVE}。
+ * 后端实读依据：TaskServiceImpl.validateMountTarget 只允许挂载到
+ * 规划中/进行中的冲刺（须同项目、有效），其它状态后端报业务码
+ * （"只有规划中或进行中的冲刺可以挂载任务"）；这里把过滤前置，
+ * 避免用户选出后端必拒绝的目标。纯函数，可独立测试。
+ */
+export function filterMountableSprints(sprints: SprintResponse[]): SprintResponse[] {
+  return sprints.filter((sprint) => MOUNTABLE_STATUSES.has(sprint.status));
+}
+
+/** 可挂载冲刺排序：ACTIVE 在前，其次 PLANNING，同状态按 id 升序。纯函数，可独立测试。 */
+export function sortMountableSprints(sprints: SprintResponse[]): SprintResponse[] {
+  const rank = (status: string) => (status === 'ACTIVE' ? 0 : 1);
+  return [...sprints].sort((a, b) => rank(a.status) - rank(b.status) || a.id - b.id);
+}

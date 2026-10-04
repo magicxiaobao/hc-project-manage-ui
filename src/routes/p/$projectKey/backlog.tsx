@@ -1,5 +1,18 @@
+/**
+ * Backlog 待办路由（P3：p3-backlog 未规划任务池与 Sprint 规划）。
+ *
+ * 登录态：projectKey → projectId（useProjectIdByKey）→ BacklogLive
+ * （POST /task/v1/findByPage 全页循环 + 前端 backlog 过滤 + BacklogPlanDialog）。
+ * 未登录：保留原演示待办视图（BacklogView），供未登录浏览。
+ */
 import { createFileRoute } from "@tanstack/react-router";
+import { useRef } from "react";
+import { Button, Spinner } from "@heroui/react";
+import { EmptyHint } from "@/components/biz";
+import { BacklogLive } from "@/components/pm/backlog-live";
 import { BacklogView } from "@/components/pm/backlog-view";
+import { useAuthStore } from "@/lib/api/auth-store";
+import { toUserMessage, useProjectIdByKey } from "@/lib/query";
 
 export const Route = createFileRoute("/p/$projectKey/backlog")({
   component: Page,
@@ -7,5 +20,62 @@ export const Route = createFileRoute("/p/$projectKey/backlog")({
 
 function Page() {
   const { projectKey } = Route.useParams();
-  return <BacklogView projectKey={projectKey} />;
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  if (!isAuthenticated) return <BacklogView projectKey={projectKey} />;
+  return <LiveBacklog projectKey={projectKey} />;
+}
+
+/**
+ * P3 p3-backlog：路由 key（字符串）→ 后端 id（数字）→ 全量任务查询。
+ * 演示数据不再用于已登录的待办页。
+ */
+function LiveBacklog({ projectKey }: { projectKey: string }) {
+  const resolution = useProjectIdByKey(projectKey);
+  // 上次解析成功的项目 id：后台重取失败（isError）或结果变空时，保留已挂载的
+  // 列表与其弹窗子树，脏表单不被卸载（沿用 testcase-list-live 的 P2 经验）。
+  const lastGoodProjectId = useRef<number | null>(null);
+  if (typeof resolution.data === "number") {
+    lastGoodProjectId.current = resolution.data;
+  }
+  const projectId = typeof resolution.data === "number" ? resolution.data : lastGoodProjectId.current;
+
+  if (resolution.isPending && projectId == null) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-8 text-sm text-default-500">
+        <Spinner size="sm" /> 正在解析项目…
+      </div>
+    );
+  }
+  if (projectId == null) {
+    if (resolution.isError) {
+      return (
+        <div className="flex flex-col items-start gap-3 px-4 py-8">
+          <p className="type-body text-danger">项目解析失败：{toUserMessage(resolution.error)}</p>
+          <Button variant="ghost" onPress={() => void resolution.refetch()}>
+            重试
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <EmptyHint>{`没有找到这个项目（${projectKey}）。请检查项目标识是否正确，或确认你有该项目的访问权限。`}</EmptyHint>
+    );
+  }
+
+  // 后台重取失败时保留列表挂载：顶部展示错误横幅 + 重试，不卸载脏表单。
+  return (
+    <>
+      {resolution.isError ? (
+        <div className="mx-4 mt-4 flex items-center gap-3 rounded-md border border-danger/40 bg-danger/5 px-4 py-2">
+          <p className="type-body flex-1 text-danger">
+            项目解析失败（后台刷新）：{toUserMessage(resolution.error)}。列表为上次成功的数据。
+          </p>
+          <Button size="sm" variant="ghost" onPress={() => void resolution.refetch()}>
+            重试
+          </Button>
+        </div>
+      ) : null}
+      <BacklogLive projectId={projectId} projectKey={projectKey} />
+    </>
+  );
 }
