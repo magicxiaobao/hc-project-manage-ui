@@ -200,10 +200,12 @@ export function useDefectDetail(id: number | null | undefined) {
   });
 }
 
-/** 缺陷域变更的缓存失效：缺陷域 + 需求域（追溯图/影响范围/矩阵里嵌了缺陷关联与状态） */
+/** 缺陷域变更的缓存失效：缺陷域 + 需求域（追溯图/影响范围/矩阵里嵌了缺陷关联与状态）
+ * + 测试轮域（工作台展示缺陷标题/严重度摘要；codex r10 P2-10） */
 function invalidateDefectDomain(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.defect.all });
   void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.testRun.all });
 }
 
 /**

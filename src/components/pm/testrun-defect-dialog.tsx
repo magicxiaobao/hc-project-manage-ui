@@ -265,10 +265,12 @@ export function TestRunDefectDialog({
                   />
                 </div>
                 <div>
-                  <Label>严重度</Label>
+                  <Label>
+                    严重度<RequiredMark />
+                  </Label>
                   <OptionSelect
                     isDisabled={isPending}
-                    label="严重度"
+                    label="严重度（必填）"
                     value={form.severity}
                     options={SEVERITY_OPTIONS}
                     onChange={(next) => set({ severity: next as DefectSeverity })}

@@ -9,7 +9,11 @@
  * - TARGETED_RETEST：sourceRunId 正数必填；sourceRunCaseIds 去重后 1–200
  * - 完成执行：result 必填；FAILED/BLOCKED → failureMessage 必填；
  *   PASSED → failureMessage 必须为空（后端直接拒绝）；SKIPPED → executionNotes 必填；
- *   overrideReason 最多 500
+ *   overrideReason：本人完成时隐藏且不发送，他人执行由当前用户完成
+ *   （管理员覆盖）时必填；长度最多 500（UTF-16 码元）；
+ *   actualResult/failureMessage/executionNotes 另受 65535 UTF-8 字节上限
+ * - 文本长度统一按 UTF-16 码元（str.length）计数，与后端 Java String.length()
+ *   对齐；仅缺陷标题沿用码点计数（后端用 codePointCount）
  * - 重试执行/取消轮：reason trim 后 1–500（必填）
  * - 执行建缺陷：title 按码点 1–200（必填，老前端 ExecutionDefectDialog 口径）；
  *   关联已有缺陷：defectId 正整数必填
@@ -69,16 +73,18 @@ export function emptyTestRunCreateInput(runType: TestRunType): TestRunCreateInpu
   };
 }
 
-/** 公共文本校验：runName 必填 1–200，environment 最多 255 */
+/** 公共文本校验：runName 必填 1–200，environment 最多 255。
+ * 长度按 UTF-16 码元（str.length）计数，与后端 Java String.length() 对齐。 */
 function validateCommonText(input: TestRunCreateInput): FieldIssue[] {
   const issues: FieldIssue[] = [];
   const name = input.runName.trim();
   if (!name) {
     issues.push({ field: 'runName', message: '运行名称为必填项（1–200 个字符）' });
-  } else if (Array.from(name).length > 200) {
+  } else if (name.length > 200) {
     issues.push({ field: 'runName', message: '运行名称最多 200 个字符' });
   }
-  if (input.environment.trim() && Array.from(input.environment.trim()).length > 255) {
+  const environment = input.environment.trim();
+  if (environment && environment.length > 255) {
     issues.push({ field: 'environment', message: '环境最多 255 个字符' });
   }
   return issues;
@@ -94,22 +100,31 @@ export function validateTestRunCreateInput(input: TestRunCreateInput): FieldIssu
   } else if (input.runType === 'AD_HOC') {
     const suites = parseIdListText(input.adHocSuiteIds);
     const cases = parseIdListText(input.adHocCaseIds);
-    const invalidTokens = [...suites.invalid, ...cases.invalid];
-    if (invalidTokens.length > 0) {
+    const suiteInvalid = [...new Set(suites.invalid)];
+    const caseInvalid = [...new Set(cases.invalid)];
+    // 非法输入按来源字段分别归属，调用方把错误挂到各自输入下方
+    if (suiteInvalid.length > 0) {
       issues.push({
         field: 'adHocSuiteIds',
-        message: `存在非法 ID：${[...new Set(invalidTokens)].join('、')}`,
+        message: `测试套件 ID 存在非法输入：${suiteInvalid.join('、')}`,
       });
-    } else {
+    }
+    if (caseInvalid.length > 0) {
+      issues.push({
+        field: 'adHocCaseIds',
+        message: `测试用例 ID 存在非法输入：${caseInvalid.join('、')}`,
+      });
+    }
+    if (suiteInvalid.length === 0 && caseInvalid.length === 0) {
       const total = new Set(suites.ids).size + new Set(cases.ids).size;
       if (total < 1) {
         issues.push({
-          field: 'adHocSuiteIds',
+          field: 'adHocSelection',
           message: '临时验证至少选择 1 个测试套件或测试用例',
         });
       } else if (total > 200) {
         issues.push({
-          field: 'adHocSuiteIds',
+          field: 'adHocSelection',
           message: '套件与用例选择合计最多 200 项（已去重）',
         });
       }
@@ -207,17 +222,35 @@ export function emptyExecutionCompleteInput(): ExecutionCompleteInput {
   };
 }
 
-/** 完成执行校验：忠实后端 completeValidation 三段规则 */
+/** UTF-8 字节长度（TextEncoder 按 UTF-8 编码计数），与后端 TEXT 列
+ * 65535 bytes 上限对齐。 */
+export function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+/** 完成执行表单校验选项 */
+export interface ValidateExecutionCompleteOptions {
+  /**
+   * 管理员覆盖场景（当前用户 ≠ attempt.executedBy）时覆盖原因为必填；
+   * 本人完成时该字段隐藏且不发送，此时传 false（默认 false：未知身份时
+   * 不强制，避免误拦；调用方按身份判定传入）。
+   */
+  requireOverrideReason?: boolean;
+}
+
+/** 完成执行校验：忠实后端 completeValidation 三段规则；收集全部错误，不首错即停 */
 export function validateExecutionCompleteInput(
   input: ExecutionCompleteInput,
+  opts: ValidateExecutionCompleteOptions = {},
 ): FieldIssue[] {
   const issues: FieldIssue[] = [];
   if (!input.result) {
     issues.push({ field: 'result', message: '执行结果为必填项' });
-    return issues;
   }
+  const actualResult = input.actualResult.trim();
   const failureMessage = input.failureMessage.trim();
   const executionNotes = input.executionNotes.trim();
+  const overrideReason = input.overrideReason.trim();
   if (input.result === 'FAILED' || input.result === 'BLOCKED') {
     if (!failureMessage) {
       issues.push({
@@ -238,14 +271,38 @@ export function validateExecutionCompleteInput(
       message: '结果为跳过时必须填写执行备注',
     });
   }
-  if (input.overrideReason.trim() && Array.from(input.overrideReason.trim()).length > 500) {
+  // 管理员覆盖（他人执行、由当前用户完成）：覆盖原因为必填
+  if (opts.requireOverrideReason && !overrideReason) {
+    issues.push({
+      field: 'overrideReason',
+      message: '该执行由他人开始，由你完成时必须填写覆盖原因',
+    });
+  }
+  // 长度按 UTF-16 码元（str.length）计数，与后端 Java String.length() 对齐
+  if (overrideReason && overrideReason.length > 500) {
     issues.push({ field: 'overrideReason', message: '覆盖原因最多 500 个字符' });
+  }
+  // TEXT 列上限：后端 actualResult/failureMessage/executionNotes 均为
+  // 65535 UTF-8 bytes，超限挂字段级错误（不只等提交后报总体错误）
+  const textFields: Array<[string, string, string]> = [
+    ['actualResult', actualResult, '实际结果'],
+    ['failureMessage', failureMessage, '失败说明'],
+    ['executionNotes', executionNotes, '执行备注'],
+  ];
+  for (const [field, value, label] of textFields) {
+    if (value && utf8ByteLength(value) > 65535) {
+      issues.push({
+        field,
+        message: `${label}内容过大（最多 65535 字节，当前约 ${utf8ByteLength(value)} 字节）`,
+      });
+    }
   }
   return issues;
 }
 
 export function buildCompleteExecutionPayload(
   input: ExecutionCompleteInput,
+  opts: { includeOverrideReason?: boolean } = {},
 ): CompleteExecutionPayload {
   const payload: CompleteExecutionPayload = {
     result: input.result as TestExecutionResult,
@@ -257,20 +314,24 @@ export function buildCompleteExecutionPayload(
   if (actualResult) payload.actualResult = actualResult;
   if (failureMessage) payload.failureMessage = failureMessage;
   if (executionNotes) payload.executionNotes = executionNotes;
-  if (overrideReason) payload.overrideReason = overrideReason;
+  // 本人完成时不发送 overrideReason（后端 adminOverride=false 时直接拒绝该字段）
+  if (overrideReason && opts.includeOverrideReason !== false) {
+    payload.overrideReason = overrideReason;
+  }
   return payload;
 }
 
 /**
  * 原因字段校验（取消轮 / 重试执行共用）：trim 后 1–500 必填，
  * 忠实后端 requireReason（服务端同样 trim 并限制 500）。
+ * 长度按 UTF-16 码元（str.length）计数，与后端 Java String.length() 对齐。
  */
 export function validateReasonField(reason: string): FieldIssue[] {
   const normalized = reason.trim();
   if (!normalized) {
     return [{ field: 'reason', message: '原因为必填项（1–500 个字符）' }];
   }
-  if (Array.from(normalized).length > 500) {
+  if (normalized.length > 500) {
     return [{ field: 'reason', message: '原因最多 500 个字符' }];
   }
   return [];

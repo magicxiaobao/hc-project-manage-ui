@@ -104,13 +104,13 @@ export function TestRunCreateDialog({
     open && isDirty,
   );
 
-  const set = (patch: Partial<TestRunCreateInput>) => {
+  const set = (patch: Partial<TestRunCreateInput>, clearAlso: string[] = []) => {
     setForm((current) => ({ ...current, ...patch }));
     setSubmitError("");
     setFieldErrors((current) => {
       const next = { ...current };
       let changed = false;
-      for (const key of Object.keys(patch)) {
+      for (const key of [...Object.keys(patch), ...clearAlso]) {
         if (next[key] !== undefined) {
           delete next[key];
           changed = true;
@@ -240,7 +240,7 @@ export function TestRunCreateDialog({
                 <TextField
                   isDisabled={isPending}
                   value={form.adHocSuiteIds}
-                  onChange={(next) => set({ adHocSuiteIds: next })}
+                  onChange={(next) => set({ adHocSuiteIds: next }, ["adHocSelection"])}
                   aria-label="测试套件 ID"
                 >
                   <Label>测试套件 ID</Label>
@@ -249,12 +249,13 @@ export function TestRunCreateDialog({
                     placeholder="逗号分隔的套件 ID，如：12, 34"
                   />
                 </TextField>
+                <FieldError message={fieldErrors.adHocSuiteIds} />
               </div>
               <div>
                 <TextField
                   isDisabled={isPending}
                   value={form.adHocCaseIds}
-                  onChange={(next) => set({ adHocCaseIds: next })}
+                  onChange={(next) => set({ adHocCaseIds: next }, ["adHocSelection"])}
                   aria-label="测试用例 ID"
                 >
                   <Label>测试用例 ID</Label>
@@ -266,7 +267,8 @@ export function TestRunCreateDialog({
                 <p className="type-caption mt-1 text-default-500">
                   套件与用例选择合计至少 1 项、去重后最多 200 项；套件内的用例会自动展开。
                 </p>
-                <FieldError message={fieldErrors.adHocSuiteIds} />
+                <FieldError message={fieldErrors.adHocCaseIds} />
+                <FieldError message={fieldErrors.adHocSelection} />
               </div>
             </>
           ) : null}

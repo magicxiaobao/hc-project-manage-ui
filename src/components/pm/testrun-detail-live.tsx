@@ -22,7 +22,7 @@
  *
  * 错误/加载/空分支下各弹窗保持挂载（脏表单不因后台重取被卸载）。
  */
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button, Spinner } from "@heroui/react";
 import { toast } from "sonner";
@@ -269,6 +269,34 @@ export function TestRunDetailLive({
           <TestExecutionResultChip result={runCase.latestAttempt?.result ?? null} />
         </div>
 
+        {/* 冻结快照内容：建轮时冻结的测试步骤/预期结果，供执行时对照
+            （codex r10 P2-4；后端已返回 snapshot.testSteps/expectedResult） */}
+        {snapshot?.testSteps?.trim() || snapshot?.expectedResult?.trim() ? (
+          <details className="border-b border-border px-3 py-2">
+            <summary className="type-caption cursor-pointer text-default-500">
+              查看冻结快照（测试步骤 / 预期结果）
+            </summary>
+            <div className="mt-2 flex flex-col gap-2">
+              {snapshot?.testSteps?.trim() ? (
+                <div>
+                  <p className="type-caption text-default-500">测试步骤</p>
+                  <p className="type-body mt-0.5 whitespace-pre-wrap">
+                    {snapshot.testSteps}
+                  </p>
+                </div>
+              ) : null}
+              {snapshot?.expectedResult?.trim() ? (
+                <div>
+                  <p className="type-caption text-default-500">预期结果</p>
+                  <p className="type-body mt-0.5 whitespace-pre-wrap">
+                    {snapshot.expectedResult}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </details>
+        ) : null}
+
         {runCase.attempts.length > 0 ? (
           <div>{runCase.attempts.map((attempt) => renderAttemptRow(runCase, attempt))}</div>
         ) : (
@@ -298,9 +326,11 @@ export function TestRunDetailLive({
     );
   };
 
-  // 各弹窗在所有分支下保持挂载：后台重取失败/加载中不卸载脏表单
+  // 各弹窗在所有分支下保持挂载：同一 keyed Fragment 实例位于各分支的
+  // 同一 <div> 根下，分支切换时 React 只做 keyed 移动而不 remount；
+  // 后台重取失败/加载中不卸载脏表单（codex r10 P2-1）
   const dialogs = (
-    <>
+    <Fragment key="testrun-dialogs">
       <TestExecutionCompleteDialog
         open={completeTarget !== null}
         execution={completeTarget}
@@ -380,7 +410,7 @@ export function TestRunDetailLive({
           onClose={() => setTargetedContext(null)}
         />
       ) : null}
-    </>
+    </Fragment>
   );
 
   if (detailQuery.isPending) {

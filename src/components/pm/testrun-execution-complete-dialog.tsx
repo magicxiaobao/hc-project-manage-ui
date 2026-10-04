@@ -6,7 +6,8 @@
  * - FAILED/BLOCKED → failureMessage 必填
  * - PASSED → failureMessage 必须为空（后端直接拒绝，前端拦截）
  * - SKIPPED → executionNotes 必填
- * - overrideReason 可选，最多 500
+ * - overrideReason 条件契约：本人完成（executedBy == 当前用户）时隐藏且不发送；
+ *   管理员覆盖（他人执行、由当前用户完成）时必填；最多 500（UTF-16 码元）
  *
  * 表单 UX：dirty check、必填星号、字段级错误挂输入下、编辑即清；
  * 请求进行中禁用全部输入与关闭入口。
@@ -25,6 +26,7 @@ import {
   toUserMessage,
   useCompleteExecution,
 } from "@/lib/query";
+import { useAuthStore } from "@/lib/api/auth-store";
 import {
   buildCompleteExecutionPayload,
   emptyExecutionCompleteInput,
@@ -54,6 +56,18 @@ export function TestExecutionCompleteDialog({
 }) {
   const completeExecution = useCompleteExecution();
   const isPending = completeExecution.isPending;
+
+  // 覆盖原因条件契约（codex r10 P2-3）：后端 adminOverride = actorId != executedBy。
+  // 本人完成 → 字段隐藏且不发送（后端直接拒绝该字段）；他人执行由当前用户完成
+  // （管理员覆盖）→ 必填 + 必填星号 + 字段级错误。executedBy 未知时按覆盖处理。
+  // userId 为规范十进制字符串（hydrate 时校验），executedBy 为 number，
+  // 用 String() 归一化后比较。
+  const currentUserId = useAuthStore((s) => s.user?.userId ?? null);
+  const isSelfCompletion =
+    execution != null &&
+    execution.executedBy != null &&
+    currentUserId != null &&
+    String(execution.executedBy) === currentUserId;
 
   const [form, setForm] = useState<ExecutionCompleteInput>(
     emptyExecutionCompleteInput,
@@ -100,14 +114,21 @@ export function TestExecutionCompleteDialog({
 
   const handleSubmit = () => {
     if (isPending || !execution) return;
-    const errors = validateExecutionCompleteInput(form);
+    const errors = validateExecutionCompleteInput(form, {
+      requireOverrideReason: !isSelfCompletion,
+    });
     const nextFieldErrors: Record<string, string> = {};
     for (const error of errors) nextFieldErrors[error.field] = error.message;
     setFieldErrors(nextFieldErrors);
     if (errors.length > 0) return;
     setSubmitError("");
     completeExecution.mutate(
-      { executionId: execution.id, data: buildCompleteExecutionPayload(form) },
+      {
+        executionId: execution.id,
+        data: buildCompleteExecutionPayload(form, {
+          includeOverrideReason: !isSelfCompletion,
+        }),
+      },
       {
         onSuccess: () => {
           toast.success(`执行 #${execution.id} 已完成（${TEST_EXECUTION_RESULT_LABELS[form.result as keyof typeof TEST_EXECUTION_RESULT_LABELS]}）`);
@@ -144,7 +165,17 @@ export function TestExecutionCompleteDialog({
               label="执行结果（必填）"
               value={form.result}
               options={RESULT_OPTIONS}
-              onChange={(next) => set({ result: next as ExecutionCompleteInput["result"] })}
+              onChange={(next) => {
+                const result = next as ExecutionCompleteInput["result"];
+                // 切离 失败/阻塞 时清空失败说明：其输入与 FieldError 仅在
+                // 失败/阻塞下渲染，残留值+残留错误会导致"看不见的错误拦截提交"
+                //（codex r10 P2-2）；set 会同步清除该字段的错误
+                set(
+                  result === "FAILED" || result === "BLOCKED"
+                    ? { result }
+                    : { result, failureMessage: "" },
+                );
+              }}
             />
             <FieldError message={fieldErrors.result} />
           </div>
@@ -203,18 +234,26 @@ export function TestExecutionCompleteDialog({
             </div>
           ) : null}
 
-          <div>
-            <TextField
-              isDisabled={isPending}
-              value={form.overrideReason}
-              onChange={(next) => set({ overrideReason: next })}
-              aria-label="覆盖原因"
-            >
-              <Label>覆盖原因</Label>
-              <TextArea rows={2} placeholder="覆盖默认判定时填写（可选，最多 500 个字符）" />
-            </TextField>
-            <FieldError message={fieldErrors.overrideReason} />
-          </div>
+          {/* 覆盖原因：本人完成时隐藏（且不发送）；管理员覆盖时必填 */}
+          {isSelfCompletion ? null : (
+            <div>
+              <TextField
+                isDisabled={isPending}
+                value={form.overrideReason}
+                onChange={(next) => set({ overrideReason: next })}
+                aria-label="覆盖原因（必填）"
+              >
+                <Label>
+                  覆盖原因<RequiredMark />
+                </Label>
+                <TextArea
+                  rows={2}
+                  placeholder="该执行由他人开始，由你完成时必填（最多 500 个字符）"
+                />
+              </TextField>
+              <FieldError message={fieldErrors.overrideReason} />
+            </div>
+          )}
 
           {submitError ? <p className="type-body text-danger">{submitError}</p> : null}
 

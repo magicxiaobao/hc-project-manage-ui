@@ -7,22 +7,22 @@
  * - testrun-form 纯函数：建轮校验/载荷、完成执行校验、原因校验、
  *   执行缺陷校验/载荷
  *
- * 运行：pnpm vitest run src/lib/query/__tests__/testrun-workspace.test.tsx
+ * 运行：pnpm vitest run src/lib/__tests__/testrun-workspace.test.tsx（已接入 pnpm run test:lib）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { createQueryClient } from '../client';
-import { queryKeys } from '../keys';
+import { createQueryClient } from '../query/client';
+import { queryKeys } from '../query/keys';
 import {
   normalizeTestRunListParams,
   useTestRunList,
-} from '../hooks/useTestRuns';
-import { api } from '../../api/client';
-import { testRunApi } from '../../api/testRun';
-import { testExecutionApi } from '../../api/testExecution';
-import type { PageResult } from '../../api/types';
-import type { TestRunResponse } from '../../api/testRun-types';
+} from '../query/hooks/useTestRuns';
+import { api } from '../api/client';
+import { testRunApi } from '../api/testRun';
+import { testExecutionApi } from '../api/testExecution';
+import type { PageResult } from '../api/types';
+import type { TestRunResponse } from '../api/testRun-types';
 import {
   buildAdHocPayload,
   buildCompleteExecutionPayload,
@@ -33,12 +33,13 @@ import {
   emptyExecutionCompleteInput,
   emptyExecutionDefectInput,
   emptyTestRunCreateInput,
+  utf8ByteLength,
   validateExecutionCompleteInput,
   validateExecutionDefectInput,
   validateReasonField,
   validateTestRunCreateInput,
-} from '../../testrun-form';
-import type { TestRunCreateInput } from '../../testrun-form';
+} from '../testrun-form';
+import type { TestRunCreateInput } from '../testrun-form';
 
 function testRun(overrides: Partial<TestRunResponse>): TestRunResponse {
   return {
@@ -307,27 +308,35 @@ describe('validateTestRunCreateInput 建轮校验', () => {
     expect(issues.some((issue) => issue.field === 'environment')).toBe(true);
   });
 
-  it('AD_HOC 无选择 → 错误', () => {
+  it('AD_HOC 无选择 → adHocSelection 错误', () => {
     const issues = validateTestRunCreateInput(
       validCreateInput({ runType: 'AD_HOC', adHocSuiteIds: '', adHocCaseIds: ' ' }),
     );
-    expect(issues.some((issue) => issue.field === 'adHocSuiteIds')).toBe(true);
+    expect(issues.some((issue) => issue.field === 'adHocSelection')).toBe(true);
   });
 
-  it('AD_HOC 非法 token → 错误并指出 token', () => {
+  it('AD_HOC 用例非法 token → 错误归属 adHocCaseIds 并指出 token', () => {
     const issues = validateTestRunCreateInput(
       validCreateInput({ runType: 'AD_HOC', adHocCaseIds: '101, abc' }),
     );
-    const issue = issues.find((entry) => entry.field === 'adHocSuiteIds');
+    const issue = issues.find((entry) => entry.field === 'adHocCaseIds');
     expect(issue?.message).toContain('abc');
   });
 
-  it('AD_HOC 合计超 200 项 → 错误', () => {
+  it('AD_HOC 套件非法 token → 错误归属 adHocSuiteIds', () => {
+    const issues = validateTestRunCreateInput(
+      validCreateInput({ runType: 'AD_HOC', adHocSuiteIds: 'xx' }),
+    );
+    const issue = issues.find((entry) => entry.field === 'adHocSuiteIds');
+    expect(issue?.message).toContain('xx');
+  });
+
+  it('AD_HOC 合计超 200 项 → adHocSelection 错误', () => {
     const ids = Array.from({ length: 201 }, (_, index) => String(index + 1)).join(',');
     const issues = validateTestRunCreateInput(
       validCreateInput({ runType: 'AD_HOC', adHocCaseIds: ids }),
     );
-    expect(issues.some((issue) => issue.field === 'adHocSuiteIds')).toBe(true);
+    expect(issues.some((issue) => issue.field === 'adHocSelection')).toBe(true);
   });
 
   it('AD_HOC 合法选择 → 无错误', () => {
@@ -440,6 +449,140 @@ describe('validateExecutionCompleteInput 完成执行校验（后端三段规则
       result: 'FAILED',
       failureMessage: '闪退',
     });
+  });
+});
+
+describe('r10 修复回归：完成执行校验收集全部错误（P2-7）', () => {
+  it('result 未选 + overrideReason 超 500（UTF-16）→ 同时返回两条错误', () => {
+    const issues = validateExecutionCompleteInput({
+      ...emptyExecutionCompleteInput(),
+      overrideReason: 'x'.repeat(501),
+    });
+    expect(issues.map((issue) => issue.field).sort()).toEqual([
+      'overrideReason',
+      'result',
+    ]);
+  });
+
+  it('result 未选 + failureMessage 超 65535 字节 → 同时返回 result 与 failureMessage 错误', () => {
+    const issues = validateExecutionCompleteInput({
+      ...emptyExecutionCompleteInput(),
+      failureMessage: 'x'.repeat(65536),
+    });
+    expect(issues.map((issue) => issue.field).sort()).toEqual([
+      'failureMessage',
+      'result',
+    ]);
+  });
+});
+
+describe('r10 修复回归：overrideReason 条件契约（P2-3）', () => {
+  it('管理员覆盖（requireOverrideReason）且为空 → overrideReason 必填错误', () => {
+    const issues = validateExecutionCompleteInput(
+      { ...emptyExecutionCompleteInput(), result: 'PASSED' },
+      { requireOverrideReason: true },
+    );
+    expect(
+      issues.some((issue) => issue.field === 'overrideReason'),
+    ).toBe(true);
+  });
+
+  it('本人完成（默认不强制）且为空 → 无 overrideReason 错误', () => {
+    const issues = validateExecutionCompleteInput({
+      ...emptyExecutionCompleteInput(),
+      result: 'PASSED',
+    });
+    expect(
+      issues.some((issue) => issue.field === 'overrideReason'),
+    ).toBe(false);
+  });
+
+  it('载荷：includeOverrideReason=false 时不发送 overrideReason（本人完成）', () => {
+    const payload = buildCompleteExecutionPayload(
+      {
+        ...emptyExecutionCompleteInput(),
+        result: 'PASSED',
+        overrideReason: ' 误填 ',
+      },
+      { includeOverrideReason: false },
+    );
+    expect(payload).toEqual({ result: 'PASSED' });
+    expect('overrideReason' in payload).toBe(false);
+  });
+
+  it('载荷：默认仍发送 overrideReason（管理员覆盖，向后兼容）', () => {
+    const payload = buildCompleteExecutionPayload({
+      ...emptyExecutionCompleteInput(),
+      result: 'PASSED',
+      overrideReason: ' 覆盖说明 ',
+    });
+    expect(payload.overrideReason).toBe('覆盖说明');
+  });
+});
+
+describe('r10 修复回归：TEXT 字段 65535 UTF-8 字节上限（P2-9）', () => {
+  it('utf8ByteLength：emoji 按 4 字节计', () => {
+    expect(utf8ByteLength('😀')).toBe(4);
+    expect(utf8ByteLength('abc')).toBe(3);
+  });
+
+  it('failureMessage 65536 字节 → 字段级错误', () => {
+    const issues = validateExecutionCompleteInput({
+      ...emptyExecutionCompleteInput(),
+      result: 'FAILED',
+      failureMessage: 'x'.repeat(65536),
+    });
+    const issue = issues.find((entry) => entry.field === 'failureMessage');
+    expect(issue?.message).toContain('65535');
+  });
+
+  it('failureMessage 恰 65535 字节 → 通过', () => {
+    const issues = validateExecutionCompleteInput({
+      ...emptyExecutionCompleteInput(),
+      result: 'FAILED',
+      failureMessage: 'x'.repeat(65535),
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('16384 个 emoji（65536 字节）→ 字段级错误（字节口径非码点口径）', () => {
+    const issues = validateExecutionCompleteInput({
+      ...emptyExecutionCompleteInput(),
+      result: 'FAILED',
+      failureMessage: '😀'.repeat(16384),
+    });
+    expect(
+      issues.some((issue) => issue.field === 'failureMessage'),
+    ).toBe(true);
+  });
+});
+
+describe('r10 修复回归：长度按 UTF-16 码元与后端对齐（P2-8）', () => {
+  it('runName：101 个 emoji（202 码元）→ 错误；100 个 emoji（200 码元）→ 通过', () => {
+    expect(
+      validateTestRunCreateInput(validCreateInput({ runName: '😀'.repeat(101) })).some(
+        (issue) => issue.field === 'runName',
+      ),
+    ).toBe(true);
+    expect(
+      validateTestRunCreateInput(validCreateInput({ runName: '😀'.repeat(100) })),
+    ).toEqual([]);
+  });
+
+  it('validateReasonField：251 个 emoji（502 码元）→ 错误；250 个（500 码元）→ 通过', () => {
+    expect(validateReasonField('😀'.repeat(251)).length).toBe(1);
+    expect(validateReasonField('😀'.repeat(250))).toEqual([]);
+  });
+
+  it('overrideReason：501 个 emoji（1002 码元）→ 错误', () => {
+    const issues = validateExecutionCompleteInput({
+      ...emptyExecutionCompleteInput(),
+      result: 'PASSED',
+      overrideReason: '😀'.repeat(501),
+    });
+    expect(
+      issues.some((issue) => issue.field === 'overrideReason'),
+    ).toBe(true);
   });
 });
 
