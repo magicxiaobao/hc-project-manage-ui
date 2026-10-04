@@ -48,6 +48,15 @@ export const Route = createRootRoute({
  */
 function RootComponent() {
   const [queryClient] = useState(() => createQueryClient());
+  // Codex 本地评审 P1（4175724983 跟进）：跨 tab 换账号（A→B）时只清查询
+  // 缓存是不够的——已挂载且仅订阅 isAuthenticated 的页面不会重渲染，其
+  // QueryObserver 在 queryClient.clear() 后仍持有被移除的 query 实例，
+  // 继续展示 A 的旧数据（已用 QueryObserver 实证：clear 后 status 仍为
+  // success、fetch 次数不变），而写操作已用 B 的 token。
+  // 以账号身份为 key 重挂载整个路由子树：身份变化后所有页面都是全新实例，
+  // 全部查询按新身份重新拉取。token 刷新等 userId 不变的场景 key 不变，
+  // 不会重挂载。
+  const accountKey = useAuthStore((state) => state.user?.userId ?? "anonymous");
   useEffect(() => {
     useAuthStore.getState().hydrate();
     // 登录用户变更时清空查询缓存：防止账号 B 读到账号 A 的缓存数据。
@@ -88,7 +97,7 @@ function RootComponent() {
         <I18nProvider locale="zh-CN">
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <Outlet />
+              <Outlet key={accountKey} />
             </AuthProvider>
           </QueryClientProvider>
         </I18nProvider>
