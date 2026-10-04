@@ -231,12 +231,6 @@ describe("confirmAuthoritativeRefresh", () => {
     expect(confirmAuthoritativeRefresh(base)).toBe(true);
   });
 
-  it("r10 P2-3：同一毫秒/时钟回拨下 dataUpdatedAt 不推进，成功计数仍确认真实 GET 成功", () => {
-    // 旧的 dataUpdatedAt > updatedAtBefore 在同一毫秒会误判 false；
-    // 计数器与墙钟无关，真实 success dispatch 即递增
-    expect(confirmAuthoritativeRefresh(base)).toBe(true);
-  });
-
   it("r9 P2-4 ①：刷新开始前的乐观写入不能冒充权威成功（成功计数未推进）", () => {
     // 列排序失败恢复路径：setQueryData(previous) 与刷新开始同 tick，
     // 被取消的 refetch 不产生 success dispatch → 计数不推进 → false

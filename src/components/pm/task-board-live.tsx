@@ -393,8 +393,15 @@ export function TaskBoardLive({
    * r10 P1-2：权威成功后的统一清理——把 awaitingRefresh 里的卡片从
    * movingCardIds 解锁。协调器内（authoritativeBoardRefresh）与协调器外
    * （顶部横幅重试/重连自动刷新/列 CRUD 失效刷新，见下方 effect）共用。
+   *
+   * r11 P1-2：任一次权威成功都递增 refreshSucceededSignal，同步给原因弹窗——
+   * 弹窗的 refreshFailed 是内部状态，POST 成功+刷新失败后，若权威成功来自
+   * toast 重试/自动重连等其它入口，弹窗收不到通知会一直锁死关闭。
+   * 信号只在权威成功确认后递增；弹窗收到后 markClean 关闭（见 dialog 注释）。
    */
+  const [refreshSucceededSignal, setRefreshSucceededSignal] = useState(0);
   function unlockAwaitingCards() {
+    setRefreshSucceededSignal((n) => n + 1);
     const awaiting = awaitingRefresh.current;
     if (awaiting.size === 0) return;
     const ids = [...awaiting];
@@ -445,31 +452,47 @@ export function TaskBoardLive({
    *   markOptimisticWrite 推进代次；
    * 因此"观察到拉取开始 → 拉取结束且 success → dataUpdateCount 推进 →
    * 期间代次未变"即为一次非乐观的权威 GET 成功，可安全解锁等待中的卡片。
+   *
+   * r11 P1-1：暂停中的 GET 不能误判为权威成功——
+   * - 拉取开始时同时记录代次与成功计数（unlockFetchStartCount），结束时要求
+   *   status 为 success 且计数严格大于拉取开始前（真实 success dispatch）。
+   *   旧逻辑只记代次、用"上次已处理计数"比较：乐观写入推进计数后，
+   *   GET 因网络失败进入 paused（isFetching=false、缓存仍 success、
+   *   代次未变）也会触发解锁（探针：countBefore=2、countAfter=2、
+   *   fetchStatus=paused、unlocked=true）；
+   * - fetchStatus=paused 不是完成：不做判定，也不丢掉本次拉取快照，
+   *   等恢复后继续用同一快照判定；
+   * - 期间有乐观写入（代次推进）→ 守卫失败，不解锁（保守）。
    */
   const unlockFetchStartSeq = useRef<number | null>(null);
-  const unlockHandledUpdateCount = useRef(0);
+  const unlockFetchStartCount = useRef(0);
   useEffect(() => {
     if (columnsQuery.isFetching) {
       if (unlockFetchStartSeq.current == null) {
         unlockFetchStartSeq.current = boardRefreshSeq.current;
+        unlockFetchStartCount.current =
+          queryClient.getQueryState(columnsKey)?.dataUpdateCount ?? 0;
       }
       return;
     }
+    // r11 P1-1：paused 不是完成——保留快照，等恢复后继续观察
+    if (columnsQuery.fetchStatus === "paused") return;
     if (unlockFetchStartSeq.current == null) return;
     const startSeq = unlockFetchStartSeq.current;
+    const countAtStart = unlockFetchStartCount.current;
     unlockFetchStartSeq.current = null;
     const state = queryClient.getQueryState(columnsKey);
     const count = state?.dataUpdateCount ?? 0;
     if (
       state?.status === "success" &&
-      count > unlockHandledUpdateCount.current &&
+      count > countAtStart &&
       boardRefreshSeq.current === startSeq
     ) {
-      unlockHandledUpdateCount.current = count;
       unlockAwaitingCards();
     }
   }, [
     columnsQuery.isFetching,
+    columnsQuery.fetchStatus,
     columnsQuery.status,
     columnsQuery.dataUpdatedAt,
     columnsKey,
@@ -831,6 +854,9 @@ export function TaskBoardLive({
           }}
           // r9 P1-2：仅重试看板权威刷新（不重发 POST）；成功后弹窗自行关闭
           onRetryRefresh={() => retryBoardRefresh(pendingMove.card.id)}
+          // r11 P1-2：各入口的权威成功同步到弹窗——refreshFailed 态下收到
+          // 递增即 markClean 关闭（toast 重试/自动重连成功不再锁死弹窗）
+          refreshSucceededSignal={refreshSucceededSignal}
           onConfirm={async (text, assigneeId) => {
             const move = pendingMove;
             // r7 F9：请求期间保留弹窗与文本；成功才由弹窗 markClean 后关闭，

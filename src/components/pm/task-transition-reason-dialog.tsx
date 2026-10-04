@@ -26,7 +26,7 @@
  *
  * 父组件按 open/key 重挂载本弹窗（与 BoardFormDialog 同一模式）。
  */
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Input, Label, Spinner, TextArea, TextField } from "@heroui/react";
 import {
   AppModal,
@@ -65,6 +65,7 @@ export function TaskTransitionReasonDialog({
   onCancel,
   onConfirm,
   onRetryRefresh,
+  refreshSucceededSignal,
 }: {
   open: boolean;
   taskTitle: string;
@@ -107,6 +108,14 @@ export function TaskTransitionReasonDialog({
    * "重试刷新"按钮调用它；返回 true 表示权威刷新成功。
    */
   onRetryRefresh?: () => Promise<boolean>;
+  /**
+   * r11 P1-2：父组件每次确认权威刷新成功即递增（各入口统一经
+   * unlockAwaitingCards：协调器自身、顶部横幅重试、toast 重试、
+   * 重连自动刷新、列 CRUD 失效刷新）。refreshFailed 态下收到变化 →
+   * 失败态已过时（看板已恢复、卡片已解锁），markClean 后关闭；
+   * 继续锁死弹窗、要求用户再经弹窗取一次 GET 成功才能退出是 bug。
+   */
+  refreshSucceededSignal?: number;
 }) {
   const [text, setText] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -146,7 +155,7 @@ export function TaskTransitionReasonDialog({
   const actorReasonRequired = taskNeedsActorReason(to, effectiveAssigneeId, actorId);
   const reasonRequired = textRequired || actorReasonRequired;
 
-  const doClose = () => {
+  const doClose = useCallback(() => {
     setText("");
     setFieldError(null);
     setAssigneeInput("");
@@ -155,7 +164,22 @@ export function TaskTransitionReasonDialog({
     setRefreshFailed(false);
     setRefreshError(null);
     onCancel();
-  };
+  }, [onCancel]);
+
+  // r11 P1-2：父组件权威成功信号——refreshFailed 态下收到递增，说明失败态
+  // 已过时（看板已恢复、卡片已解锁），markClean 后关闭。选关闭而非仅恢复
+  // 关闭能力：提交早已成功，重开输入会诱发重复 POST；失败警告文本也已过时，
+  // 继续展示是误导。ref 守卫保证同一信号只处理一次。
+  const refreshSignalRef = useRef(refreshSucceededSignal ?? 0);
+  useEffect(() => {
+    const current = refreshSucceededSignal ?? 0;
+    if (current === refreshSignalRef.current) return;
+    refreshSignalRef.current = current;
+    if (refreshFailed) {
+      markClean();
+      doClose();
+    }
+  }, [refreshSucceededSignal, refreshFailed, markClean, doClose]);
 
   const close = () => {
     // r10 P1-1：refreshFailed 时卡片仍锁定（父组件 keepLocked），此时关闭
