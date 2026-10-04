@@ -383,6 +383,7 @@ export function SprintListLive({ projectId, projectKey }: { projectId: number; p
           mode="edit"
           sprintId={editingSprint.id}
           initial={editFormFromSprint(editingSprint)}
+          originalSprint={editingSprint}
           onClose={() => setEditingSprint(null)}
         />
       ) : null}

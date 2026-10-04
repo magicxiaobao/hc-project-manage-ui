@@ -143,13 +143,21 @@ export function useStartSprint() {
  * 请求体 { disposition: 'BACKLOG' | 'TARGET_SPRINT', targetSprintId? }；
  * disposition 必填，TARGET_SPRINT 时 targetSprintId 必填（须同项目、规划中）。
  * 成功后失效冲刺域全部缓存。
+ *
+ * r14 F4：后端 SprintServiceImpl.completeSprint → taskRepository
+ * .moveUnfinishedTasksToSprint 会改写未完成任务的 sprint_id（BACKLOG 与
+ * TARGET_SPRINT 都走），因此同步失效任务域缓存，避免 30s staleTime 内
+ * 返回任务页仍显示旧所属冲刺。
  */
 export function useCompleteSprint() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: SprintCompletePayload }) =>
       sprintApi.completeSprint(id, data),
-    onSuccess: () => invalidateSprintDomain(queryClient),
+    onSuccess: () => {
+      invalidateSprintDomain(queryClient);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
+    },
   });
 }
 

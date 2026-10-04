@@ -51,7 +51,6 @@ import { Route as PProjectKeyReleasesIndexRouteImport } from './routes/p/$projec
 import { Route as PProjectKeyReleasesReleaseIdRouteImport } from './routes/p/$projectKey/releases/$releaseId'
 import { Route as PProjectKeyRequirementsIndexRouteImport } from './routes/p/$projectKey/requirements/index'
 import { Route as PProjectKeyRequirementsRequirementIdRouteImport } from './routes/p/$projectKey/requirements.$requirementId'
-<<<<<<< HEAD
 import { Route as PProjectKeyTestcasesIndexRouteImport } from './routes/p/$projectKey/testcases/index'
 import { Route as PProjectKeyTestcasesTestCaseIdRouteImport } from './routes/p/$projectKey/testcases/$testCaseId'
 import { Route as PProjectKeyTestsIndexRouteImport } from './routes/p/$projectKey/tests/index'
@@ -60,9 +59,8 @@ import { Route as PProjectKeyTestsuitesIndexRouteImport } from './routes/p/$proj
 import { Route as PProjectKeyTestsuitesTestSuiteIdRouteImport } from './routes/p/$projectKey/testsuites/$testSuiteId'
 import { Route as PProjectKeyVersionsIndexRouteImport } from './routes/p/$projectKey/versions/index'
 import { Route as PProjectKeyVersionsVersionIdRouteImport } from './routes/p/$projectKey/versions/$versionId'
-=======
+import { Route as PProjectKeySprintsIndexRouteImport } from './routes/p/$projectKey/sprints/index'
 import { Route as PProjectKeySprintsSprintIdRouteImport } from './routes/p/$projectKey/sprints/$sprintId'
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -281,7 +279,6 @@ const PProjectKeyRequirementsRequirementIdRoute =
     path: '/$requirementId',
     getParentRoute: () => PProjectKeyRequirementsRoute,
   } as any)
-<<<<<<< HEAD
 const PProjectKeyTestcasesIndexRoute =
   PProjectKeyTestcasesIndexRouteImport.update({
     id: '/',
@@ -328,13 +325,16 @@ const PProjectKeyVersionsVersionIdRoute =
     id: '/$versionId',
     path: '/$versionId',
     getParentRoute: () => PProjectKeyVersionsRoute,
-=======
+const PProjectKeySprintsIndexRoute = PProjectKeySprintsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PProjectKeySprintsRoute,
+} as any)
 const PProjectKeySprintsSprintIdRoute =
   PProjectKeySprintsSprintIdRouteImport.update({
     id: '/$sprintId',
     path: '/$sprintId',
     getParentRoute: () => PProjectKeySprintsRoute,
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -374,15 +374,12 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
   '/p/$projectKey/releases/$releaseId': typeof PProjectKeyReleasesReleaseIdRoute
   '/p/$projectKey/requirements/$requirementId': typeof PProjectKeyRequirementsRequirementIdRoute
-<<<<<<< HEAD
   '/p/$projectKey/testcases/$testCaseId': typeof PProjectKeyTestcasesTestCaseIdRoute
   '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
   '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
   '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
   '/p/$projectKey/defects/': typeof PProjectKeyDefectsIndexRoute
-=======
   '/p/$projectKey/sprints/$sprintId': typeof PProjectKeySprintsSprintIdRoute
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
   '/p/$projectKey/boards/': typeof PProjectKeyBoardsIndexRoute
   '/p/$projectKey/issues/': typeof PProjectKeyIssuesIndexRoute
   '/p/$projectKey/release-environments/': typeof PProjectKeyReleaseEnvironmentsIndexRoute
@@ -392,6 +389,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/tests/': typeof PProjectKeyTestsIndexRoute
   '/p/$projectKey/testsuites/': typeof PProjectKeyTestsuitesIndexRoute
   '/p/$projectKey/versions/': typeof PProjectKeyVersionsIndexRoute
+  '/p/$projectKey/sprints/': typeof PProjectKeySprintsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -400,34 +398,8 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
   '/projects/new': typeof ProjectsNewRoute
-  '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
-  '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
-  '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
-  '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
-  '/p/$projectKey/gantt': typeof PProjectKeyGanttRoute
-  '/p/$projectKey/settings': typeof PProjectKeySettingsRoute
-  '/p/$projectKey/sprints': typeof PProjectKeySprintsRouteWithChildren
-  '/p/$projectKey/stats': typeof PProjectKeyStatsRoute
-  '/p/$projectKey/trace': typeof PProjectKeyTraceRoute
-  '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey': typeof PProjectKeyIndexRoute
-  '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
-  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
-  '/p/$projectKey/boards/$boardId': typeof PProjectKeyBoardsBoardIdRoute
-  '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
-  '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
-  '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
-  '/p/$projectKey/releases/$releaseId': typeof PProjectKeyReleasesReleaseIdRoute
-  '/p/$projectKey/requirements/$requirementId': typeof PProjectKeyRequirementsRequirementIdRoute
-<<<<<<< HEAD
-  '/p/$projectKey/testcases/$testCaseId': typeof PProjectKeyTestcasesTestCaseIdRoute
-  '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
-  '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
-  '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
   '/p/$projectKey/defects': typeof PProjectKeyDefectsIndexRoute
-=======
-  '/p/$projectKey/sprints/$sprintId': typeof PProjectKeySprintsSprintIdRoute
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
   '/p/$projectKey/boards': typeof PProjectKeyBoardsIndexRoute
   '/p/$projectKey/issues': typeof PProjectKeyIssuesIndexRoute
   '/p/$projectKey/release-environments': typeof PProjectKeyReleaseEnvironmentsIndexRoute
@@ -437,6 +409,7 @@ export interface FileRoutesByTo {
   '/p/$projectKey/tests': typeof PProjectKeyTestsIndexRoute
   '/p/$projectKey/testsuites': typeof PProjectKeyTestsuitesIndexRoute
   '/p/$projectKey/versions': typeof PProjectKeyVersionsIndexRoute
+  '/p/$projectKey/sprints': typeof PProjectKeySprintsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -445,55 +418,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
-  '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects_/new': typeof ProjectsNewRoute
-  '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
-  '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
-  '/p/$projectKey/boards': typeof PProjectKeyBoardsRouteWithChildren
-  '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
-  '/p/$projectKey/defects': typeof PProjectKeyDefectsRouteWithChildren
-  '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
-  '/p/$projectKey/gantt': typeof PProjectKeyGanttRoute
-  '/p/$projectKey/issues': typeof PProjectKeyIssuesRouteWithChildren
-  '/p/$projectKey/release-environments': typeof PProjectKeyReleaseEnvironmentsRouteWithChildren
-  '/p/$projectKey/releases': typeof PProjectKeyReleasesRouteWithChildren
-  '/p/$projectKey/requirements': typeof PProjectKeyRequirementsRouteWithChildren
-  '/p/$projectKey/settings': typeof PProjectKeySettingsRoute
-  '/p/$projectKey/sprints': typeof PProjectKeySprintsRouteWithChildren
-  '/p/$projectKey/stats': typeof PProjectKeyStatsRoute
-  '/p/$projectKey/testcases': typeof PProjectKeyTestcasesRouteWithChildren
-  '/p/$projectKey/tests': typeof PProjectKeyTestsRouteWithChildren
-  '/p/$projectKey/testsuites': typeof PProjectKeyTestsuitesRouteWithChildren
-  '/p/$projectKey/trace': typeof PProjectKeyTraceRoute
-  '/p/$projectKey/versions': typeof PProjectKeyVersionsRouteWithChildren
-  '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
-  '/p/$projectKey/': typeof PProjectKeyIndexRoute
-  '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
-  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
-  '/p/$projectKey/boards/$boardId': typeof PProjectKeyBoardsBoardIdRoute
-  '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
-  '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
-  '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
-  '/p/$projectKey/releases/$releaseId': typeof PProjectKeyReleasesReleaseIdRoute
-  '/p/$projectKey/requirements/$requirementId': typeof PProjectKeyRequirementsRequirementIdRoute
-<<<<<<< HEAD
-  '/p/$projectKey/testcases/$testCaseId': typeof PProjectKeyTestcasesTestCaseIdRoute
-  '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
-  '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
-  '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
-  '/p/$projectKey/defects/': typeof PProjectKeyDefectsIndexRoute
-=======
-  '/p/$projectKey/sprints/$sprintId': typeof PProjectKeySprintsSprintIdRoute
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
-  '/p/$projectKey/boards/': typeof PProjectKeyBoardsIndexRoute
-  '/p/$projectKey/issues/': typeof PProjectKeyIssuesIndexRoute
-  '/p/$projectKey/release-environments/': typeof PProjectKeyReleaseEnvironmentsIndexRoute
-  '/p/$projectKey/releases/': typeof PProjectKeyReleasesIndexRoute
-  '/p/$projectKey/requirements/': typeof PProjectKeyRequirementsIndexRoute
-  '/p/$projectKey/testcases/': typeof PProjectKeyTestcasesIndexRoute
-  '/p/$projectKey/tests/': typeof PProjectKeyTestsIndexRoute
-  '/p/$projectKey/testsuites/': typeof PProjectKeyTestsuitesIndexRoute
-  '/p/$projectKey/versions/': typeof PProjectKeyVersionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -534,15 +459,12 @@ export interface FileRouteTypes {
     | '/p/$projectKey/items/$itemKey'
     | '/p/$projectKey/releases/$releaseId'
     | '/p/$projectKey/requirements/$requirementId'
-<<<<<<< HEAD
     | '/p/$projectKey/testcases/$testCaseId'
     | '/p/$projectKey/tests/$testRunId'
     | '/p/$projectKey/testsuites/$testSuiteId'
     | '/p/$projectKey/versions/$versionId'
     | '/p/$projectKey/defects/'
-=======
     | '/p/$projectKey/sprints/$sprintId'
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
     | '/p/$projectKey/boards/'
     | '/p/$projectKey/issues/'
     | '/p/$projectKey/release-environments/'
@@ -552,6 +474,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests/'
     | '/p/$projectKey/testsuites/'
     | '/p/$projectKey/versions/'
+    | '/p/$projectKey/sprints/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -566,7 +489,6 @@ export interface FileRouteTypes {
     | '/p/$projectKey/dependencies'
     | '/p/$projectKey/gantt'
     | '/p/$projectKey/settings'
-    | '/p/$projectKey/sprints'
     | '/p/$projectKey/stats'
     | '/p/$projectKey/trace'
     | '/p/$projectKey/worklogs'
@@ -579,15 +501,12 @@ export interface FileRouteTypes {
     | '/p/$projectKey/items/$itemKey'
     | '/p/$projectKey/releases/$releaseId'
     | '/p/$projectKey/requirements/$requirementId'
-<<<<<<< HEAD
     | '/p/$projectKey/testcases/$testCaseId'
     | '/p/$projectKey/tests/$testRunId'
     | '/p/$projectKey/testsuites/$testSuiteId'
     | '/p/$projectKey/versions/$versionId'
     | '/p/$projectKey/defects'
-=======
     | '/p/$projectKey/sprints/$sprintId'
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
     | '/p/$projectKey/boards'
     | '/p/$projectKey/issues'
     | '/p/$projectKey/release-environments'
@@ -597,6 +516,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests'
     | '/p/$projectKey/testsuites'
     | '/p/$projectKey/versions'
+    | '/p/$projectKey/sprints'
   id:
     | '__root__'
     | '/'
@@ -635,15 +555,12 @@ export interface FileRouteTypes {
     | '/p/$projectKey/items/$itemKey'
     | '/p/$projectKey/releases/$releaseId'
     | '/p/$projectKey/requirements/$requirementId'
-<<<<<<< HEAD
     | '/p/$projectKey/testcases/$testCaseId'
     | '/p/$projectKey/tests/$testRunId'
     | '/p/$projectKey/testsuites/$testSuiteId'
     | '/p/$projectKey/versions/$versionId'
     | '/p/$projectKey/defects/'
-=======
     | '/p/$projectKey/sprints/$sprintId'
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
     | '/p/$projectKey/boards/'
     | '/p/$projectKey/issues/'
     | '/p/$projectKey/release-environments/'
@@ -653,6 +570,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests/'
     | '/p/$projectKey/testsuites/'
     | '/p/$projectKey/versions/'
+    | '/p/$projectKey/sprints/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -960,7 +878,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyRequirementsRequirementIdRouteImport
       parentRoute: typeof PProjectKeyRequirementsRoute
     }
-<<<<<<< HEAD
     '/p/$projectKey/testcases/': {
       id: '/p/$projectKey/testcases/'
       path: '/'
@@ -1016,14 +933,19 @@ declare module '@tanstack/react-router' {
       fullPath: '/p/$projectKey/versions/$versionId'
       preLoaderRoute: typeof PProjectKeyVersionsVersionIdRouteImport
       parentRoute: typeof PProjectKeyVersionsRoute
-=======
+    '/p/$projectKey/sprints/': {
+      id: '/p/$projectKey/sprints/'
+      path: '/'
+      fullPath: '/p/$projectKey/sprints/'
+      preLoaderRoute: typeof PProjectKeySprintsIndexRouteImport
+      parentRoute: typeof PProjectKeySprintsRoute
+    }
     '/p/$projectKey/sprints/$sprintId': {
       id: '/p/$projectKey/sprints/$sprintId'
       path: '/$sprintId'
       fullPath: '/p/$projectKey/sprints/$sprintId'
       preLoaderRoute: typeof PProjectKeySprintsSprintIdRouteImport
       parentRoute: typeof PProjectKeySprintsRoute
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
     }
   }
 }
@@ -1115,7 +1037,6 @@ const PProjectKeyRequirementsRouteWithChildren =
     PProjectKeyRequirementsRouteChildren,
   )
 
-<<<<<<< HEAD
 interface PProjectKeyTestcasesRouteChildren {
   PProjectKeyTestcasesTestCaseIdRoute: typeof PProjectKeyTestcasesTestCaseIdRoute
   PProjectKeyTestcasesIndexRoute: typeof PProjectKeyTestcasesIndexRoute
@@ -1169,18 +1090,18 @@ const PProjectKeyVersionsRouteChildren: PProjectKeyVersionsRouteChildren = {
 
 const PProjectKeyVersionsRouteWithChildren =
   PProjectKeyVersionsRoute._addFileChildren(PProjectKeyVersionsRouteChildren)
-=======
 interface PProjectKeySprintsRouteChildren {
   PProjectKeySprintsSprintIdRoute: typeof PProjectKeySprintsSprintIdRoute
+  PProjectKeySprintsIndexRoute: typeof PProjectKeySprintsIndexRoute
 }
 
 const PProjectKeySprintsRouteChildren: PProjectKeySprintsRouteChildren = {
   PProjectKeySprintsSprintIdRoute: PProjectKeySprintsSprintIdRoute,
+  PProjectKeySprintsIndexRoute: PProjectKeySprintsIndexRoute,
 }
 
 const PProjectKeySprintsRouteWithChildren =
   PProjectKeySprintsRoute._addFileChildren(PProjectKeySprintsRouteChildren)
->>>>>>> 2d88cb9 (feat(p3-sprint): 冲刺列表与生命周期管理（p3-sprint-list）)
 
 interface PProjectKeyRouteChildren {
   PProjectKeyAssignmentRoute: typeof PProjectKeyAssignmentRoute

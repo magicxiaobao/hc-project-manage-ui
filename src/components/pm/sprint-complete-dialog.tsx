@@ -146,9 +146,11 @@ export function SprintCompleteDialog({
             冲刺完成后状态不可逆。未完成的任务按所选去向处理。
           </p>
           <div>
-            <Label className="mb-1 block">未完成任务去向</Label>
+            <Label className="mb-1 block">
+              未完成任务去向<RequiredMark />
+            </Label>
             <RadioGroup
-              aria-label="未完成任务去向"
+              aria-label="未完成任务去向（必填）"
               value={disposition}
               onChange={(value) => {
                 setDisposition(value as SprintCompletionDisposition);

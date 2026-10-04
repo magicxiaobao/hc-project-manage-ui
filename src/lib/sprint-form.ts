@@ -11,9 +11,16 @@
  *   （后端按 canTransitionTo(CANCELLED) 转换表：PLANNING/ACTIVE→CANCELLED）。
  * - 日期：表单用 YYYY-MM-DD（HTML date 输入），发后端拼成
  *   'YYYY-MM-DDTHH:mm:ss'（后端 LocalDateTime，老前端同口径）。
- * - 数字字段（capacity/teamSize/scrumMasterId/productOwnerId）后端为
- *   Integer/Long：限定 0..2147483647（Integer 上限；超限前端 FieldError，
- *   沿用 p3-board-kanban r8-R7 经验）。
+ * - 数字字段（capacity/teamSize/scrumMasterId/productOwnerId）：
+ *   capacity/teamSize 后端为 Integer：限定 0..2147483647（超限前端 FieldError，
+ *   沿用 p3-board-kanban r8-R7 经验）；scrumMasterId/productOwnerId 后端为
+ *   Long：仅限定安全整数范围（r14 F2 修复：此前误套用 Integer 上限）。
+ * - 更新载荷（r14 F2）：后端 BaseSprintUpdater.updateSprint 是 null-skip
+ *   （Optional.ofNullable(...).ifPresent(...)），缺省/null 字段跳过不写；
+ *   只有显式传 "" 的字符串字段能被置空。编辑时清空了原本有值的 sprintGoal
+ *   会显式发送 ""；日期与数字字段后端无清空语义（"" 会反序列化失败、
+ *   null 会被跳过），编辑时若清空了原本有值的这类字段，前端校验直接拦截
+ *   并给字段级错误，而不是静默保留旧值。
  * - 校验收集全部错误（不首错即停），调用方挂 FieldError、编辑即清除。
  */
 import type {
@@ -139,6 +146,8 @@ function validateIntegerField(
   field: SprintFormFieldError["field"],
   label: string,
   errors: SprintFormFieldError[],
+  /** Integer 上限（如 capacity/teamSize）；null 表示仅校验安全整数范围（用户 ID 等 Long 字段） */
+  max: number | null,
 ): number | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -147,8 +156,12 @@ function validateIntegerField(
     return null;
   }
   const value = Number(trimmed);
-  if (!Number.isSafeInteger(value) || value > MAX_INTEGER) {
-    errors.push({ field, message: `${label}不能超过 ${MAX_INTEGER}` });
+  if (!Number.isSafeInteger(value)) {
+    errors.push({ field, message: `${label}超出安全整数范围` });
+    return null;
+  }
+  if (max !== null && value > max) {
+    errors.push({ field, message: `${label}不能超过 ${max}` });
     return null;
   }
   return value;
@@ -158,9 +171,16 @@ function validateIntegerField(
  * 字段级校验：收集全部错误返回（不首错即停）。
  * - 冲刺名称必填（后端 Sprint 实体要求非空）；
  * - 结束日期不早于开始日期；
- * - capacity/teamSize/scrumMasterId/productOwnerId 为正整数且不超 Java Integer 上限。
+ * - capacity/teamSize 为正整数且不超 Java Integer 上限；
+ *   scrumMasterId/productOwnerId 后端为 Long，仅限安全整数范围（r14 F2）；
+ * - 编辑模式（original 非空）时：若清空了原本有值的日期/数字字段，
+ *   后端 null-skip 语义下旧值会被保留且无法置空——直接给字段级错误拦截，
+ *   不让"提示成功但重开仍是旧值"发生（r14 F2）。
  */
-export function validateSprintFormInput(input: SprintFormInput): SprintFormFieldError[] {
+export function validateSprintFormInput(
+  input: SprintFormInput,
+  original?: SprintResponse,
+): SprintFormFieldError[] {
   const errors: SprintFormFieldError[] = [];
   const name = input.sprintName.trim();
   if (!name) {
@@ -188,11 +208,41 @@ export function validateSprintFormInput(input: SprintFormInput): SprintFormField
   if (DAY_RE.test(start) && DAY_RE.test(end) && end < start) {
     errors.push({ field: "plannedEndDate", message: "计划结束日期不能早于开始日期" });
   }
-  validateIntegerField(input.capacity, "capacity", "容量（人天）", errors);
-  validateIntegerField(input.scrumMasterId, "scrumMasterId", "Scrum Master 用户 ID", errors);
-  validateIntegerField(input.productOwnerId, "productOwnerId", "产品负责人用户 ID", errors);
-  validateIntegerField(input.teamSize, "teamSize", "团队规模", errors);
+  validateIntegerField(input.capacity, "capacity", "容量（人天）", errors, MAX_INTEGER);
+  validateIntegerField(input.scrumMasterId, "scrumMasterId", "Scrum Master 用户 ID", errors, null);
+  validateIntegerField(input.productOwnerId, "productOwnerId", "产品负责人用户 ID", errors, null);
+  validateIntegerField(input.teamSize, "teamSize", "团队规模", errors, MAX_INTEGER);
+  if (original) {
+    // 后端更新是 null-skip：这些字段传空会被忽略、旧值保留，且后端
+    // 不支持把它们置空；编辑时清空即拦截，避免静默"成功但没改"。
+    rejectClearedField(input.plannedStartDate, original.plannedStartDate, "plannedStartDate", "计划开始日期", errors);
+    rejectClearedField(input.plannedEndDate, original.plannedEndDate, "plannedEndDate", "计划结束日期", errors);
+    rejectClearedField(input.capacity, original.capacity, "capacity", "容量（人天）", errors);
+    rejectClearedField(input.scrumMasterId, original.scrumMasterId, "scrumMasterId", "Scrum Master 用户 ID", errors);
+    rejectClearedField(input.productOwnerId, original.productOwnerId, "productOwnerId", "产品负责人用户 ID", errors);
+    rejectClearedField(input.teamSize, original.teamSize, "teamSize", "团队规模", errors);
+  }
   return errors;
+}
+
+/**
+ * 编辑时"清空了原本有值的字段"拦截：当前值为空且原值非空 → 字段级错误。
+ * 仅用于后端 null-skip 下无法置空的日期/数字字段（字符串字段走显式空串，
+ * 见 buildSprintUpdatePayload）。
+ */
+function rejectClearedField(
+  current: string,
+  hadValue: string | number | null | undefined,
+  field: SprintFormFieldError["field"],
+  label: string,
+  errors: SprintFormFieldError[],
+): void {
+  if (!current.trim() && hadValue !== null && hadValue !== undefined && String(hadValue).trim() !== "") {
+    errors.push({
+      field,
+      message: `${label}不支持清空（后端会忽略空值并保留旧值），请保留原值`,
+    });
+  }
 }
 
 function parseOptionalInteger(raw: string): number | undefined {
@@ -228,14 +278,26 @@ export function buildSprintCreatePayload(
   return payload;
 }
 
-/** 更新载荷：字段级更新，id 必传（projectId 不随更新发送，后端按 id 定位） */
+/**
+ * 更新载荷：字段级更新，id 必传（projectId 不随更新发送，后端按 id 定位）。
+ * original（编辑时的原记录）用于识别被清空的字符串字段：后端
+ * BaseSprintUpdater.updateSprint 是 null-skip（缺省/null 跳过不写），
+ * 只有显式传 "" 的字符串字段会被置空。编辑时若用户清空了原本有值的
+ * sprintGoal，显式发送 "" 让后端真正清空（r14 F2；原本始终有值/始终
+ * 为空则不发送，避免把 null 改写成 "" 的无意义写）。
+ */
 export function buildSprintUpdatePayload(
   input: SprintFormInput,
   id: number,
+  original?: SprintResponse,
 ): SprintUpdatePayload {
   const { projectId: _omitted, ...rest } = buildSprintCreatePayload(input, 0);
   void _omitted;
-  return { ...rest, id };
+  const payload: SprintUpdatePayload = { ...rest, id };
+  if (input.sprintGoal.trim() === "" && (original?.sprintGoal?.trim() ?? "") !== "") {
+    payload.sprintGoal = "";
+  }
+  return payload;
 }
 
 /**

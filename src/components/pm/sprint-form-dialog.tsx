@@ -34,6 +34,7 @@ import {
   validateSprintFormInput,
   type SprintFormInput,
 } from "@/lib/sprint-form";
+import type { SprintResponse } from "@/lib/api/sprint-types";
 import { toUserMessage, useCreateSprint, useUpdateSprint } from "@/lib/query";
 
 export function SprintFormDialog({
@@ -42,6 +43,8 @@ export function SprintFormDialog({
   mode,
   sprintId,
   initial = emptySprintFormInput(),
+  /** 编辑模式时的原记录（r14 F2：用于识别被清空的字段，后端 null-skip 语义） */
+  originalSprint,
   onClose,
 }: {
   open: boolean;
@@ -51,6 +54,7 @@ export function SprintFormDialog({
   sprintId?: number;
   /** 初始表单值（create 传空表单，edit 传回填值） */
   initial?: SprintFormInput;
+  originalSprint?: SprintResponse;
   onClose: () => void;
 }) {
   const createSprint = useCreateSprint();
@@ -103,7 +107,8 @@ export function SprintFormDialog({
   const handleSubmit = () => {
     if (isPending) return;
     // 收集全部字段错误（不首错即停），一次更新错误集合
-    const errors = validateSprintFormInput(form);
+    // 编辑模式传入原记录：识别"清空了后端无法置空的字段"并给字段级错误（r14 F2）
+    const errors = validateSprintFormInput(form, mode === "edit" ? originalSprint : undefined);
     const nextFieldErrors: Record<string, string> = {};
     for (const error of errors) nextFieldErrors[error.field] = error.message;
     setFieldErrors(nextFieldErrors);
@@ -123,7 +128,7 @@ export function SprintFormDialog({
         },
       });
     } else {
-      updateSprint.mutate(buildSprintUpdatePayload(form, sprintId as number), {
+      updateSprint.mutate(buildSprintUpdatePayload(form, sprintId as number, originalSprint), {
         onSuccess: () => {
           toast.success("冲刺已更新");
           markClean();
