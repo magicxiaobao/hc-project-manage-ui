@@ -36,6 +36,7 @@ import {
 import {
   buildTestCaseCreatePayload,
   buildTestCaseUpdatePayload,
+  mergeSubmitFieldErrors,
   validateTestCaseFormInput,
 } from "@/lib/testcase-form";
 import type { TestCaseFormInput, TestCaseSubmitVeto } from "@/lib/testcase-form";
@@ -150,30 +151,22 @@ export function TestCaseFormDialog({
 
   const handleSubmit = () => {
     if (isPending) return;
-    // 提交前复核：归属翻转/实时状态变化时拒绝提交（codex P2 #1/#2/#3）。
-    // 拒绝后草稿保留、弹窗不卸载；归属错误走弹窗内持久错误（submitError），
-    // 状态过期走字段级错误（状态下拉下方），都不用 toast（一闪而过）。
-    const veto = submitVeto?.(form);
-    if (veto) {
-      if (veto.field) {
-        setFieldErrors({ [veto.field]: veto.message });
-      } else {
-        setSubmitError(veto.message);
-      }
-      return;
-    }
+    // 先收集全部普通字段错误（收集全部，不首错即停），再合并提交复核错误，
+    // 一次更新错误集合：避免复核提前返回导致未修正的字段错误被状态错误
+    // 覆盖后从显示上消失（codex P2 r3）。
     const errors = validateTestCaseFormInput(form, {
       includeVerifiesRequirementIds: mode === "create",
       // 编辑模式：清空已有负责人按老前端口径显式拒绝（codex P2 #5）
       originalAssigneeId: mode === "edit" ? initial.assigneeId : undefined,
     });
-    if (errors.length > 0) {
-      const nextFieldErrors: Record<string, string> = {};
-      for (const error of errors) nextFieldErrors[error.field] = error.message;
-      setFieldErrors(nextFieldErrors);
-      return;
-    }
-    setFieldErrors({});
+    // 提交前复核：归属翻转/实时状态变化时拒绝提交（codex P2 #1/#2/#3）。
+    // 拒绝后草稿保留、弹窗不卸载；归属错误走弹窗内持久错误（submitError），
+    // 状态过期走字段级错误（状态下拉下方），都不用 toast（一闪而过）。
+    const veto = submitVeto?.(form);
+    const nextFieldErrors = mergeSubmitFieldErrors(errors, veto);
+    if (veto && !veto.field) setSubmitError(veto.message);
+    setFieldErrors(nextFieldErrors);
+    if (errors.length > 0 || veto) return;
     setSubmitError("");
     if (mode === "create") {
       createTestCase.mutate(buildTestCaseCreatePayload(form, projectId), {

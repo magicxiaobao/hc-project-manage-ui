@@ -173,6 +173,22 @@ export interface TestCaseSubmitVeto {
 }
 
 /**
+ * 合并提交前的错误集合（纯函数）：先收集全部普通字段错误，再叠加提交复核
+ * 错误，一次返回。复核的字段错误只影响对应字段，不清空其它字段的普通错误，
+ * 避免复核提前返回导致未修正的字段错误从显示上消失（codex P2 r3）。
+ * 复核无字段（归属类）时调用方走 submitError 通道，此处不处理。
+ */
+export function mergeSubmitFieldErrors(
+  fieldErrors: { field: string; message: string }[],
+  veto: TestCaseSubmitVeto | null | undefined,
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const error of fieldErrors) next[error.field] = error.message;
+  if (veto?.field) next[veto.field] = veto.message;
+  return next;
+}
+
+/**
  * 编辑提交前的状态/归属复核（纯函数，忠实后端约束）：
  * - projectContextVerified 为 false → 拒绝（项目归属已翻转/无法确认）
  * - 实时状态为 ARCHIVED → 拒绝（后端 updateTestCase/duplicate 均拒绝归档记录）

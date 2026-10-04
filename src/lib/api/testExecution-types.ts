@@ -10,6 +10,10 @@
  *   项目与报告人由服务端可信事实填充，前端不传 projectId/reporterId）
  * - POST /testExecution/v1/{executionId}/defect-links（关联已有缺陷，请求体为 { defectId }）
  */
+/**
+ * 执行→缺陷结果（忠实于后端 ExecutionDefectResponse）。
+ * relation 为追溯域 AlmRelationView 的 JSON 投影（关联关系快照），P3 前只读透传。
+ */
 export interface ExecutionDefectResponse {
   executionId: number;
   operation: ExecutionDefectOperation;
@@ -80,14 +84,3 @@ export interface ExecutionDefectSummary {
   assigneeId: number | null;
 }
 
-/**
- * 执行→缺陷结果（忠实于后端 ExecutionDefectResponse）。
- * relation 为追溯域 AlmRelationView 的 JSON 投影（关联关系快照），P3 前只读透传。
- */
-export interface ExecutionDefectResponse {
-  executionId: number;
-  operation: ExecutionDefectOperation;
-  defect: ExecutionDefectSummary;
-  relation: Record<string, unknown> | null;
-  occurredAt: string;
-}

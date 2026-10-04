@@ -36,6 +36,7 @@ import {
   checkEditSubmitVeto,
   editFormFromTestCase,
   emptyTestCaseFormInput,
+  mergeSubmitFieldErrors,
   validateTestCaseFormInput,
 } from '../../testcase-form';
 import type { TestCaseFormInput } from '../../testcase-form';
@@ -535,5 +536,36 @@ describe('hooks 导出完整（防止漏挂载）', () => {
     expect(typeof useUpdateTestCase).toBe('function');
     expect(typeof useDuplicateTestCase).toBe('function');
     expect(typeof useArchiveTestCase).toBe('function');
+  });
+});
+
+describe('mergeSubmitFieldErrors 提交错误合并（codex P2 r3 回归）', () => {
+  it('复核字段错误与普通字段错误一次合并：未修正的字段错误不消失', () => {
+    // 复现 codex P2 r3：DRAFT 弹窗清标题/步骤后保存 → {title, testSteps}；
+    // 后台重取状态变 ACTIVE 后复核否决 status。旧实现只显示 {status}，
+    // title/testSteps 的错误消失。新实现应一次显示三者。
+    const merged = mergeSubmitFieldErrors(
+      [
+        { field: 'title', message: '标题必填' },
+        { field: 'testSteps', message: '测试步骤必填' },
+      ],
+      { field: 'status', message: '用例状态已变为「执行中」' },
+    );
+    expect(merged).toEqual({
+      title: '标题必填',
+      testSteps: '测试步骤必填',
+      status: '用例状态已变为「执行中」',
+    });
+  });
+
+  it('复核通过时只返回普通字段错误；复核无字段（归属）时不影响字段错误', () => {
+    expect(mergeSubmitFieldErrors([{ field: 'title', message: '标题必填' }], null)).toEqual({
+      title: '标题必填',
+    });
+    expect(
+      mergeSubmitFieldErrors([{ field: 'title', message: '标题必填' }], {
+        message: '项目归属已变化',
+      }),
+    ).toEqual({ title: '标题必填' });
   });
 });
