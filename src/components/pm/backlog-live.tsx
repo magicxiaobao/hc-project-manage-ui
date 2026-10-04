@@ -34,6 +34,7 @@ import type { StateTone } from "@/components/biz/state-tone";
 import { sprintStatusLabel, type SprintStatus } from "@/lib/sprint-form";
 import {
   filterBacklogTasks,
+  isTasksFatalError,
   toUserMessage,
   useProjectAllSprints,
   useProjectAllTasks,
@@ -144,10 +145,12 @@ export function BacklogLive({ projectId, projectKey }: { projectId: number; proj
   };
 
   const isLoading = tasksQuery.isPending || sprintsQuery.isPending;
-  // 首次任务请求失败且从未成功（无任何缓存数据）：绝不能回退 [] 渲染
-  // "成功空态"（"0 个任务""所有任务都已挂载到冲刺"），走全页错误态 + 重试。
-  // 曾经成功过再后台重取失败时 allTasks.length > 0，走下面的横幅错误态。
-  const tasksFatalError = tasksQuery.isError && allTasks.length === 0;
+  // 首次任务请求失败且从未成功（tasksQuery.data === undefined）：绝不能回退 []
+  // 渲染"成功空态"（"0 个任务""所有任务都已挂载到冲刺"），走全页错误态 + 重试。
+  // 曾经成功过（哪怕返回的是空数组）再后台重取失败时，走下面的横幅错误态。
+  // run198-codex-P3-r22-1：不能用 `(data ?? []).length === 0` 判断"从未成功"，
+  // React Query 后台重取失败会保留 data=[] 且 isError=true，会误判。
+  const tasksFatalError = isTasksFatalError(tasksQuery);
   const loadError = tasksFatalError
     ? null
     : tasksQuery.isError

@@ -20,6 +20,7 @@ import type { SprintResponse } from '../../api/sprint-types';
 import {
   fetchAllProjectTasks,
   filterBacklogTasks,
+  isTasksFatalError,
 } from '../hooks/useTasks';
 import {
   fetchAllProjectSprints,
@@ -107,6 +108,27 @@ describe('fetchAllProjectTasks 分页循环', () => {
       pageSize: 500,
       bean: { projectId: 7 },
     });
+  });
+});
+
+describe('isTasksFatalError 首次失败判定（run198-codex-P3-r22-1）', () => {
+  it('从未成功（data === undefined）且错误 → 全页错误态', () => {
+    expect(isTasksFatalError({ isError: true, data: undefined })).toBe(true);
+  });
+
+  it('首次成功返回 [] 后后台重取失败（data=[] 且 isError）→ 不走全页错误态，走横幅', () => {
+    // 回归：React Query 后台重取失败会保留 data=[] 且 isError=true；
+    // 旧写法 `(data ?? []).length === 0` 会误判成"从未成功"，错误卸载空态
+    expect(isTasksFatalError({ isError: true, data: [] })).toBe(false);
+  });
+
+  it('曾经成功有数据后后台重取失败 → 横幅错误态', () => {
+    expect(isTasksFatalError({ isError: true, data: [task({ id: 1 })] })).toBe(false);
+  });
+
+  it('无错误（无论 data 有无）→ 非致命', () => {
+    expect(isTasksFatalError({ isError: false, data: undefined })).toBe(false);
+    expect(isTasksFatalError({ isError: false, data: [] })).toBe(false);
   });
 });
 

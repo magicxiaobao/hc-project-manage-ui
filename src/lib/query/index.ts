@@ -21,6 +21,7 @@ export type { TaskListParams } from './hooks/useTasks';
 export {
   TASK_TRANSITIONS_BY_STATUS,
   filterBacklogTasks,
+  isTasksFatalError,
   useAssignTask,
   useCreateTask,
   useCreateTaskComment,

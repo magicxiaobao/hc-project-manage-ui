@@ -266,6 +266,22 @@ export function filterBacklogTasks(tasks: TaskResponse[]): TaskResponse[] {
 }
 
 /**
+ * 任务列表是否处于"首次致命错误"态：只有从未成功过（data === undefined）
+ * 且当前错误，才走全页错误态 + 重试（绝不回退 [] 渲染"成功空态"）。
+ * 曾经成功过（哪怕返回的是空数组）后的后台重取失败 → 横幅错误态
+ * （BacklogLive 的 loadError 分支），保留已挂载内容。
+ * run198-codex-P3-r22-1：旧写法 `isError && (data ?? []).length === 0`
+ * 把"成功返回空数组"误判成"从未成功"——React Query 在后台重取失败时
+ * 保留 data=[] 且 isError=true，会错误地卸载空态走全页错误态。
+ */
+export function isTasksFatalError(query: {
+  isError: boolean;
+  data: TaskResponse[] | undefined;
+}): boolean {
+  return query.isError && query.data === undefined;
+}
+
+/**
  * 任务挂载/移出冲刺（Backlog 规划的核心写操作）：
  * 走 POST /task/v1/updateTask，载荷仅 { id, sprintId }。
  * - 后端 TaskUpdateRequest：@JsonSetter("sprintId") 把"键出现"即视为已提交
