@@ -17,6 +17,7 @@ import { boardApi } from '../../api/board';
 import type {
   BoardCreatePayload,
   BoardQueryRequest,
+  BoardResponse,
   BoardUpdatePayload,
 } from '../../api/board-types';
 import { queryKeys } from '../keys';
@@ -47,6 +48,50 @@ export function useBoardList(params: BoardListParams = {}) {
   return useQuery({
     queryKey: queryKeys.board.list(normalized),
     queryFn: () => boardApi.findByProject(projectId as number, normalized),
+    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+  });
+}
+
+/** 全量拉取的单页大小：内部循环直到某页返回不足此数即停（正常远不到此量级） */
+const FETCH_ALL_PAGE_SIZE = 200;
+
+export interface BoardListAllParams {
+  /** 所属项目 id；null/undefined 时不发起请求（调用方等待 projectKey→id 解析） */
+  projectId?: number | null;
+}
+
+/**
+ * 看板全量列表（循环分页，供本地筛选+本地分页使用）：
+ * 走 POST /board/v1/project/{projectId}/findByPage（bean 只带 projectId，
+ * 后端忽略其它条件）。
+ * 单次 pageSize=500 的请求在 total>500 时会静默漏数——这里循环拉取所有页
+ * （直到某页返回不足 FETCH_ALL_PAGE_SIZE），返回合并后的 BoardResponse[]，
+ * 不再假装"500 就是全量"。
+ * key 用 list({ all: true, ... }) 与分页查询区分；失效走 queryKeys.board.all 全域。
+ */
+export function useBoardListAll(params: BoardListAllParams = {}) {
+  const { projectId } = params;
+  return useQuery({
+    queryKey: queryKeys.board.list({
+      all: true,
+      pageSize: FETCH_ALL_PAGE_SIZE,
+      projectId: projectId ?? 0,
+    }),
+    queryFn: async () => {
+      const all: BoardResponse[] = [];
+      let page = 1;
+      for (;;) {
+        const pageResult = await boardApi.findByProject(projectId as number, {
+          page,
+          pageSize: FETCH_ALL_PAGE_SIZE,
+          bean: { projectId: projectId as number },
+        });
+        all.push(...pageResult.list);
+        if (pageResult.list.length < FETCH_ALL_PAGE_SIZE) break;
+        page += 1;
+      }
+      return all;
+    },
     enabled: typeof projectId === 'number' && Number.isFinite(projectId),
   });
 }
@@ -101,8 +146,9 @@ export function useCopyBoard() {
 
 /**
  * 删除看板（逻辑删）：走 POST /board/v1/invalid/{id}。
- * 注意与 archive/{id}（归档，独立状态、可激活恢复）语义不同：
- * invalid 是软删除。成功后失效看板域缓存。
+ * 注意：后端 Board.invalid() 只是把状态置为"归档"（Board.java:170-172，
+ * 与 archive() 同一状态），非物理删除，记录仍在列表中、可激活恢复。
+ * 成功后失效看板域缓存。
  */
 export function useInvalidBoard() {
   const queryClient = useQueryClient();

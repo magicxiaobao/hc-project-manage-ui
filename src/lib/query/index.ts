@@ -48,6 +48,7 @@ export {
   transitionFieldRequirements,
 } from './hooks/useRequirements';
 export type { TraceMatrixParams, TransitionFieldRequirements } from './hooks/useRequirements';
+export type { BoardListAllParams, BoardListParams } from './hooks/useBoards';
 export {
   normalizeTestCaseListParams,
   useArchiveTestCase,
@@ -132,10 +133,10 @@ export type { ReleaseListParams, ReleaseListAllParams } from './hooks/useRelease
   useArchiveBoard,
   useBoardDetail,
   useBoardList,
+  useBoardListAll,
   useCopyBoard,
   useCreateBoard,
   useInvalidBoard,
   useSetDefaultBoard,
   useUpdateBoard,
 } from './hooks/useBoards';
-export type { BoardListParams } from './hooks/useBoards';
