@@ -68,3 +68,20 @@ export {
   useValidTestSuite,
 } from './hooks/useTestSuites';
 export type { TestSuiteListParams } from './hooks/useTestSuites';
+export {
+  normalizeTestRunListParams,
+  useCancelTestRun,
+  useCompleteExecution,
+  useCompleteTestRun,
+  useCreateAdHocRun,
+  useCreateDefectFromExecution,
+  useCreateFullRegression,
+  useCreateTargetedRetest,
+  useLinkExistingDefect,
+  useRetryExecution,
+  useStartExecution,
+  useStartTestRun,
+  useTestRunDetail,
+  useTestRunList,
+} from './hooks/useTestRuns';
+export type { TestRunListParams } from './hooks/useTestRuns';
