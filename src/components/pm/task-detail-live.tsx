@@ -93,11 +93,13 @@ export function TaskDetailLive({
   // 缩到一页以内——请求返回空列表且分页器消失，用户被困在无处可回的空页。
   // 自动钳制回最后一页（与追溯矩阵 tab 4175549755 同类逻辑；页码在 query
   // key 里，钳制即触发重新拉取）。
+  // 本地评审（pi）：守卫 commentTotal > 0——请求失败且无缓存时 total 兜底 0，
+  // 不钳制才能保留「加载失败/重试」状态，否则用户被静默弹回第 1 页。
   useEffect(() => {
-    if (!commentsQuery.isPending && commentPage > commentTotalPages) {
+    if (!commentsQuery.isPending && commentTotal > 0 && commentPage > commentTotalPages) {
       setCommentPage(commentTotalPages);
     }
-  }, [commentsQuery.isPending, commentPage, commentTotalPages]);
+  }, [commentsQuery.isPending, commentTotal, commentPage, commentTotalPages]);
 
   const transitionMutation = useUpdateTaskStatus();
   const assignMutation = useAssignTask();
