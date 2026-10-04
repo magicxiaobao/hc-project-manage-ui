@@ -164,6 +164,7 @@ export function TestSuiteDetailLive({
   // 前端只展示可添加的。空态文案必须区分"全局空"与"本页空"，否则与分页条自相矛盾：
   // 只有单页且本页全部被过滤时，才能断言"本项目没有可添加的用例"；多页场景下
   // 本页为空只说明本页无可添加用例（其它页可能有），末页为空亦然。
+  // 搜索场景（r8 修复）同理：只有命中数为零或单页命中全部已关联时才用全局否定文案。
   const candidateSinglePageAllLinked =
     candidateTotal > 0 && candidateTotal <= CANDIDATE_PAGE_SIZE && candidates.length === 0;
   useEffect(() => {
@@ -536,7 +537,11 @@ export function TestSuiteDetailLive({
         {candidateQuery.isSuccess && candidates.length === 0 ? (
           <EmptyHint>
             {appliedTitle
-              ? `没有标题包含「${appliedTitle}」的可添加用例。`
+              ? candidateTotal === 0
+                ? `没有标题包含「${appliedTitle}」的用例。`
+                : candidateSinglePageAllLinked
+                  ? `没有标题包含「${appliedTitle}」的可添加用例（全部已归属本套件）。`
+                  : "本页暂无可添加用例，请尝试翻页或调整搜索条件。"
               : candidateTotal === 0
                 ? "本项目还没有任何用例。"
                 : candidateSinglePageAllLinked
@@ -575,7 +580,7 @@ export function TestSuiteDetailLive({
         {candidateQuery.isSuccess && candidateTotal > CANDIDATE_PAGE_SIZE ? (
           <div className="mt-2 flex items-center justify-between gap-3">
             <span className="type-meta">
-              共 {candidateTotal} 条项目用例 · 第 {candidatePage} / {candidateTotalPages} 页
+              共 {candidateTotal} 条{appliedTitle ? "匹配用例" : "项目用例"} · 第 {candidatePage} / {candidateTotalPages} 页
             </span>
             <div className="flex gap-2">
               <Button
