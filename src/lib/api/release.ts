@@ -1,15 +1,17 @@
 /**
  * 发布 API。契约忠实于 hc-project-manage 后端 ReleaseController（release/v1）：
  * - POST create，返回发布草稿响应（idempotencyKey 防重）
- * - POST updateDraft，载荷含 id 的字段级更新 + 可选 adminReason
+ * - POST updateDraft，整包覆盖（省略字段即清空，forceUpdate 省略回退 false）+ 可选 adminReason
  * - POST findByPage，标准分页请求体 { page, pageSize, bean }（bean：projectId/versionId 二选一必填）
  * - GET findById/{id}，返回发布详情（含范围快照/门禁/审批/产物证据）
  * - GET {id}/previewGates，预览发布门禁裁决数组
  * - POST {id}/waiveGate 与 {id}/revokeWaiver，请求体 { gateType, reason }（需 project:admin）
  * - POST {id}/submit：提交审批，无请求体
  * - POST {id}/approve 与 {id}/reject 与 {id}/cancel，请求体 { reason }（需 project:admin）
- * - POST {id}/recordReleased 与 {id}/recordFailed，请求体 ReleaseResultRequest
- *   （buildNumber/artifactLocation/fileSize/fileHash/resultNotes 全可选）
+ * - POST {id}/recordReleased，请求体 ReleaseSuccessPayload
+ *   （buildNumber/artifactLocation/fileHash 必填非空白，fileSize ≥0 可选）
+ * - POST {id}/recordFailed，请求体 ReleaseFailurePayload
+ *   （resultNotes 必填；制品三件套+fileSize 要么全齐要么全空，半套抛错）
  * - POST {id}/copyAsDraft 与 {id}/rollbackAsDraft，请求体 { idempotencyKey }，
  *   返回新草稿响应
  * - POST {id}/deleteDraft：body 可选（仅草稿态；无 adminReason 时不带 body）
@@ -25,7 +27,8 @@ import type {
   ReleaseGateType,
   ReleasePageQuery,
   ReleaseResponse,
-  ReleaseResultPayload,
+  ReleaseFailurePayload,
+  ReleaseSuccessPayload,
 } from './release-types';
 
 export const releaseApi = {
@@ -70,11 +73,13 @@ export const releaseApi = {
     api.post<string>(`/release/v1/${id}/reject`, { reason }),
 
   /** 记录发布成功：请求体为可选字段的产物信息 */
-  recordReleased: (id: number, data: ReleaseResultPayload) =>
+  /** 记录发布成功：制品三件套必填且非空白 */
+  recordReleased: (id: number, data: ReleaseSuccessPayload) =>
     api.post<string>(`/release/v1/${id}/recordReleased`, data),
 
   /** 记录发布失败：请求体为可选字段的产物信息 */
-  recordFailed: (id: number, data: ReleaseResultPayload) =>
+  /** 记录发布失败：resultNotes 必填；制品证据全齐或全空 */
+  recordFailed: (id: number, data: ReleaseFailurePayload) =>
     api.post<string>(`/release/v1/${id}/recordFailed`, data),
 
   /** 取消发布：请求体 { reason }（需 project:admin） */

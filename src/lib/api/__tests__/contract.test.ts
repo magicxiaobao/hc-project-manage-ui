@@ -73,7 +73,7 @@
  *
  * 版本契约（P2；来自后端 VersionController + 老前端 frontend/src/api/version.ts）：
  * - POST /version/v1/createVersion，请求体 VersionCreatePayload，返回新建版本 id
- * - POST /version/v1/updateVersion，载荷含 id 的字段级更新
+ * - POST /version/v1/updateVersion，id 必填、其余全可选的字段级更新（后端 BaseVersionUpdater 只更新非 null 字段）
  * - POST /version/v1/{id}/transition，请求体 { event, expectedStatus, reason? }；
  *   expectedStatus 为状态字段上的乐观并发预期（后端 CAS 比对 status，非数字版本号），
  *   目标状态由服务端按事件解析
@@ -82,7 +82,7 @@
  *
  * 发布契约（P2；来自后端 ReleaseController + 老前端 frontend/src/api/release.ts）：
  * - POST /release/v1/create，请求体含 versionId/environmentId/idempotencyKey，返回发布响应
- * - POST /release/v1/updateDraft，载荷含 id 的字段级更新 + 可选 adminReason
+ * - POST /release/v1/updateDraft，整包覆盖（省略即清空，forceUpdate 省略回退 false）+ 可选 adminReason
  * - POST /release/v1/findByPage，请求体 { page, pageSize, bean }
  *   （projectId/versionId 二选一必填）
  * - GET /release/v1/findById/{id}，返回发布详情（范围/门禁/审批/产物证据）
@@ -90,14 +90,17 @@
  * - POST /release/v1/{id}/waiveGate 与 /revokeWaiver，请求体 { gateType, reason }
  * - POST /release/v1/{id}/submit，无请求体
  * - POST /release/v1/{id}/approve 与 /reject 与 /cancel，请求体 { reason }
- * - POST /release/v1/{id}/recordReleased 与 /recordFailed，请求体 ReleaseResultPayload
+ * - POST /release/v1/{id}/recordReleased，请求体 ReleaseSuccessPayload
+ *   （buildNumber/artifactLocation/fileHash 必填非空白）；/recordFailed 请求体
+ *   ReleaseFailurePayload（resultNotes 必填；制品三件套+fileSize 全齐或全空，半套抛错）
  * - POST /release/v1/{id}/copyAsDraft 与 /rollbackAsDraft，请求体 { idempotencyKey }，
  *   返回新草稿响应
  * - POST /release/v1/{id}/deleteDraft，body 可选（无 adminReason 时不带 body）
  *
  * 发布环境契约（P2；来自后端 ReleaseEnvironmentController + 老前端）：
  * - POST /release-environment/v1/create，返回环境响应对象
- * - POST /release-environment/v1/update，载荷含 id 的字段级更新，返回环境响应对象
+ * - POST /release-environment/v1/update，id/name/order 必填（name 非空≤100 字、order 非负）；
+ *   approvalRequired 随状态：ACTIVE 环境必填、INACTIVE 环境必须省略，返回环境响应对象
  * - POST /release-environment/v1/{id}/disable，请求体 { reason } 必填
  * - GET /release-environment/v1/project/{projectId}，返回项目环境数组
  *
@@ -2236,7 +2239,7 @@ describe('版本 API 契约', () => {
     });
   });
 
-  it('POST /version/v1/updateVersion，载荷含 id 的字段级更新', async () => {
+  it('POST /version/v1/updateVersion，多字段更新', async () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: 'success' } },
     ]);
@@ -2257,6 +2260,25 @@ describe('版本 API 契约', () => {
       versionNumber: '2.2.0',
       description: '调整了范围',
       versionType: '次版本',
+    });
+  });
+
+  it('POST /version/v1/updateVersion，单字段更新（仅 id + description；后端只更新非 null 字段）', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await versionApi.updateVersion({
+      id: 3101,
+      description: '调整范围',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/updateVersion');
+    expect(init.method).toBe('POST');
+    // 局部更新：只送变化字段，后端 BaseVersionUpdater 对其余字段保持原值
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 3101,
+      description: '调整范围',
     });
   });
 
@@ -2418,13 +2440,22 @@ describe('发布 API 契约', () => {
     });
   });
 
-  it('POST /release/v1/updateDraft，载荷含 id 的字段级更新 + 可选 adminReason', async () => {
+  it('POST /release/v1/updateDraft，整包覆盖：发送完整草稿载荷 + 可选 adminReason', async () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: 'success' } },
     ]);
+    // 整包覆盖语义（后端 ReleaseRepository.updateDraft 无条件全量 SET）：
+    // 想保留的字段必须把现值一起送出，想清空的字段显式省略（后端写 null），
+    // forceUpdate 省略会回退为 false（后端 Boolean.TRUE.equals）。
     await releaseApi.updateDraft({
       id: 7101,
       releaseNotes: '更新后的发布说明',
+      changelog: '修复已知缺陷',
+      rollbackPlan: '回滚至上一稳定版本',
+      knownIssues: '已知：大文件上传较慢',
+      forceUpdate: true,
+      compatibility: '兼容 v2.1 客户端',
+      dependencies: '依赖服务 X v1.4',
       adminReason: '补充门禁材料',
     });
 
@@ -2434,6 +2465,12 @@ describe('发布 API 契约', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       id: 7101,
       releaseNotes: '更新后的发布说明',
+      changelog: '修复已知缺陷',
+      rollbackPlan: '回滚至上一稳定版本',
+      knownIssues: '已知：大文件上传较慢',
+      forceUpdate: true,
+      compatibility: '兼容 v2.1 客户端',
+      dependencies: '依赖服务 X v1.4',
       adminReason: '补充门禁材料',
     });
   });
@@ -2582,7 +2619,7 @@ describe('发布 API 契约', () => {
     expect(JSON.parse(init3.body as string)).toEqual({ reason: '版本策略调整' });
   });
 
-  it('POST /release/v1/{id}/recordReleased 与 /recordFailed，记录产物结果', async () => {
+  it('POST /release/v1/{id}/recordReleased（制品三件套必填）与 /recordFailed（resultNotes 必填、无制品证据）', async () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: 'success' } },
       { body: { code: 1, msg: 'ok', result: 'success' } },
@@ -2686,13 +2723,15 @@ describe('发布环境 API 契约', () => {
     });
   });
 
-  it('POST /release-environment/v1/update，载荷含 id 的字段级更新', async () => {
+  it('POST /release-environment/v1/update，id/name/order 必填 + ACTIVE 环境 approvalRequired 必填', async () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: { ...envResponse, name: '预发布环境（新）' } } },
     ]);
+    // ACTIVE 环境：name/order 必填（order 非负），approvalRequired 必填（后端强制校验）
     const env = await releaseEnvironmentApi.updateEnvironment({
       id: 510,
       name: '预发布环境（新）',
+      order: 3,
       approvalRequired: false,
     });
 
@@ -2703,6 +2742,7 @@ describe('发布环境 API 契约', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       id: 510,
       name: '预发布环境（新）',
+      order: 3,
       approvalRequired: false,
     });
   });

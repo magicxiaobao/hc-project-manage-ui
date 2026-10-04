@@ -47,11 +47,16 @@ export interface ReleaseEnvironmentCreatePayload {
   approvalRequired: boolean;
 }
 
-/** 更新发布环境载荷（忠实于后端 ReleaseEnvironmentUpdateRequest：id 必填，其余可选） */
+/**
+ * 更新发布环境载荷（忠实于后端 ReleaseEnvironmentService.update 的强制校验）：
+ * - id/name/order 必填；name 非空且 ≤100 字，order 非负（缺任一直接 ReleaseEnvironmentInvalid）；
+ * - approvalRequired 随环境状态：ACTIVE 环境必填，INACTIVE 环境必须省略（错位同样抛错）。
+ */
 export interface ReleaseEnvironmentUpdatePayload {
   id: number;
-  name?: string;
-  order?: number;
+  name: string;
+  order: number;
+  /** ACTIVE 环境必填；INACTIVE 环境必须省略（后端强制校验，绝非"全可选"） */
   approvalRequired?: boolean;
 }
 

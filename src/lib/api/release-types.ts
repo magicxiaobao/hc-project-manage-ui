@@ -293,7 +293,14 @@ export interface ReleaseCreatePayload {
   dependencies?: string;
 }
 
-/** 更新发布草稿载荷（忠实于后端 ReleaseDraftUpdateRequest；含 id 的字段级更新 + 管理员原因） */
+/**
+ * 更新发布草稿载荷（忠实于后端 ReleaseDraftService.updateDraft →
+ * ReleaseRepository.updateDraft：整包覆盖语义，绝非"字段级更新"）。
+ * 省略的字段会被写成 null（releaseNotes/changelog/rollbackPlan/knownIssues/
+ * compatibility/dependencies），forceUpdate 省略则回退为 false
+ * （后端 Boolean.TRUE.equals）。想保留现有值必须把该字段的现值一起送出；
+ * 想清空则显式省略该字段。
+ */
 export interface ReleaseDraftUpdatePayload
   extends Omit<ReleaseCreatePayload, 'versionId' | 'environmentId' | 'idempotencyKey'> {
   id: number;
@@ -319,13 +326,34 @@ export interface ReleaseReasonPayload {
   reason: string;
 }
 
-/** 记录发布结果载荷（忠实于后端 ReleaseResultRequest；fileSize 为 Long） */
-export interface ReleaseResultPayload {
+/**
+ * 记录发布成功载荷（忠实于后端 ReleaseResultService.validateReleased）：
+ * - buildNumber/artifactLocation/fileHash 均必填且非空白（后端 trimToNull 后判空）；
+ * - fileSize 可选，但若传则必须 ≥0（负数直接 ReleaseEvidenceInvalid）；
+ * - resultNotes 可选（附言）。
+ */
+export interface ReleaseSuccessPayload {
+  buildNumber: string;
+  artifactLocation: string;
+  fileSize?: number;
+  fileHash: string;
+  resultNotes?: string;
+}
+
+/**
+ * 记录发布失败载荷（忠实于后端 ReleaseResultService.validateFailed）：
+ * - resultNotes 必填（非空）；
+ * - 证据完整性约束：制品三件套（buildNumber/artifactLocation/fileHash）+ fileSize
+ *   要么全齐要么全空——半套（只给其中几个）直接抛 ReleaseEvidenceInvalid。
+ *   全空 = 无制品证据；全齐 = 附制品证据；
+ * - fileSize 若传则必须 ≥0。
+ */
+export interface ReleaseFailurePayload {
+  resultNotes: string;
   buildNumber?: string;
   artifactLocation?: string;
   fileSize?: number;
   fileHash?: string;
-  resultNotes?: string;
 }
 
 /** 复制/回滚为草稿载荷（忠实于后端 ReleaseCloneRequest） */

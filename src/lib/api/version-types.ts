@@ -101,8 +101,11 @@ export interface VersionCreatePayload {
   tags?: string;
 }
 
-/** 更新版本载荷（忠实于后端 VersionUpdateRequest：含 id 的字段级更新） */
-export interface VersionUpdatePayload extends Omit<VersionCreatePayload, 'projectId'> {
+/**
+ * 更新版本载荷（忠实于后端 BaseVersionUpdater：只更新非 null 字段，真正的字段级更新；
+ * id 必填，其余全可选——项目归属 projectId 不允许变更，故不出现在更新载荷中）。
+ */
+export interface VersionUpdatePayload extends Partial<Omit<VersionCreatePayload, 'projectId'>> {
   id: number;
 }
 
