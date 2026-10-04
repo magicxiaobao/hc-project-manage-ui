@@ -106,11 +106,51 @@ export function TestCaseDetailLive({
     projectId: number;
   } | null>(null);
 
+  // 弹窗打开后的提交复核（codex P2 #2/#3）：归属翻转 → 弹窗内持久错误；
+  // 实时状态变化（他人改状态/归档）→ 状态字段错误。草稿保留，不卸载。
+  // 定义在所有提前返回之前：isError/!detail/归属不符分支也要渲染 editDialog，
+  // 弹窗生命周期不能依赖这些分支（pi run138 P2-1 子路径 B）。
+  // detail 非空时与下方 projectContextVerified/liveStatus 取值完全一致。
+  const editSubmitVeto = (form: TestCaseFormInput) =>
+    checkEditSubmitVeto({
+      projectContextVerified:
+        typeof routeProjectQuery.data === "number" &&
+        (detail?.projectId ?? editSnapshot?.projectId) != null &&
+        (detail?.projectId ?? editSnapshot?.projectId) === routeProjectQuery.data,
+      liveStatus: detail?.status ?? editSnapshot?.detail.status ?? null,
+      formStatus: form.status,
+    });
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditSnapshot(null);
+  };
+  // 编辑弹窗：所有分支共用同一个 keyed 实例且位于同一 <div> 根下，
+  // 分支切换时 React 只做 keyed 移动而不 remount，脏表单不丢失
+  //（pi run138 P2-1：此前归属不符分支用 Fragment 根导致整树 remount，
+  // isError/!detail 分支根本不渲染弹窗）。
+  const editDialog = editSnapshot ? (
+    // 编辑弹窗只在打开时挂载：表单快照在挂载瞬间捕获（dirty check 基线），
+    // 列表页同 key 模式（TestCaseListLive）。挂载后不再依赖实时详情/归属，
+    // 归属翻转或状态变化只影响提交复核，不卸载脏表单。
+    <TestCaseFormDialog
+      key={`detail-edit-${editSnapshot.detail.id}`}
+      open={editOpen}
+      projectId={editSnapshot.projectId}
+      mode="edit"
+      testCaseId={editSnapshot.detail.id}
+      editStatus={editSnapshot.detail.status}
+      submitVeto={editSubmitVeto}
+      initial={editFormFromTestCase(editSnapshot.detail)}
+      onClose={closeEdit}
+    />
+  ) : null;
+
   if (detailQuery.isPending) {
     return (
       <div className="flex items-center gap-2 px-4 py-8 text-sm text-default-500">
         <Spinner size="sm" />
         正在加载测试用例详情…
+        {editDialog}
       </div>
     );
   }
@@ -121,11 +161,17 @@ export function TestCaseDetailLive({
         <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
           重试
         </Button>
+        {editDialog}
       </div>
     );
   }
   if (!detail) {
-    return <EmptyHint>{`没有找到这个测试用例（id=${testCaseId}）。`}</EmptyHint>;
+    return (
+      <div>
+        <EmptyHint>{`没有找到这个测试用例（id=${testCaseId}）。`}</EmptyHint>
+        {editDialog}
+      </div>
+    );
   }
 
   const routeProjectId = routeProjectQuery.data;
@@ -154,34 +200,6 @@ export function TestCaseDetailLive({
     setEditSnapshot({ detail, projectId: detail.projectId });
     setEditOpen(true);
   };
-  const closeEdit = () => {
-    setEditOpen(false);
-    setEditSnapshot(null);
-  };
-  // 弹窗打开后的提交复核（codex P2 #2/#3）：归属翻转 → 弹窗内持久错误；
-  // 实时状态变化（他人改状态/归档）→ 状态字段错误。草稿保留，不卸载。
-  const editSubmitVeto = (form: TestCaseFormInput) =>
-    checkEditSubmitVeto({
-      projectContextVerified,
-      liveStatus: detail.status,
-      formStatus: form.status,
-    });
-  const editDialog = editSnapshot ? (
-    // 编辑弹窗只在打开时挂载：表单快照在挂载瞬间捕获（dirty check 基线），
-    // 列表页同 key 模式（TestCaseListLive）。挂载后不再依赖实时详情/归属，
-    // 归属翻转或状态变化只影响提交复核，不卸载脏表单。
-    <TestCaseFormDialog
-      key={`detail-edit-${editSnapshot.detail.id}`}
-      open={editOpen}
-      projectId={editSnapshot.projectId}
-      mode="edit"
-      testCaseId={editSnapshot.detail.id}
-      editStatus={editSnapshot.detail.status}
-      submitVeto={editSubmitVeto}
-      initial={editFormFromTestCase(editSnapshot.detail)}
-      onClose={closeEdit}
-    />
-  ) : null;
 
   if (
     typeof routeProjectId === "number" &&
@@ -190,11 +208,14 @@ export function TestCaseDetailLive({
   ) {
     // 归属不符时整页只读，但已打开的编辑弹窗必须保留（快照挂载），
     // 否则脏表单会被直接卸载而不走 dirty check（codex P2 #1）。
+    // 根节点必须与正常分支同为 <div>（绝不能用 Fragment）：React 在
+    // Fragment↔<div> 切换时会整棵子树 remount，keyed 的编辑弹窗会被重建、
+    // 草稿静默重置且不走 dirty check（pi run138 P2-1 子路径 A）。
     return (
-      <>
+      <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
         <EmptyHint>{`测试用例 #${testCaseId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
         {editDialog}
-      </>
+      </div>
     );
   }
   const projectContextNotice = routeProjectQuery.isPending
