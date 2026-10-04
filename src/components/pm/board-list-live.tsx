@@ -2,20 +2,28 @@
  * 看板列表管理（P3：p3-board-manage）。
  *
  * 登录态纯展示组件，不再引用 usePm 演示 store：
- * - 数据：POST /board/v1/project/{projectId}/findByPage（bean.projectId 必传），
- *   分页 page/pageSize
+ * - 数据：POST /board/v1/project/{projectId}/findByPage（bean.projectId 必传）。
+ *   注意：后端 findByPage/getBoardsByProject 只按 projectId 过滤，bean 中的
+ *   boardName/boardType/status 条件被完全忽略——前端一次性拉取项目全量看板
+ *   后本地筛选（名称包含/类型/状态）+ 本地分页，避免"筛选不生效"的误导。
  * - 筛选：看板名称（文本）/ 看板类型（老前端五类）/ 状态（活跃/归档/暂停/维护中）
  * - 新建/编辑：BoardFormDialog（POST createBoard/updateBoard），成功后列表缓存已失效
  * - 行操作：编辑（弹窗）、设为默认（POST setDefault/{id}，仅非默认显示）、
- *   复制（POST copy/{id}?newBoardName=，弹窗输入新名称，成功后 toast 新 id）、
+ *   复制（POST copy/{id}?newBoardName=，弹窗输入新名称；后端 copyBoard 是 TODO
+ *   空壳返回 null，前端校验返回 id 有效才算成功）、
  *   归档（POST archive/{id}，确认框确认，仅"活跃"显示）、
- *   激活（POST activate/{id}，仅"归档"显示）
+ *   激活（POST activate/{id}，仅"归档"显示）、
+ *   删除（POST invalid/{id} 逻辑删，二次确认）
+ * - 冲刺看板：工具栏"冲刺看板"按钮 → GET /board/v1/sprint/{sprintId}，无则
+ *   POST sprint/{sprintId}/create?boardName=；后端 createSprintBoard 是 TODO
+ *   空壳返回 null，前端诚实提示"后端未实现"而非假装成功
  * - 状态：加载 / 错误（重试）/ 空 / 列表 + 分页
  *
  * 未登录走演示看板视图（BoardView）时不使用本组件。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Input, Label, Spinner, TextField } from "@heroui/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AppModal,
@@ -27,18 +35,27 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/biz";
 import { BOARD_TYPES, editFormFromBoard, emptyBoardFormInput } from "@/lib/board-form";
+import { boardApi } from "@/lib/api/board";
 import {
+  queryKeys,
   toUserMessage,
   useActivateBoard,
   useArchiveBoard,
   useBoardList,
   useCopyBoard,
+  useInvalidBoard,
   useSetDefaultBoard,
 } from "@/lib/query";
-import type { BoardQueryRequest, BoardResponse } from "@/lib/api/board-types";
+import type { BoardResponse } from "@/lib/api/board-types";
 import { BoardFormDialog } from "@/components/pm/board-form-dialog";
 
 const PAGE_SIZE = 20;
+/**
+ * 全量拉取页大小。后端 findByPage/getBoardsByProject 只按 projectId 过滤，
+ * bean 里的其它条件被忽略——前端一次性拉取项目全量看板后做本地筛选+分页。
+ * 单个项目的看板数远小于此量级。
+ */
+const FETCH_ALL_SIZE = 500;
 
 const BOARD_STATUSES = ["活跃", "归档", "暂停", "维护中"] as const;
 
@@ -62,21 +79,31 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
   const [editingBoard, setEditingBoard] = useState<BoardResponse | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<BoardResponse | null>(null);
   const [copyTarget, setCopyTarget] = useState<BoardResponse | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BoardResponse | null>(null);
+  const [sprintBoardOpen, setSprintBoardOpen] = useState(false);
 
-  const bean = useMemo<BoardQueryRequest>(() => {
-    const value: BoardQueryRequest = { projectId };
-    const boardName = appliedName.trim();
-    if (boardName) value.boardName = boardName;
-    if (boardType) value.boardType = boardType;
-    if (status) value.status = status;
-    return value;
-  }, [projectId, appliedName, boardType, status]);
+  // 后端忽略 bean 里的 boardName/boardType/status 条件（只按 projectId 过滤），
+  // 因此 bean 只传 projectId，筛选用下面的本地过滤实现——避免"筛选不生效"。
+  const listQuery = useBoardList({ page: 1, pageSize: FETCH_ALL_SIZE, projectId });
 
-  const listQuery = useBoardList({ page, pageSize: PAGE_SIZE, bean, projectId });
+  // 本地筛选：名称包含匹配（前后空格已 trim）、类型精确、状态精确。
+  // 注意筛选用"已确认"的 applied 值（回车/搜索按钮触发），输入框内容未确认前不参与。
+  const filteredBoards = useMemo(() => {
+    const source = listQuery.data?.list ?? [];
+    const keyword = appliedName.trim();
+    return source.filter((item) => {
+      if (keyword && !(item.boardName ?? "").includes(keyword)) return false;
+      if (boardType && item.boardType !== boardType) return false;
+      if (status && item.status !== status) return false;
+      return true;
+    });
+  }, [listQuery.data, appliedName, boardType, status]);
+
   const copyMutation = useCopyBoard();
   const archiveMutation = useArchiveBoard();
   const activateMutation = useActivateBoard();
   const setDefaultMutation = useSetDefaultBoard();
+  const invalidMutation = useInvalidBoard();
 
   const applyFilters = () => {
     setAppliedName(nameInput);
@@ -91,8 +118,13 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
     setPage(1);
   };
 
-  const total = listQuery.data?.total ?? 0;
+  const total = filteredBoards.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // 本地分页：当前页的数据切片
+  const pageItems = useMemo(
+    () => filteredBoards.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredBoards, page],
+  );
 
   // 数据返回后若当前页已越界（他人增删导致 total 缩水），自动回退到最后一页重新查询，
   // 避免出现"第 2 / 1 页"且空列表的误导状态。
@@ -110,14 +142,34 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
       { id, newBoardName },
       {
         onSuccess: (newId) => {
-          toast.success(`看板已复制（新看板 #${newId}）`);
-          setCopyTarget(null);
+          // 后端 copyBoard 是 TODO 空壳，Controller 包成功响应但 result 为 null：
+          // 必须校验返回 id 有效才算成功，否则诚实报错，不提示"已复制"。
+          if (typeof newId === "number" && Number.isFinite(newId) && newId > 0) {
+            toast.success(`看板已复制（新看板 #${newId}）`);
+            setCopyTarget(null);
+          } else {
+            toast.error("复制失败：后端尚未实现看板复制（接口返回空）。请联系后端开发补齐。");
+          }
         },
         onError: (error) => {
           toast.error(`复制失败：${toUserMessage(error)}`);
         },
       },
     );
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deleteTarget === null || invalidMutation.isPending) return;
+    const id = deleteTarget.id;
+    setDeleteTarget(null);
+    invalidMutation.mutate(id, {
+      onSuccess: () => {
+        toast.success(`看板 #${id} 已删除`);
+      },
+      onError: (error) => {
+        toast.error(`删除失败：${toUserMessage(error)}`);
+      },
+    });
   };
 
   const handleArchiveConfirm = () => {
@@ -170,7 +222,7 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
       <PageHeading
         title="看板"
-        hint="真实后端数据（POST /board/v1/project/{projectId}/findByPage）。按名称、类型、状态筛选；支持新建/编辑、设为默认、复制、归档/激活。"
+        hint="真实后端数据（POST /board/v1/project/{projectId}/findByPage）。筛选为前端本地过滤（后端接口仅按项目过滤）；支持新建/编辑、设为默认、复制、归档/激活、删除。"
       />
 
       <form
@@ -216,6 +268,9 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
         <Button variant="secondary" onPress={() => setCreateOpen(true)}>
           新建看板
         </Button>
+        <Button variant="ghost" onPress={() => setSprintBoardOpen(true)}>
+          冲刺看板
+        </Button>
       </form>
 
       {listQuery.isPending ? (
@@ -234,13 +289,13 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
         </div>
       ) : null}
 
-      {listQuery.isSuccess && (listQuery.data?.list.length ?? 0) === 0 ? (
+      {listQuery.isSuccess && filteredBoards.length === 0 ? (
         <EmptyHint>没有符合筛选条件的看板。</EmptyHint>
       ) : null}
 
-      {listQuery.isSuccess && (listQuery.data?.list.length ?? 0) > 0 ? (
+      {listQuery.isSuccess && pageItems.length > 0 ? (
         <div className="overflow-hidden rounded-sm border border-border bg-surface">
-          {listQuery.data!.list.map((item) => (
+          {pageItems.map((item) => (
             <div
               key={item.id}
               className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0"
@@ -315,6 +370,16 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
                     激活
                   </Button>
                 ) : null}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-danger"
+                  onPress={() => setDeleteTarget(item)}
+                  isDisabled={invalidMutation.isPending}
+                  aria-label={`删除看板 ${item.id}`}
+                >
+                  删除
+                </Button>
               </span>
             </div>
           ))}
@@ -375,7 +440,7 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
         size="sm"
       >
         <p className="type-body">
-          确定归档看板「{archiveTarget?.boardName}」（#{archiveTarget?.id}）吗？归档后它将不再出现在默认列表中，可随时激活恢复。
+          确定归档看板「{archiveTarget?.boardName}」（#{archiveTarget?.id}）吗？归档后的看板将不再显示在活跃列表中，可随时激活恢复。
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onPress={() => setArchiveTarget(null)}>
@@ -401,6 +466,35 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
           onConfirm={handleCopyConfirm}
         />
       ) : null}
+
+      {/* 删除确认：非表单弹窗，无需 dirty check；走 POST /board/v1/invalid/{id} 逻辑删 */}
+      <AppModal
+        open={deleteTarget !== null}
+        title="删除看板"
+        onClose={() => setDeleteTarget(null)}
+        size="sm"
+      >
+        <p className="type-body">
+          确定删除看板「{deleteTarget?.boardName}」（#{deleteTarget?.id}）吗？这是逻辑删除，删除后无法在列表中恢复。
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onPress={() => setDeleteTarget(null)}>
+            取消
+          </Button>
+          <Button
+            variant="danger"
+            onPress={handleDeleteConfirm}
+            isDisabled={invalidMutation.isPending}
+          >
+            {invalidMutation.isPending ? <Spinner size="sm" /> : null}
+            删除
+          </Button>
+        </div>
+      </AppModal>
+
+      {sprintBoardOpen ? (
+        <SprintBoardDialog onClose={() => setSprintBoardOpen(false)} />
+      ) : null}
     </div>
   );
 }
@@ -409,6 +503,11 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
  * 复制看板：输入新看板名称的小表单弹窗。
  * 单字段表单同样套用表单 UX 约定：dirty check（有输入未确认即关闭先确认
  * "是否放弃修改？"）、必填星号、字段级错误。
+ *
+ * dirty 判定：与打开瞬间的初始值快照比较。注意初始值 `${boardName}（副本）`
+ * 非空，不能用"输入非空即脏"，否则打开弹窗即被判定为脏、点取消直接弹确认。
+ * 另注意：请求发出前不清脏——失败后弹窗保留，若已清脏则守卫离线，后续修改
+ * 会直接放行；只在成功时由父组件卸载弹窗（程序化关闭，不走守卫）。
  */
 function CopyBoardDialog({
   boardName,
@@ -423,7 +522,9 @@ function CopyBoardDialog({
 }) {
   const [name, setName] = useState(`${boardName}（副本）`);
   const [error, setError] = useState("");
-  const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(name.trim() !== "");
+  // 打开瞬间的初始值快照；dirty = 当前值偏离快照
+  const initialRef = useRef(`${boardName}（副本）`);
+  const { guard, dialog, blocker } = useUnsavedChangesGuard(name !== initialRef.current);
 
   const doClose = () => {
     onClose();
@@ -445,7 +546,8 @@ function CopyBoardDialog({
       setError("看板名称不能超过 100 个字符");
       return;
     }
-    markClean();
+    // 不在请求前 markClean：失败后弹窗保留，若已清脏则守卫离线、后续修改直接放行。
+    // 成功时父组件的 onSuccess 直接卸载弹窗（程序化关闭，无需守卫）。
     onConfirm(trimmed);
   };
 
@@ -482,6 +584,134 @@ function CopyBoardDialog({
             >
               {isPending ? <Spinner size="sm" /> : null}
               复制
+            </Button>
+          </div>
+        </div>
+      </AppModal>
+    </>
+  );
+}
+
+/**
+ * 冲刺看板（P3：p3-board-manage scope 接线）。
+ *
+ * 流程：GET /board/v1/sprint/{sprintId} → 已有则直接提示看板信息；
+ * 无（后端返回 null）则 POST /board/v1/sprint/{sprintId}/create?boardName= 创建。
+ *
+ * 后端现状（实读 BoardServiceImpl:181-186）：createSprintBoard 是 TODO 空壳，
+ * 直接返回 null（Controller 包成功响应）。前端做 null 防护：创建返回的 id
+ * 无效时诚实提示"后端未实现"，不假装创建成功。
+ *
+ * 表单 UX 约定：dirty 按初始快照比较判定；失败时弹窗保留、守卫继续布防；
+ * 成功是程序化关闭，直接卸载。
+ */
+function SprintBoardDialog({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [sprintIdInput, setSprintIdInput] = useState("");
+  const [boardName, setBoardName] = useState("");
+  const [fieldError, setFieldError] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [isPending, setIsPending] = useState(false);
+
+  const initialRef = useRef({ sprintIdInput: "", boardName: "" });
+  const isDirty =
+    sprintIdInput !== initialRef.current.sprintIdInput ||
+    boardName !== initialRef.current.boardName;
+  const { guard, dialog, blocker } = useUnsavedChangesGuard(isDirty);
+
+  const close = () => {
+    if (isPending) return;
+    guard(onClose);
+  };
+
+  const handleConfirm = async () => {
+    if (isPending) return;
+    const sprintId = Number(sprintIdInput.trim());
+    if (!Number.isInteger(sprintId) || sprintId <= 0) {
+      setFieldError("请填写有效的冲刺 ID（正整数）");
+      return;
+    }
+    setFieldError("");
+    setSubmitError("");
+    setIsPending(true);
+    try {
+      const existing = await boardApi.getSprintBoard(sprintId);
+      if (existing) {
+        toast.success(`冲刺 ${sprintId} 已有看板「${existing.boardName}」（#${existing.id}）`);
+        onClose();
+        return;
+      }
+      const name = boardName.trim() || `Sprint ${sprintId} 冲刺看板`;
+      const newId = await boardApi.createSprintBoard(sprintId, name);
+      if (typeof newId === "number" && Number.isFinite(newId) && newId > 0) {
+        toast.success(`已为冲刺 ${sprintId} 创建看板（#${newId}）`);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.board.all });
+        onClose();
+      } else {
+        // 后端空壳返回 null：诚实提示后端未实现，不假装成功；弹窗保留可重试/取消
+        setSubmitError(
+          "创建失败：后端尚未实现冲刺看板创建（接口返回空）。请联系后端开发补齐。",
+        );
+      }
+    } catch (error) {
+      setSubmitError(`操作失败：${toUserMessage(error)}`);
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return (
+    <>
+      {blocker}
+      <AppModal open title="冲刺看板" onClose={close} size="sm">
+        {dialog}
+        <div className="flex flex-col gap-4">
+          <p className="type-caption text-default-500">
+            先按冲刺 ID 查询已有看板；没有则创建（名称可留空自动生成）。
+          </p>
+          <div>
+            <TextField
+              value={sprintIdInput}
+              onChange={(value) => {
+                setSprintIdInput(value);
+                setFieldError("");
+                setSubmitError("");
+              }}
+              isDisabled={isPending}
+              inputMode="numeric"
+            >
+              <Label>
+                冲刺 ID<RequiredMark />
+              </Label>
+              <Input placeholder="例如：12" />
+            </TextField>
+            <FieldError message={fieldError} />
+          </div>
+          <div>
+            <TextField
+              value={boardName}
+              onChange={(value) => {
+                setBoardName(value);
+                setSubmitError("");
+              }}
+              isDisabled={isPending}
+            >
+              <Label>看板名称（无看板需新建时使用）</Label>
+              <Input placeholder="留空则自动生成" maxLength={101} />
+            </TextField>
+          </div>
+          {submitError ? (
+            <p role="alert" className="text-sm text-danger">
+              {submitError}
+            </p>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onPress={close} isDisabled={isPending}>
+              取消
+            </Button>
+            <Button variant="primary" onPress={() => void handleConfirm()} isDisabled={isPending}>
+              {isPending ? <Spinner size="sm" /> : null}
+              查询 / 创建
             </Button>
           </div>
         </div>

@@ -8,7 +8,9 @@
  * - 必填（红色星号 RequiredMark）：看板名称；字段级错误用 FieldError 挂在对应
  *   输入正下方，收集全部错误、编辑即清除；
  * - 下拉类控件（OptionSelect）的 label 带"（必填）"口径——本表单看板类型为
- *   可选项，不带必填标记。
+ *   可选项，不带必填标记；无"不指定"选项（后端 update 无置空语义，避免误导）。
+ * - 看板公开性 / WIP 开关：复选框，初始值与后端实体默认值对齐
+ *   （isPublic=true、wipEnabled=false）。
  *
  * 父组件按 open/记录 key 重挂载本弹窗（与 TestCaseFormDialog 同一模式），
  * 因此 initialRef 快照只在挂载时捕获一次即可。
@@ -33,10 +35,10 @@ import {
 } from "@/lib/board-form";
 import { toUserMessage, useCreateBoard, useUpdateBoard } from "@/lib/query";
 
-const BOARD_TYPE_OPTIONS = [
-  { id: "", label: "不指定" },
-  ...BOARD_TYPES.map((type) => ({ id: type, label: type })),
-];
+// 注意：不提供"不指定"选项。后端 update 按 Optional.ofNullable().ifPresent
+// 跳过 null/缺失字段，无置空语义；编辑时选"不指定"只会静默保留旧值，
+// 与用户预期不一致。新建时未选择则省略，后端走默认值"Kanban看板"。
+const BOARD_TYPE_OPTIONS = BOARD_TYPES.map((type) => ({ id: type, label: type }));
 
 export function BoardFormDialog({
   open,
@@ -186,12 +188,22 @@ export function BoardFormDialog({
             />
             <FieldError message={fieldErrors.boardType} />
           </div>
+          {/* 设为默认不属于表单：后端 create/update 不清除项目内其它默认看板，
+              只有 setDefaultBoard 会；表单里直接勾选会产生多个默认看板。
+              改走行操作的"设为默认"。 */}
           <Checkbox
-            isSelected={form.isDefault}
-            onChange={(selected) => set({ isDefault: selected })}
+            isSelected={form.isPublic}
+            onChange={(selected) => set({ isPublic: selected })}
             isDisabled={isPending}
           >
-            <span className="type-body">设为项目默认看板</span>
+            <span className="type-body">公开看板（项目成员可见）</span>
+          </Checkbox>
+          <Checkbox
+            isSelected={form.wipEnabled}
+            onChange={(selected) => set({ wipEnabled: selected })}
+            isDisabled={isPending}
+          >
+            <span className="type-body">启用 WIP 在制品限制</span>
           </Checkbox>
           {submitError ? (
             <p role="alert" className="text-sm text-danger">

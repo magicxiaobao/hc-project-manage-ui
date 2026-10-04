@@ -8,7 +8,8 @@
  * - 列表 hook 的 projectId 为 null/undefined 时 disabled，不发起请求
  *   （看板列表始终按项目过滤，走 POST /board/v1/project/{projectId}/findByPage，
  *   bean.projectId 必传，后端 validatePageRequest 会直接报业务码）
- * - 状态变更一律 POST：归档=POST /board/v1/archive/{id}、激活=POST /board/v1/activate/{id}、
+ * - 状态变更一律 POST：逻辑删=POST /board/v1/invalid/{id}、
+ *   归档=POST /board/v1/archive/{id}、激活=POST /board/v1/activate/{id}、
  *   设默认=POST /board/v1/setDefault/{id}、复制=POST /board/v1/copy/{id}?newBoardName=xxx
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -94,6 +95,19 @@ export function useCopyBoard() {
   return useMutation({
     mutationFn: ({ id, newBoardName }: { id: number; newBoardName: string }) =>
       boardApi.copyBoard(id, newBoardName),
+    onSuccess: () => invalidateBoardDomain(queryClient),
+  });
+}
+
+/**
+ * 删除看板（逻辑删）：走 POST /board/v1/invalid/{id}。
+ * 注意与 archive/{id}（归档，独立状态、可激活恢复）语义不同：
+ * invalid 是软删除。成功后失效看板域缓存。
+ */
+export function useInvalidBoard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => boardApi.invalidBoard(id),
     onSuccess: () => invalidateBoardDomain(queryClient),
   });
 }

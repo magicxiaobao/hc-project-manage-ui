@@ -5,7 +5,14 @@
  * - boardName 必填（后端 Board 实体要求非空，空名会创建出无名看板）；
  * - 校验收集全部错误，不首错即停；
  * - 看板类型取老前端 BoardTypeSelector 的枚举口径（Scrum看板/Kanban看板/
- *   自定义看板/Bug看板/测试看板），后端为自由字符串，前端只做选项约束。
+ *   自定义看板/Bug看板/测试看板），后端为自由字符串，前端只做选项约束；
+ *   编辑时不提供"不指定"选项（后端 update 按 Optional.ofNullable().ifPresent
+ *   跳过 null/缺失字段，无置空语义，选"不指定"会误导用户以为已清除）。
+ * - isPublic/wipEnabled 走表单复选框（后端 Board 实体默认 isPublic=true、
+ *   wipEnabled=false，表单初始值与后端默认值对齐）。
+ * - isDefault 不属于表单：后端 create/update 不清除项目内其它默认看板，
+ *   只有 setDefaultBoard 会；表单里直接勾选会产生多个默认看板。
+ *   改走行操作的"设为默认"（POST /board/v1/setDefault/{id}）。
  */
 import type {
   BoardCreatePayload,
@@ -30,13 +37,20 @@ export const MAX_BOARD_DESCRIPTION_LENGTH = 500;
 export interface BoardFormInput {
   boardName: string;
   description: string;
-  /** 看板类型；空字符串表示未选择（后端按 null 处理走默认值） */
+  /**
+   * 看板类型；空字符串表示未选择（新建时后端按 null 走默认值"Kanban看板"；
+   * 编辑时空串省略，后端按字段缺失跳过、保留旧值——后端无置空语义，
+   * 因此表单不提供"不指定"选项）。
+   */
   boardType: string;
-  isDefault: boolean;
+  /** 是否公开看板（后端默认 true） */
+  isPublic: boolean;
+  /** 是否启用 WIP 限制（后端默认 false，仅开关，限额在看板列层配置） */
+  wipEnabled: boolean;
 }
 
 export function emptyBoardFormInput(): BoardFormInput {
-  return { boardName: "", description: "", boardType: "", isDefault: false };
+  return { boardName: "", description: "", boardType: "", isPublic: true, wipEnabled: false };
 }
 
 export function editFormFromBoard(detail: BoardResponse): BoardFormInput {
@@ -44,7 +58,10 @@ export function editFormFromBoard(detail: BoardResponse): BoardFormInput {
     boardName: detail.boardName ?? "",
     description: detail.description ?? "",
     boardType: detail.boardType ?? "",
-    isDefault: detail.isDefault === true,
+    // 回填走后端实体默认值口径（Board.init：isPublic=true、wipEnabled=false），
+    // 实体初始化后两字段恒非空，?? 仅防御历史脏数据
+    isPublic: detail.isPublic ?? true,
+    wipEnabled: detail.wipEnabled ?? false,
   };
 }
 
@@ -88,11 +105,12 @@ export function buildBoardCreatePayload(
   const payload: BoardCreatePayload = {
     boardName: input.boardName.trim(),
     projectId,
+    isPublic: input.isPublic,
+    wipEnabled: input.wipEnabled,
   };
   const description = input.description.trim();
   if (description) payload.description = description;
   if (input.boardType) payload.boardType = input.boardType;
-  if (input.isDefault) payload.isDefault = true;
   return payload;
 }
 
@@ -105,8 +123,10 @@ export function buildBoardUpdatePayload(
     id,
     boardName: input.boardName.trim(),
     description: input.description.trim(),
+    // 空串省略：后端按 Optional.ofNullable().ifPresent 跳过，保留旧值
     boardType: input.boardType || undefined,
-    isDefault: input.isDefault,
+    isPublic: input.isPublic,
+    wipEnabled: input.wipEnabled,
   };
 }
 
@@ -119,6 +139,7 @@ export function isBoardFormDirty(current: BoardFormInput, initial: BoardFormInpu
     current.boardName !== initial.boardName ||
     current.description !== initial.description ||
     current.boardType !== initial.boardType ||
-    current.isDefault !== initial.isDefault
+    current.isPublic !== initial.isPublic ||
+    current.wipEnabled !== initial.wipEnabled
   );
 }
