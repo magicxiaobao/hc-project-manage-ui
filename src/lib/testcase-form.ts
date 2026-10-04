@@ -10,11 +10,14 @@
  * - assigneeId：空白=未设置（null），否则严格正整数
  * - estimatedDuration：空白=未设置（null），否则 1-480 的整数分钟
  * - verifiesRequirementIds（仅新建）：逗号分隔的需求 ID，≤200，非法 token 报错
- * - 更新载荷：字段级更新；description 恒发送 trim 后字符串（'' = 清空，
- *   后端 updateEditableFields 用 `!= null` 判定，支持写入空字符串——忠实老前端
- *   TestCaseForm.vue）；preconditions/testData/environmentRequirements/tags
- *   空文本 → undefined（字段省略，后端保留原值，忠实老前端 trimOptional）；
- *   assigneeId 空白 → undefined（保留原值），清空已有负责人由校验显式拒绝
+ * - 更新载荷：字段级更新；description/preconditions/testData/
+ *   environmentRequirements/tags 恒发送 trim 后字符串（'' = 清空，后端
+ *   updateEditableFields 用 `!= null` 判定，支持写入空字符串——description 沿袭
+ *   老前端 TestCaseForm.vue，另四个由 codex r4 P2 修复为一致口径：编辑时用户
+ *   清空已有值必须真实清空，不再静默保留原值）；
+ * - estimatedDuration：空白 → undefined（后端只更新非空值，无法置空）；
+ *   编辑模式清空已有值时由校验显式拒绝（口径同负责人）；
+ * - assigneeId 空白 → undefined（保留原值），清空已有负责人由校验显式拒绝
  *   （老前端 TestCaseForm.vue:105），不静默忽略；
  *   verifiesRequirementIds 不在更新载荷里（类型已排除，静默 no-op 陷阱）
  */
@@ -228,12 +231,16 @@ export function checkEditSubmitVeto(options: {
  * originalAssigneeId 为编辑前负责人的原始值（initial.assigneeId）：原有负责人
  * 被清空时按老前端 TestCaseForm.vue:105 口径显式拒绝（"当前更新契约不支持
  * 清空负责人"），而不是静默保留原值。
+ * originalEstimatedDuration 为编辑前预计时长的原始值（initial.estimatedDuration）：
+ * 后端更新只写非空值，清空已有值无法真正置空——按负责人同口径显式拒绝
+ * （"当前更新契约不支持清空预计时长"），而不是静默保留原值（codex r4 P2）。
  */
 export function validateTestCaseFormInput(
   input: TestCaseFormInput,
   options: {
     includeVerifiesRequirementIds?: boolean;
     originalAssigneeId?: string | null;
+    originalEstimatedDuration?: string | null;
   } = {},
 ): TestCaseFormFieldError[] {
   const errors: TestCaseFormFieldError[] = [];
@@ -305,6 +312,16 @@ export function validateTestCaseFormInput(
         message: `预计时长须为 1-${MAX_ESTIMATED_DURATION_MINUTES} 分钟的整数`,
       });
     }
+  } else if (
+    options.originalEstimatedDuration != null &&
+    options.originalEstimatedDuration.trim() !== ''
+  ) {
+    // 后端更新只写非空值：编辑时清空已有预计时长会静默保留原值，
+    // 与提示"留空=未设置"矛盾——按负责人同口径显式拒绝（codex r4 P2）
+    errors.push({
+      field: 'estimatedDuration',
+      message: '当前更新契约不支持清空预计时长',
+    });
   }
 
   if (options.includeVerifiesRequirementIds) {
@@ -368,11 +385,12 @@ export function buildTestCaseCreatePayload(
 
 /**
  * 由编辑表单组装 POST /testCase/v1/updateTestCase 载荷（id 必传，字段级更新）。
- * - description：恒发送 trim 后的字符串（'' = 清空；后端 updateEditableFields
- *   用 `!= null` 判定，支持写入空字符串——忠实老前端 TestCaseForm.vue 的
- *   `description: form.description.trim()`）
- * - preconditions/testData/environmentRequirements/tags：空文本 → undefined
- *   （字段省略，后端保留原值；忠实老前端的 trimOptional）
+ * - description/preconditions/testData/environmentRequirements/tags：
+ *   恒发送 trim 后的字符串（'' = 清空；后端 updateEditableFields 用 `!= null`
+ *   判定，支持写入空字符串——另四个由 codex r4 P2 修复为与 description 一致
+ *   口径：用户清空已有值必须真实清空，不静默保留原值）
+ * - estimatedDuration：空白 → undefined（保留原值）；清空已有值由校验显式
+ *   拒绝（口径同负责人），不静默忽略
  * - assigneeId：空白 → undefined（保留原值）；清空已有负责人由校验显式拒绝
  *   （老前端 TestCaseForm.vue:105），不静默忽略
  * - verifiesRequirementIds 明确不承载（更新接口收到会静默忽略，静默 no-op 陷阱）
@@ -384,18 +402,20 @@ export function buildTestCaseUpdatePayload(
   return {
     id: testCaseId,
     title: input.title.trim(),
+    // 恒发送 trim 字符串：'' = 清空（后端 `!= null` 支持写入空串）。
+    // codex r4 P2：用户清空已有值时不能静默保留原值
     description: input.description.trim(),
     caseNumber: undefinedIfBlank(input.caseNumber),
     testType: whiteList(input.testType, TEST_CASE_TYPES, '功能测试'),
     priority: whiteList(input.priority, TEST_CASE_PRIORITIES, '中'),
     status: whiteList(input.status, ['DRAFT', 'ACTIVE', 'REVIEW'] as const, 'DRAFT'),
     assigneeId: parseOptionalPositiveInt(input.assigneeId) ?? undefined,
-    preconditions: undefinedIfBlank(input.preconditions),
+    preconditions: input.preconditions.trim(),
     testSteps: input.testSteps.trim(),
     expectedResult: input.expectedResult.trim(),
-    testData: undefinedIfBlank(input.testData),
-    environmentRequirements: undefinedIfBlank(input.environmentRequirements),
-    tags: undefinedIfBlank(input.tags),
+    testData: input.testData.trim(),
+    environmentRequirements: input.environmentRequirements.trim(),
+    tags: input.tags.trim(),
     estimatedDuration: parseOptionalPositiveInt(input.estimatedDuration) ?? undefined,
   };
 }

@@ -156,8 +156,9 @@ export function TestCaseFormDialog({
     // 覆盖后从显示上消失（codex P2 r3）。
     const errors = validateTestCaseFormInput(form, {
       includeVerifiesRequirementIds: mode === "create",
-      // 编辑模式：清空已有负责人按老前端口径显式拒绝（codex P2 #5）
+      // 编辑模式：清空已有负责人/预计时长按老前端口径显式拒绝（codex P2 #5 / r4）
       originalAssigneeId: mode === "edit" ? initial.assigneeId : undefined,
+      originalEstimatedDuration: mode === "edit" ? initial.estimatedDuration : undefined,
     });
     // 提交前复核：归属翻转/实时状态变化时拒绝提交（codex P2 #1/#2/#3）。
     // 拒绝后草稿保留、弹窗不卸载；归属错误走弹窗内持久错误（submitError），
@@ -318,7 +319,13 @@ export function TestCaseFormDialog({
                 aria-label="预计时长（分钟）"
               >
                 <Label>预计时长（分钟）</Label>
-                <Input placeholder="1-480 的整数，留空=未设置" />
+                <Input
+                  placeholder={
+                    mode === "edit" && initial.estimatedDuration.trim() !== ""
+                      ? "1-480 的整数（更新契约不支持清空已有值）"
+                      : "1-480 的整数，留空=未设置"
+                  }
+                />
               </TextField>
               <FieldError message={fieldErrors.estimatedDuration} />
             </div>

@@ -83,4 +83,3 @@ export interface ExecutionDefectSummary {
   severity: string | null;
   assigneeId: number | null;
 }
-

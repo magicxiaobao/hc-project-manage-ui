@@ -399,20 +399,51 @@ describe('buildTestCaseCreatePayload / buildTestCaseUpdatePayload', () => {
     expect(payload).not.toHaveProperty('projectId');
   });
 
-  it('更新载荷：description 恒发送 trim 字符串（空 = 清空，后端支持写入空串）', () => {
+  it('更新载荷：description/可选文本恒发送 trim 字符串（空 = 清空，后端 `!= null` 支持写入空串）', () => {
     const payload = buildTestCaseUpdatePayload(5, {
       ...validInput(),
       description: '   ',
       assigneeId: '',
       estimatedDuration: '',
-      preconditions: '',
+      preconditions: '   ',
+      testData: '数据',
+      environmentRequirements: '   ',
+      tags: '',
     });
-    // 忠实老前端 TestCaseForm.vue：description.trim() 恒发送，'' 清空字段
+    // 恒发送口径（codex r4 P2）：用户清空已有值必须真实清空，不静默保留原值
     expect(payload.description).toBe('');
-    // trimOptional 口径：其余可选文本空白 → undefined（保留原值）
-    expect(payload.preconditions).toBeUndefined();
+    expect(payload.preconditions).toBe('');
+    expect(payload.testData).toBe('数据');
+    expect(payload.environmentRequirements).toBe('');
+    expect(payload.tags).toBe('');
+    // 负责人/预计时长：后端只写非空值，空白 → undefined（保留原值）；
+    // 清空已有值由校验显式拒绝，不静默忽略
     expect(payload.assigneeId).toBeUndefined();
     expect(payload.estimatedDuration).toBeUndefined();
+  });
+
+  it('编辑校验：清空已有预计时长被显式拒绝（codex r4 P2，口径同负责人）', () => {
+    const errors = validateTestCaseFormInput(
+      { ...validInput(), estimatedDuration: '  ' },
+      { originalEstimatedDuration: '30' },
+    );
+    expect(errors).toContainEqual({
+      field: 'estimatedDuration',
+      message: '当前更新契约不支持清空预计时长',
+    });
+  });
+
+  it('编辑校验：原本无预计时长时留空不报错；新建模式不检查原值', () => {
+    const errors = validateTestCaseFormInput(
+      { ...validInput(), estimatedDuration: '' },
+      { originalEstimatedDuration: '' },
+    );
+    expect(errors.filter((e) => e.field === 'estimatedDuration')).toHaveLength(0);
+    const createErrors = validateTestCaseFormInput({
+      ...validInput(),
+      estimatedDuration: '',
+    });
+    expect(createErrors.filter((e) => e.field === 'estimatedDuration')).toHaveLength(0);
   });
 
   it('编辑校验：清空已有负责人被显式拒绝（老前端 TestCaseForm.vue:105 口径）', () => {
