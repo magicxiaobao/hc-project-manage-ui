@@ -170,24 +170,39 @@ export function DefectDetailLive({
 
   if (detailQuery.isPending) {
     return (
-      <div className="flex items-center gap-2 px-4 py-8 text-sm text-default-500">
-        <Spinner size="sm" />
-        正在加载缺陷详情…
-      </div>
+      <>
+        {editBlocker}
+        <div className="flex items-center gap-2 px-4 py-8 text-sm text-default-500">
+          <Spinner size="sm" />
+          正在加载缺陷详情…
+        </div>
+      </>
     );
   }
   if (detailQuery.isError) {
     return (
-      <div className="flex flex-col items-start gap-3 px-4 py-8">
-        <p className="type-body text-danger">缺陷详情加载失败：{toUserMessage(detailQuery.error)}</p>
-        <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
-          重试
-        </Button>
-      </div>
+      <>
+        {/*
+          NOTE-3 加固：错误页上守卫不能离线——编辑弹窗可能开着且有脏草稿
+          （后台重取失败切到此分支），用户在此再按后退仍需确认。
+        */}
+        {editBlocker}
+        <div className="flex flex-col items-start gap-3 px-4 py-8">
+          <p className="type-body text-danger">缺陷详情加载失败：{toUserMessage(detailQuery.error)}</p>
+          <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
+            重试
+          </Button>
+        </div>
+      </>
     );
   }
   if (!detail) {
-    return <EmptyHint>{`没有找到这个缺陷（id=${defectId}）。`}</EmptyHint>;
+    return (
+      <>
+        {editBlocker}
+        <EmptyHint>{`没有找到这个缺陷（id=${defectId}）。`}</EmptyHint>
+      </>
+    );
   }
 
   const routeProjectId = routeProjectQuery.data;
