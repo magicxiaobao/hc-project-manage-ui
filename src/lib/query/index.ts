@@ -86,3 +86,15 @@ export {
   useTestRunReport,
 } from './hooks/useTestRuns';
 export type { TestRunListParams } from './hooks/useTestRuns';
+export {
+  useVersionList,
+  useVersionDetail,
+  useCreateVersion,
+  useUpdateVersion,
+  useTransitionVersion,
+  normalizeVersionListParams,
+  versionTransitionEvents,
+  versionEventRequiresReason,
+  buildTransitionVersionOptions,
+} from './hooks/useVersions';
+export type { VersionListParams } from './hooks/useVersions';
