@@ -11,7 +11,7 @@
  * - POST {id}/recordReleased，请求体 ReleaseSuccessPayload
  *   （buildNumber/artifactLocation/fileHash 必填非空白，fileSize ≥0 可选）
  * - POST {id}/recordFailed，请求体 ReleaseFailurePayload
- *   （resultNotes 必填；制品三件套+fileSize 要么全齐要么全空，半套抛错）
+ *   （resultNotes 必填；三件套齐全（fileSize 可选，若传须 ≥0），或四项全空，半套抛错）
  * - POST {id}/copyAsDraft 与 {id}/rollbackAsDraft，请求体 { idempotencyKey }，
  *   返回新草稿响应
  * - POST {id}/deleteDraft：body 可选（仅草稿态；无 adminReason 时不带 body）
@@ -36,7 +36,7 @@ export const releaseApi = {
   createRelease: (data: ReleaseCreatePayload) =>
     api.post<ReleaseResponse>('/release/v1/create', data),
 
-  /** 更新发布草稿：载荷含 id 的字段级更新 */
+  /** 更新发布草稿：整包覆盖（省略即写 null，forceUpdate 省略回退 false） */
   updateDraft: (data: ReleaseDraftUpdatePayload) =>
     api.post<string>('/release/v1/updateDraft', data),
 
@@ -72,13 +72,11 @@ export const releaseApi = {
   rejectRelease: (id: number, reason: string) =>
     api.post<string>(`/release/v1/${id}/reject`, { reason }),
 
-  /** 记录发布成功：请求体为可选字段的产物信息 */
   /** 记录发布成功：制品三件套必填且非空白 */
   recordReleased: (id: number, data: ReleaseSuccessPayload) =>
     api.post<string>(`/release/v1/${id}/recordReleased`, data),
 
-  /** 记录发布失败：请求体为可选字段的产物信息 */
-  /** 记录发布失败：resultNotes 必填；制品证据全齐或全空 */
+  /** 记录发布失败：resultNotes 必填；三件套齐全（fileSize 可选）或四项全空 */
   recordFailed: (id: number, data: ReleaseFailurePayload) =>
     api.post<string>(`/release/v1/${id}/recordFailed`, data),
 

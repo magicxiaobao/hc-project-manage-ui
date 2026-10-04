@@ -343,18 +343,28 @@ export interface ReleaseSuccessPayload {
 /**
  * 记录发布失败载荷（忠实于后端 ReleaseResultService.validateFailed）：
  * - resultNotes 必填（非空）；
- * - 证据完整性约束：制品三件套（buildNumber/artifactLocation/fileHash）+ fileSize
- *   要么全齐要么全空——半套（只给其中几个）直接抛 ReleaseEvidenceInvalid。
- *   全空 = 无制品证据；全齐 = 附制品证据；
+ * - 证据完整性约束：三件套（buildNumber/artifactLocation/fileHash）齐全
+ *   （fileSize 可选，若传须 ≥0），或四项（buildNumber/artifactLocation/
+ *   fileHash/fileSize）全空——半套（只给其中几个）直接抛 ReleaseEvidenceInvalid。
+ *   全空 = 无制品证据；三件套齐全 = 附制品证据；
  * - fileSize 若传则必须 ≥0。
  */
-export interface ReleaseFailurePayload {
-  resultNotes: string;
-  buildNumber?: string;
-  artifactLocation?: string;
-  fileSize?: number;
-  fileHash?: string;
-}
+export type ReleaseFailurePayload = { resultNotes: string } & (
+  | {
+      /** 无制品证据分支：四个证据字段必须全空（给任何一个都不合法） */
+      buildNumber?: never;
+      artifactLocation?: never;
+      fileSize?: never;
+      fileHash?: never;
+    }
+  | {
+      /** 有制品证据分支：三件套必填非空；fileSize 可选，若传须 ≥0 */
+      buildNumber: string;
+      artifactLocation: string;
+      fileSize?: number;
+      fileHash: string;
+    }
+);
 
 /** 复制/回滚为草稿载荷（忠实于后端 ReleaseCloneRequest） */
 export interface ReleaseClonePayload {

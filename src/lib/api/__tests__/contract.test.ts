@@ -92,7 +92,8 @@
  * - POST /release/v1/{id}/approve 与 /reject 与 /cancel，请求体 { reason }
  * - POST /release/v1/{id}/recordReleased，请求体 ReleaseSuccessPayload
  *   （buildNumber/artifactLocation/fileHash 必填非空白）；/recordFailed 请求体
- *   ReleaseFailurePayload（resultNotes 必填；制品三件套+fileSize 全齐或全空，半套抛错）
+ *   ReleaseFailurePayload（resultNotes 必填；三件套齐全（fileSize 可选，若传须 ≥0），
+ *   或四项全空，半套抛错）
  * - POST /release/v1/{id}/copyAsDraft 与 /rollbackAsDraft，请求体 { idempotencyKey }，
  *   返回新草稿响应
  * - POST /release/v1/{id}/deleteDraft，body 可选（无 adminReason 时不带 body）
