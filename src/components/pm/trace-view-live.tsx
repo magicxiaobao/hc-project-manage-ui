@@ -10,7 +10,7 @@
  *
  * 未登录走演示追溯视图（TraceView）时不使用本组件。
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, StateChip, StatusChip } from "@/components/biz";
@@ -458,6 +458,29 @@ function TraceMatrixTab({ projectId, projectKey }: { projectId: number; projectK
   const rows = matrixQuery.data?.list ?? [];
   const total = matrixQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / MATRIX_PAGE_SIZE));
+  // Codex review 4175549755：页码越界（删除/权限变化导致当前页变空）时自动回到
+  // 最后一页；空的越界页仍渲染分页器，避免用户被困在无处可回的空页。
+  useEffect(() => {
+    if (!matrixQuery.isPending && total > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [matrixQuery.isPending, total, totalPages, page]);
+
+  const matrixPager = (
+    <div className="flex items-center justify-between">
+      <span className="type-caption text-default-500">
+        共 {total} 条 · 第 {page}/{totalPages} 页
+      </span>
+      <div className="flex gap-2">
+        <Button size="sm" variant="ghost" isDisabled={page <= 1} onPress={() => setPage(page - 1)}>
+          上一页
+        </Button>
+        <Button size="sm" variant="ghost" isDisabled={page >= totalPages} onPress={() => setPage(page + 1)}>
+          下一页
+        </Button>
+      </div>
+    </div>
+  );
 
   const applyFilters = () => {
     setAppliedTitle(titleInput);
@@ -524,7 +547,16 @@ function TraceMatrixTab({ projectId, projectKey }: { projectId: number; projectK
           </Button>
         </div>
       ) : rows.length === 0 ? (
-        <EmptyHint>没有符合条件的需求。</EmptyHint>
+        // total === 0 才是真空；total > 0 但当前页无数据 = 越界空页（极短瞬态，
+        // 上方 useEffect 会把 page 钳回最后一页），仍渲染分页器让用户可回。
+        total === 0 ? (
+          <EmptyHint>没有符合条件的需求。</EmptyHint>
+        ) : (
+          <>
+            <EmptyHint>当前页没有数据，正在回到最后一页…</EmptyHint>
+            {matrixPager}
+          </>
+        )
       ) : (
         <>
           <div className="overflow-hidden rounded-sm border border-border bg-surface">
@@ -564,19 +596,7 @@ function TraceMatrixTab({ projectId, projectKey }: { projectId: number; projectK
               </div>
             ))}
           </div>
-          <div className="flex items-center justify-between">
-            <span className="type-caption text-default-500">
-              共 {total} 条 · 第 {page}/{totalPages} 页
-            </span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" isDisabled={page <= 1} onPress={() => setPage(page - 1)}>
-                上一页
-              </Button>
-              <Button size="sm" variant="ghost" isDisabled={page >= totalPages} onPress={() => setPage(page + 1)}>
-                下一页
-              </Button>
-            </div>
-          </div>
+          {matrixPager}
         </>
       )}
     </div>
