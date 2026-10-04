@@ -48,3 +48,13 @@ export {
   transitionFieldRequirements,
 } from './hooks/useRequirements';
 export type { TraceMatrixParams, TransitionFieldRequirements } from './hooks/useRequirements';
+export {
+  normalizeTestCaseListParams,
+  useArchiveTestCase,
+  useCreateTestCase,
+  useDuplicateTestCase,
+  useTestCaseDetail,
+  useTestCaseList,
+  useUpdateTestCase,
+} from './hooks/useTestCases';
+export type { TestCaseListParams } from './hooks/useTestCases';
