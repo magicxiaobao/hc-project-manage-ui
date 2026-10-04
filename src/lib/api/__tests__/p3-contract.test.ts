@@ -24,7 +24,7 @@
  *   batchDelete 请求体 { ids }；checkCircularDependency 返回 boolean
  * - 甘特：GET /task/v1/gantt/{projectId}/dependencies/{taskId}/
  *   criticalPath/{projectId}/floats/{projectId}；POST /task/v1/batchUpdate
- *   请求体 { tasks: [{id, text?, startDate?, endDate?, progress?}] }（不接受状态字段）
+ *   请求体 { tasks: [{id, text?, start_date?, end_date?, progress?}] }（不接受状态字段）
  * - 里程碑（无 /v1）：POST /milestone/create//update//delete/{id}//page；
  *   GET /milestone/{id}/list/{projectId}；update 走字段 + xxxSubmitted 显式提交
  * - 追溯：GET /requirement/v1/trace/{requirementId}/{requirementId}/impact；
@@ -253,12 +253,13 @@ describe('冲刺契约（P3）', () => {
 describe('任务依赖契约（P3）', () => {
   it('依赖 CRUD/启用/归档', async () => {
     const fetchMock = mockFetchSequence([
-      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 81 } },
       { body: { code: 1, msg: 'ok', result: 'success' } },
       { body: { code: 1, msg: 'ok', result: 'success' } },
     ]);
     const createPayload = { predecessorId: 201, successorId: 202, dependencyType: 'FINISH_TO_START', projectId: 3 };
-    await taskDependencyApi.createTaskDependency(createPayload);
+    const newId = await taskDependencyApi.createTaskDependency(createPayload);
+    expect(newId).toBe(81);
     await taskDependencyApi.updateTaskDependency({ id: 11, lag: 2 });
     await taskDependencyApi.invalidDependency(11);
 
@@ -341,7 +342,7 @@ describe('甘特图/里程碑契约（P3）', () => {
     ]);
     const payload = {
       tasks: [
-        { id: 201, text: '新标题', startDate: '2026-10-05', endDate: '2026-10-08', progress: 50 },
+        { id: 201, text: '新标题', start_date: '2026-10-05', end_date: '2026-10-08', progress: 50 },
       ],
     };
     await ganttApi.batchUpdateTasks(payload);
@@ -354,7 +355,7 @@ describe('甘特图/里程碑契约（P3）', () => {
     expect(body.tasks[0]).not.toHaveProperty('status');
   });
 
-  it('里程碑 CRUD：无 /v1 前缀；update 走 xxxSubmitted 显式提交', async () => {
+  it('里程碑 CRUD：无 /v1 前缀；update 字段出现即提交（绝不发送 xxxSubmitted）', async () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: 81 } },
       { body: { code: 1, msg: 'ok', result: null } },
@@ -367,7 +368,6 @@ describe('甘特图/里程碑契约（P3）', () => {
     await milestoneApi.updateMilestone({
       id: 81,
       name: 'M1 改',
-      nameSubmitted: true,
     });
     await milestoneApi.deleteMilestone(81);
     const list = await milestoneApi.listByProject(3);
@@ -380,7 +380,6 @@ describe('甘特图/里程碑契约（P3）', () => {
     expect(JSON.parse(calls[1][1].body as string)).toEqual({
       id: 81,
       name: 'M1 改',
-      nameSubmitted: true,
     });
     expect(calls[2][0]).toBe('/api/milestone/delete/81');
     expect(calls[3][0]).toBe('/api/milestone/list/3');
@@ -427,6 +426,7 @@ describe('追溯契约（P3）', () => {
     await traceabilityRelationApi.batchQuery({
       objects: [{ objectType: 'TASK', objectId: 201 }],
       direction: 'BOTH',
+      relationTypes: ['TASK_IMPLEMENTS_REQUIREMENT' as const],
       activeOnly: true,
     });
 

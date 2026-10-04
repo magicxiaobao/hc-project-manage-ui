@@ -23,9 +23,9 @@ import type {
 } from './task-dependency-types';
 
 export const taskDependencyApi = {
-  /** 新建依赖：返回后端成功消息 */
+  /** 新建依赖：返回新建依赖 id（后端 Result<Long>） */
   createTaskDependency: (data: TaskDependencyCreatePayload) =>
-    api.post<string>('/taskDependency/v1/createTaskDependency', data),
+    api.post<number>('/taskDependency/v1/createTaskDependency', data),
 
   /** 更新依赖：字段级更新，返回后端成功消息 */
   updateTaskDependency: (data: TaskDependencyUpdatePayload) =>

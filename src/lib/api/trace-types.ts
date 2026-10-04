@@ -112,11 +112,11 @@ export interface UnlinkRelationPayload extends LinkRelationPayload {
   reason: string;
 }
 
-/** 批量关系双向查询载荷（忠实于后端 BatchRelationQueryRequest；objects 非空） */
+/** 批量关系双向查询载荷（忠实于后端 BatchRelationQueryRequest；direction/relationTypes 必填——后端紧凑构造器 requireNonNull） */
 export interface BatchRelationQueryPayload {
   objects: AlmObjectKey[];
-  direction?: AlmRelationDirection;
-  relationTypes?: AlmRelationType[];
+  direction: AlmRelationDirection;
+  relationTypes: AlmRelationType[];
   activeOnly?: boolean;
 }
 

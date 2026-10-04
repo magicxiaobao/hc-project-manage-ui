@@ -54,9 +54,9 @@ export const boardApi = {
       params,
     ),
 
-  /** 项目默认看板：GET */
+  /** 项目默认看板：GET；无默认看板时后端返回 Result.success(null) */
   getDefaultByProject: (projectId: number) =>
-    api.get<BoardResponse>(`/board/v1/project/${projectId}/default`),
+    api.get<BoardResponse | null>(`/board/v1/project/${projectId}/default`),
 
   /** 设为默认看板：id 拼在路径上 */
   setDefault: (id: number) => api.post<string>(`/board/v1/setDefault/${id}`),

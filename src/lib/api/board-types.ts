@@ -54,7 +54,7 @@ export interface BoardQueryRequest {
   ownerId?: number;
 }
 
-/** 看板（忠实于后端 BoardResponse；日期为 'YYYY-MM-DDTHH:mm:ss' 字符串） */
+/** 看板（忠实于后端 BoardResponse extends AbstractResponse；日期为 'YYYY-MM-DDTHH:mm:ss' 字符串；createdAt/updatedAt 为秒级时间戳） */
 export interface BoardResponse {
   id: number;
   boardName: string;
@@ -71,6 +71,8 @@ export interface BoardResponse {
   wipEnabled?: boolean | null;
   filterConfig?: string | null;
   isPublic?: boolean | null;
+  createdAt: number | null;
+  updatedAt: number | null;
 }
 
 /** 看板列创建载荷（忠实于后端 BoardColumnCreateRequest） */
@@ -96,14 +98,15 @@ export interface BoardColumnUpdatePayload extends Partial<BoardColumnCreatePaylo
   id: number;
 }
 
-/** 看板列查询条件（忠实于后端 BoardColumnQueryRequest） */
+/** 看板列查询条件（忠实于后端 BoardColumnQueryRequest；另有 columnType 可按列类型过滤） */
 export interface BoardColumnQueryRequest {
   boardId?: number;
   columnName?: string;
   taskStatus?: string;
+  columnType?: string;
 }
 
-/** 看板列（忠实于后端 BoardColumnResponse） */
+/** 看板列（忠实于后端 BoardColumnResponse extends AbstractResponse；createdAt/updatedAt 为秒级时间戳） */
 export interface BoardColumnResponse {
   id: number;
   boardId: number;
@@ -118,6 +121,8 @@ export interface BoardColumnResponse {
   columnType?: string | null;
   isVisible?: boolean | null;
   columnConfig?: string | null;
+  createdAt: number | null;
+  updatedAt: number | null;
 }
 
 /**

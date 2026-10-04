@@ -10,29 +10,33 @@
  *
  * 关键契约（来自后端源码）：
  * - batchUpdate 请求体为 TaskGanttBatchUpdateRequest{tasks: Item[]}，Item{id, text,
- *   startDate, endDate, progress}：整批原子更新标题/计划起止日/进度（0–100），
- *   不接受状态字段（进度不驱动状态，流转须显式调 updateStatus）。startDate/endDate
- *   为 LocalDate，类型化为 'YYYY-MM-DD' 字符串
+ *   start_date, end_date, progress}（注意：后端 @JsonProperty 为 snake_case，
+ *   且 Item 带 @JsonAnySetter rejectUnknown，发 startDate/endDate 会 400）：
+ *   整批原子更新标题/计划起止日/进度（0–100），不接受状态字段（进度不驱动状态，
+ *   流转须显式调 updateStatus）。start_date/end_date 为 LocalDate，
+ *   类型化为 'YYYY-MM-DD' 字符串
  * - gantt/{projectId} 与 criticalPath/{projectId} 返回 Map<String,Object>（实现拼装），
  *   前端按泛型记录接收；floats/{projectId} 返回 Map<number, number>（任务 id→浮动天数）
  * - dependencies/{taskId} 返回 { 前置/后置键: TaskVO[] } 的 Map，前端按
  *   Record<string, TaskGanttTaskSummary[]> 接收（键名由实现决定，渲染层不硬编码）
- * - 里程碑：create 返回 id；update 走"字段 + xxxSubmitted"显式提交模式
- *   （MilestoneUpdateRequest：name/status/startDate/endDate/projectId 均配
- *   xxxSubmitted=true 才会写入），delete/{id} 为硬删除；status 的 wire 值为小写 key
+ * - 里程碑：create 返回 id；update 为"字段出现即提交"（MilestoneUpdateRequest 的
+ *   *Submitted 字段被 @Getter/@Setter(AccessLevel.NONE) 隐藏，靠 @JsonSetter 在
+ *   字段出现时自动置位，带 @JsonAnySetter rejectUnknown——客户端绝不发送
+ *   xxxSubmitted，发送即 400 零写入；见 MilestoneUpdateHttpIntegrationTest），
+ *   delete/{id} 为逻辑删（@TableLogic）；status 的 wire 值为小写 key
  *   （MilestoneStatusEnum @JsonValue）
  * - ⚠️ GET /milestone/statistics/{projectId} 为统计域，P3 甘特图内不接线，不建模
  */
 
-/** 甘特图批量更新项（忠实于 TaskGanttBatchUpdateRequest.Item） */
+/** 甘特图批量更新项（忠实于 TaskGanttBatchUpdateRequest.Item；wire 字段名为 snake_case） */
 export interface GanttBatchUpdateItem {
   id: number;
   /** 任务标题（整批原子更新） */
   text?: string;
-  /** 'YYYY-MM-DD' */
-  startDate?: string;
-  /** 'YYYY-MM-DD' */
-  endDate?: string;
+  /** 'YYYY-MM-DD'；wire 名 start_date */
+  start_date?: string;
+  /** 'YYYY-MM-DD'；wire 名 end_date */
+  end_date?: string;
   /** 0–100；不驱动状态 */
   progress?: number;
 }
@@ -72,20 +76,16 @@ export interface MilestoneCreatePayload {
 
 /**
  * 里程碑更新载荷（忠实于后端 MilestoneUpdateRequest：
- * "字段 + xxxSubmitted"显式提交模式，未置位的字段后端忽略）
+ * "字段出现即提交"——*Submitted 由后端 @JsonSetter 自动置位，客户端只发要改的字段，
+ * 绝不发送 xxxSubmitted（发了即 400 零写入））
  */
 export interface MilestoneUpdatePayload {
   id: number;
   projectId?: number;
-  projectIdSubmitted?: boolean;
   name?: string;
-  nameSubmitted?: boolean;
   status?: MilestoneStatus | string;
-  statusSubmitted?: boolean;
   startDate?: string;
-  startDateSubmitted?: boolean;
   endDate?: string;
-  endDateSubmitted?: boolean;
 }
 
 /** 里程碑查询条件（忠实于后端 MilestoneQueryRequest） */

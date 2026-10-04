@@ -93,6 +93,10 @@ export interface SprintResponse {
   autoStart?: boolean | null;
   autoComplete?: boolean | null;
   durationDays?: number | null;
+  /** 秒级时间戳（AbstractResponse） */
+  createdAt: number | null;
+  /** 秒级时间戳（AbstractResponse） */
+  updatedAt: number | null;
 }
 
 /**

@@ -54,8 +54,8 @@ export const milestoneApi = {
     api.post<number>('/milestone/create', data),
 
   /**
-   * 更新里程碑：POST /milestone/update，"字段 + xxxSubmitted"显式提交模式；
-   * 只写置位了 xxxSubmitted 的字段，未置位后端忽略
+   * 更新里程碑：POST /milestone/update，"字段出现即提交"；
+   * 只发要改的字段，绝不发 xxxSubmitted（后端 @JsonSetter 自动置位，发了即 400）
    */
   updateMilestone: (data: MilestoneUpdatePayload) =>
     api.post<void>('/milestone/update', data),

@@ -10,7 +10,7 @@
  * - batchDelete 请求体为 { ids: number[] }（后端读 body.get("ids")）
  * - checkCircularDependency 请求体复用 TaskDependencyCreateRequest，
  *   后端仅用 predecessorId/successorId 判断，返回 boolean
- * - create/update 返回后端成功消息字符串；valid/invalid 同
+ * - create 返回新建依赖 id（后端 Result<Long>）；update/valid/invalid 返回成功消息字符串
  * - ⚠️ 老前端 TaskDependency.vue 调 taskDependencyApi.export：该方法在老前端
  *   api/task.ts 中根本不存在（死代码），P3 明确排除不建模
  */
@@ -41,7 +41,7 @@ export interface TaskDependencyQueryRequest {
   projectId?: number;
 }
 
-/** 任务依赖（忠实于后端 TaskDependencyResponse） */
+/** 任务依赖（忠实于后端 TaskDependencyResponse extends AbstractResponse；createdAt/updatedAt 为秒级时间戳） */
 export interface TaskDependencyResponse {
   id: number;
   predecessorId: number;
@@ -51,6 +51,8 @@ export interface TaskDependencyResponse {
   description?: string | null;
   status?: string | null;
   projectId: number;
+  createdAt: number | null;
+  updatedAt: number | null;
 }
 
 /** 冲突检测项（后端返回 List<Map<String,Object>>，由实现拼装） */
