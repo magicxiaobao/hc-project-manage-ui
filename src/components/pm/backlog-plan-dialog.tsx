@@ -140,9 +140,20 @@ export function BacklogPlanDialog({
               正在加载可挂载的冲刺…
             </div>
           ) : allSprintsQuery.isError ? (
-            <p role="alert" className="text-sm text-danger">
-              可挂载冲刺加载失败：{toUserMessage(allSprintsQuery.error)}
-            </p>
+            // 冲刺查询失败：弹窗内错误态 + 重试（保留已选草稿）。
+            // targetSprintId 在 state 里，refetch 不清空；不关闭弹窗，
+            // dirty 确认守卫不受影响。
+            <div className="flex flex-col items-start gap-3">
+              <p role="alert" className="text-sm text-danger">
+                可挂载冲刺加载失败：{toUserMessage(allSprintsQuery.error)}
+              </p>
+              <Button
+                variant="ghost"
+                onPress={() => void allSprintsQuery.refetch()}
+              >
+                重试
+              </Button>
+            </div>
           ) : mountableTargets.length === 0 ? (
             <p role="alert" className="text-sm text-warning-600">
               当前项目没有可挂载的冲刺（规划中/进行中），请先新建冲刺。

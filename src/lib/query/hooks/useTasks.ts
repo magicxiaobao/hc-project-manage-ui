@@ -276,8 +276,11 @@ export function filterBacklogTasks(tasks: TaskResponse[]): TaskResponse[] {
  * - 赋值时后端守卫（TaskServiceImpl.validateMountTarget）：目标冲刺必须
  *   同项目、有效、状态为 PLANNING/ACTIVE，否则报业务码，
  *   调用方经 toUserMessage 展示（页面侧如实报错，不预判拦截）。
- * - 成功后失效任务域 + 冲刺域：后端同一事务内经
- *   SprintStoryPointsRecomputer 重算源/目标冲刺故事点。
+ * - 成功后失效任务域 + 冲刺域 + 看板域：后端同一事务内经
+ *   SprintStoryPointsRecomputer 重算源/目标冲刺故事点；看板卡片查询
+ *   （queryKeys.board.list({ columnsWithTasks: boardId })，后端按看板 sprintId
+ *   筛选任务）也会因任务的 sprintId 变化而过期——看板域必须整体失效
+ *   （影响的看板不唯一，无法从 mutation 参数精确到单个 boardId）。
  */
 export function useUpdateTaskSprint() {
   const queryClient = useQueryClient();
@@ -287,6 +290,9 @@ export function useUpdateTaskSprint() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.sprint.all });
+      // 任务移入/移出冲刺后看板卡片查询过期：后端按看板 sprintId 筛选任务，
+      // 必须失效看板域，否则 30 秒新鲜期内看板仍显示旧卡片。
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board.all });
     },
   });
 }

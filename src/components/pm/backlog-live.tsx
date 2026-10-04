@@ -11,8 +11,10 @@
  *   （规划中/进行中；后端守卫 TaskServiceImpl.validateMountTarget）。
  * - 移回待办：已规划分组内"移回待办"二次确认 → updateTask
  *   {id, sprintId: null}（后端 Schema 注解"清空表示移回待办"）。
- * - 状态：加载 / 错误（横幅 + 重试，保留已挂载内容，脏表单不卸载）
- *   / 空 / 分组列表。
+ * - 状态：加载 / 错误 / 空 / 分组列表。
+ *   错误分两种：首次任务请求失败且无成功数据 → 全页错误态 + 重试，
+ *   绝不回退 [] 渲染"成功空态"；曾经成功后后台重取失败 → 横幅 + 重试，
+ *   保留已挂载内容，脏表单不卸载。
  * - 弹窗按任务 id key 重挂载，渲染在数据状态分支之外：后台重取失败切错误
  *   横幅时不卸载脏表单（沿用 testcase-list-live 的 P2 经验）。
  */
@@ -142,7 +144,17 @@ export function BacklogLive({ projectId, projectKey }: { projectId: number; proj
   };
 
   const isLoading = tasksQuery.isPending || sprintsQuery.isPending;
-  const loadError = tasksQuery.isError ? tasksQuery.error : sprintsQuery.isError ? sprintsQuery.error : null;
+  // 首次任务请求失败且从未成功（无任何缓存数据）：绝不能回退 [] 渲染
+  // "成功空态"（"0 个任务""所有任务都已挂载到冲刺"），走全页错误态 + 重试。
+  // 曾经成功过再后台重取失败时 allTasks.length > 0，走下面的横幅错误态。
+  const tasksFatalError = tasksQuery.isError && allTasks.length === 0;
+  const loadError = tasksFatalError
+    ? null
+    : tasksQuery.isError
+      ? tasksQuery.error
+      : sprintsQuery.isError
+        ? sprintsQuery.error
+        : null;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
@@ -177,7 +189,20 @@ export function BacklogLive({ projectId, projectKey }: { projectId: number; proj
         </div>
       ) : null}
 
-      {!isLoading || allTasks.length > 0 ? (
+      {/* 首次任务请求失败（无成功数据）：全页错误态 + 重试入口，
+          不渲染列表/空态，避免把"从未成功"展示成"成功空态" */}
+      {tasksFatalError ? (
+        <div className="flex flex-col items-start gap-3 py-8">
+          <p className="type-body text-danger">
+            任务加载失败：{toUserMessage(tasksQuery.error)}
+          </p>
+          <Button variant="ghost" onPress={() => void tasksQuery.refetch()}>
+            重试
+          </Button>
+        </div>
+      ) : null}
+
+      {!tasksFatalError && (!isLoading || allTasks.length > 0) ? (
         <>
           <section aria-label="未规划任务池">
             <div className="mb-2 flex items-baseline justify-between">
