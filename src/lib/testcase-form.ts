@@ -29,6 +29,7 @@ import type {
 import {
   TEST_CASE_PRIORITIES,
   TEST_CASE_STATUSES,
+  TEST_CASE_STATUS_LABELS,
   TEST_CASE_TYPES,
 } from './api/testCase-types';
 
@@ -157,6 +158,51 @@ export function allowedTargetStatuses(
  */
 export function canArchiveTestCase(status: TestCaseStatus): boolean {
   return status === 'DRAFT' || status === 'ACTIVE';
+}
+
+/**
+ * 编辑弹窗提交前复核的否决结果（纯数据，由调用方决定展示通道）：
+ * - field 有值 → 字段级错误（调用方挂到对应输入下方，如状态下拉）
+ * - field 为空 → 非字段级错误（调用方走弹窗内持久错误通道，如 submitError），
+ *   适用于"项目归属"这种表单里没有对应输入的上下文错误
+ * 返回 null 表示通过复核。草稿一律保留，不卸载。
+ */
+export interface TestCaseSubmitVeto {
+  field?: 'status';
+  message: string;
+}
+
+/**
+ * 编辑提交前的状态/归属复核（纯函数，忠实后端约束）：
+ * - projectContextVerified 为 false → 拒绝（项目归属已翻转/无法确认）
+ * - 实时状态为 ARCHIVED → 拒绝（后端 updateTestCase/duplicate 均拒绝归档记录）
+ * - 表单状态不在实时状态的允许目标集合里 → 拒绝（弹窗打开后他人改了状态，
+ *   快照里的旧状态不能再提交，如 ACTIVE 不可回 DRAFT）
+ * - 无实时状态可复核（记录已从列表消失等）→ 不拦截，后端为最终兜底
+ */
+export function checkEditSubmitVeto(options: {
+  projectContextVerified: boolean;
+  liveStatus: TestCaseStatus | null | undefined;
+  formStatus: string;
+}): TestCaseSubmitVeto | null {
+  if (!options.projectContextVerified) {
+    return { message: '项目归属已变化，无法提交。请刷新页面后重试。' };
+  }
+  const liveStatus = options.liveStatus;
+  if (liveStatus == null) return null;
+  if (liveStatus === 'ARCHIVED') {
+    return { field: 'status', message: '该用例已归档，无法保存。请关闭弹窗。' };
+  }
+  // 表单状态不在实时状态的允许目标集合里 → 拒绝（弹窗打开后他人改了状态，
+  // 快照里的旧状态不能再提交，如 ACTIVE 不可回 DRAFT）
+  const targets = allowedTargetStatuses(liveStatus) as readonly string[];
+  if (!targets.includes(options.formStatus)) {
+    return {
+      field: 'status',
+      message: `用例状态已变为「${TEST_CASE_STATUS_LABELS[liveStatus] ?? liveStatus}」，请重新选择允许的目标状态。`,
+    };
+  }
+  return null;
 }
 
 /**

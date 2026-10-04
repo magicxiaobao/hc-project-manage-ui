@@ -38,7 +38,7 @@ import {
   buildTestCaseUpdatePayload,
   validateTestCaseFormInput,
 } from "@/lib/testcase-form";
-import type { TestCaseFormInput } from "@/lib/testcase-form";
+import type { TestCaseFormInput, TestCaseSubmitVeto } from "@/lib/testcase-form";
 import {
   TEST_CASE_PRIORITIES,
   TEST_CASE_STATUS_LABELS,
@@ -79,11 +79,13 @@ export function TestCaseFormDialog({
    */
   editStatus?: TestCaseStatus;
   /**
-   * 提交前复核：返回非空字符串表示拒绝提交并 toast 该文案。
-   * 详情页传入 projectContextVerified 翻转时的拦截（弹窗已打开后归属
-   * 查询重取失败/项目被删，提交入口再次检查，不只靠挂载条件）。
+   * 提交前复核：返回非 null 表示拒绝提交。field 有值 → 字段级错误（挂对应
+   * 输入下方，如状态下拉）；field 为空 → 弹窗内持久错误（submitError 通道，
+   * 如项目归属错误）。拒绝后草稿保留、弹窗不卸载，关闭仍走 dirty check。
+   * 收到表单当前值，供调用方按实时记录状态复核（如弹窗打开后他人改了状态，
+   * 快照里的旧状态不能再提交）。
    */
-  submitVeto?: () => string | null;
+  submitVeto?: (form: TestCaseFormInput) => TestCaseSubmitVeto | null;
   /** 初始表单值（create 时传 emptyTestCaseFormInput()，edit 时传回填值） */
   initial: TestCaseFormInput;
   onClose: () => void;
@@ -148,10 +150,16 @@ export function TestCaseFormDialog({
 
   const handleSubmit = () => {
     if (isPending) return;
-    // 归属复核：详情页 projectContextVerified 翻转时拒绝提交（codex P2 #2）
-    const veto = submitVeto?.();
+    // 提交前复核：归属翻转/实时状态变化时拒绝提交（codex P2 #1/#2/#3）。
+    // 拒绝后草稿保留、弹窗不卸载；归属错误走弹窗内持久错误（submitError），
+    // 状态过期走字段级错误（状态下拉下方），都不用 toast（一闪而过）。
+    const veto = submitVeto?.(form);
     if (veto) {
-      toast.error(veto);
+      if (veto.field) {
+        setFieldErrors({ [veto.field]: veto.message });
+      } else {
+        setSubmitError(veto.message);
+      }
       return;
     }
     const errors = validateTestCaseFormInput(form, {

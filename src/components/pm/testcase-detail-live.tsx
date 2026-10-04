@@ -26,7 +26,9 @@ import {
   PageHeading,
 } from "@/components/biz";
 import { editFormFromTestCase } from "@/lib/testcase-form";
-import { canArchiveTestCase } from "@/lib/testcase-form";
+import { canArchiveTestCase, checkEditSubmitVeto } from "@/lib/testcase-form";
+import type { TestCaseFormInput } from "@/lib/testcase-form";
+import type { TestCaseResponse } from "@/lib/api/testCase-types";
 import {
   toUserMessage,
   useArchiveTestCase,
@@ -95,6 +97,14 @@ export function TestCaseDetailLive({
 
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  // 编辑快照：打开瞬间捕获记录，弹窗生命周期不依赖实时详情/归属查询。
+  // 否则弹窗打开后归属翻转（查询重取失败/项目被删/记录被移到其它项目），
+  // 挂载条件或前面的归属不符提前返回会直接卸载脏表单而不走 dirty check
+  //（codex P2 #1）。快照里的 projectId 在打开时已确认有效。
+  const [editSnapshot, setEditSnapshot] = useState<{
+    detail: TestCaseResponse;
+    projectId: number;
+  } | null>(null);
 
   if (detailQuery.isPending) {
     return (
@@ -119,15 +129,6 @@ export function TestCaseDetailLive({
   }
 
   const routeProjectId = routeProjectQuery.data;
-  if (
-    typeof routeProjectId === "number" &&
-    detail.projectId != null &&
-    detail.projectId !== routeProjectId
-  ) {
-    return (
-      <EmptyHint>{`测试用例 #${testCaseId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
-    );
-  }
   // 写操作区（编辑/复制/归档）只有在路由项目解析成功且与记录的
   // projectId 精确一致时才渲染。解析中/解析失败（无可用数据）时只读展示。
   // 注意：routeProjectQuery 的 data 与 queryKey 中的 projectKey 绑定，
@@ -146,6 +147,56 @@ export function TestCaseDetailLive({
   // 归档入口只允许 DRAFT/ACTIVE（后端 archiveTestCases 抛
   // "只有草稿或生效测试用例可以归档"，codex P2 #4）
   const canArchive = canWrite && canArchiveTestCase(detail.status);
+
+  // 打开编辑：只在写操作区可用时捕获快照（codex P2 #1）
+  const openEdit = () => {
+    if (!canWrite || detail.projectId == null) return;
+    setEditSnapshot({ detail, projectId: detail.projectId });
+    setEditOpen(true);
+  };
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditSnapshot(null);
+  };
+  // 弹窗打开后的提交复核（codex P2 #2/#3）：归属翻转 → 弹窗内持久错误；
+  // 实时状态变化（他人改状态/归档）→ 状态字段错误。草稿保留，不卸载。
+  const editSubmitVeto = (form: TestCaseFormInput) =>
+    checkEditSubmitVeto({
+      projectContextVerified,
+      liveStatus: detail.status,
+      formStatus: form.status,
+    });
+  const editDialog = editSnapshot ? (
+    // 编辑弹窗只在打开时挂载：表单快照在挂载瞬间捕获（dirty check 基线），
+    // 列表页同 key 模式（TestCaseListLive）。挂载后不再依赖实时详情/归属，
+    // 归属翻转或状态变化只影响提交复核，不卸载脏表单。
+    <TestCaseFormDialog
+      key={`detail-edit-${editSnapshot.detail.id}`}
+      open={editOpen}
+      projectId={editSnapshot.projectId}
+      mode="edit"
+      testCaseId={editSnapshot.detail.id}
+      editStatus={editSnapshot.detail.status}
+      submitVeto={editSubmitVeto}
+      initial={editFormFromTestCase(editSnapshot.detail)}
+      onClose={closeEdit}
+    />
+  ) : null;
+
+  if (
+    typeof routeProjectId === "number" &&
+    detail.projectId != null &&
+    detail.projectId !== routeProjectId
+  ) {
+    // 归属不符时整页只读，但已打开的编辑弹窗必须保留（快照挂载），
+    // 否则脏表单会被直接卸载而不走 dirty check（codex P2 #1）。
+    return (
+      <>
+        <EmptyHint>{`测试用例 #${testCaseId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
+        {editDialog}
+      </>
+    );
+  }
   const projectContextNotice = routeProjectQuery.isPending
     ? "正在确认项目归属，操作区稍后可用…"
     : detail.status === "ARCHIVED"
@@ -183,6 +234,13 @@ export function TestCaseDetailLive({
     if (archiveMutation.isPending) return;
     if (!projectContextVerified) {
       toast.error("项目归属已变化，无法提交。请刷新页面后重试。");
+      return;
+    }
+    // 确认框打开后状态可能已变化（如变为 REVIEW）：提交前按实时状态复核，
+    // 后端只允许 DRAFT/ACTIVE 归档（codex P2 #2）
+    if (!canArchiveTestCase(detail.status)) {
+      toast.error("用例状态已变化，当前不可归档。请刷新页面。");
+      setArchiveOpen(false);
       return;
     }
     const id = detail.id;
@@ -279,7 +337,7 @@ export function TestCaseDetailLive({
         <section aria-label="操作">
           <h2 className="type-emphasis mb-2">操作</h2>
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" size="sm" onPress={() => setEditOpen(true)}>
+            <Button variant="primary" size="sm" onPress={openEdit}>
               编辑
             </Button>
             <Button
@@ -306,24 +364,7 @@ export function TestCaseDetailLive({
         <p className="type-caption text-default-500">{projectContextNotice}</p>
       )}
 
-      {editOpen && detail.projectId != null ? (
-        // 编辑弹窗只在打开时挂载：表单快照在挂载瞬间捕获（dirty check 基线），
-        // 列表页同 key 模式（TestCaseListLive）
-        <TestCaseFormDialog
-          key={`detail-edit-${detail.id}`}
-          open
-          projectId={detail.projectId}
-          mode="edit"
-          testCaseId={detail.id}
-          editStatus={detail.status}
-          // 弹窗打开后归属翻转（查询重取失败/项目被删）时提交入口再次拦截（codex P2 #2）
-          submitVeto={() =>
-            projectContextVerified ? null : "项目归属已变化，无法提交。请刷新页面后重试。"
-          }
-          initial={editFormFromTestCase(detail)}
-          onClose={() => setEditOpen(false)}
-        />
-      ) : null}
+      {editDialog}
 
       {/* 归档确认框（老前端确认文案："归档后将不再出现在默认列表中，是否继续？"） */}
       <AppModal

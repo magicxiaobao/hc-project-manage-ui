@@ -27,7 +27,8 @@ import {
   PageHeading,
 } from "@/components/biz";
 import { editFormFromTestCase, emptyTestCaseFormInput } from "@/lib/testcase-form";
-import { canArchiveTestCase } from "@/lib/testcase-form";
+import { canArchiveTestCase, checkEditSubmitVeto } from "@/lib/testcase-form";
+import type { TestCaseFormInput } from "@/lib/testcase-form";
 import {
   toUserMessage,
   useArchiveTestCase,
@@ -138,6 +139,14 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
   const handleArchive = () => {
     if (archiveId === null || archiveMutation.isPending) return;
     const id = archiveId;
+    // 确认框打开后状态可能已变化（如变为 REVIEW）：提交前按实时列表状态复核，
+    // 后端只允许 DRAFT/ACTIVE 归档（codex P2 #2）
+    const liveStatus = listQuery.data?.list.find((item) => item.id === id)?.status;
+    if (liveStatus && !canArchiveTestCase(liveStatus)) {
+      toast.error("用例状态已变化，当前不可归档。请刷新列表。");
+      setArchiveId(null);
+      return;
+    }
     setArchiveId(null);
     archiveMutation.mutate(id, {
       onSuccess: () => {
@@ -148,6 +157,16 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
       },
     });
   };
+
+  // 编辑弹窗的提交复核：弹窗打开后他人改了状态，重取显示的新状态优先于
+  // 打开瞬间的快照；表单状态不在新状态的允许目标集合里时拒绝提交并在状态
+  // 下拉下方显示字段错误，草稿保留（codex P2 #2）
+  const editSubmitVeto = (form: TestCaseFormInput) =>
+    checkEditSubmitVeto({
+      projectContextVerified: true,
+      liveStatus: listQuery.data?.list.find((item) => item.id === editingCase?.id)?.status,
+      formStatus: form.status,
+    });
 
 
   return (
@@ -319,6 +338,7 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
           mode="edit"
           testCaseId={editingCase.id}
           editStatus={editingCase.status}
+          submitVeto={editSubmitVeto}
           initial={editFormFromTestCase(editingCase)}
           onClose={() => setEditingCase(null)}
         />

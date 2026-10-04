@@ -33,6 +33,7 @@ import {
   buildTestCaseCreatePayload,
   buildTestCaseUpdatePayload,
   canArchiveTestCase,
+  checkEditSubmitVeto,
   editFormFromTestCase,
   emptyTestCaseFormInput,
   validateTestCaseFormInput,
@@ -449,6 +450,70 @@ describe('状态机门控（忠实后端 TestCaseStatusEnum.canTransitionTo）',
     expect(canArchiveTestCase('ACTIVE')).toBe(true);
     expect(canArchiveTestCase('REVIEW')).toBe(false);
     expect(canArchiveTestCase('ARCHIVED')).toBe(false);
+  });
+});
+
+describe('checkEditSubmitVeto 提交前复核（codex run137 的 3 项 P2）', () => {
+  it('归属未验证 → 否决且不带字段（调用方走弹窗内持久错误通道）', () => {
+    const veto = checkEditSubmitVeto({
+      projectContextVerified: false,
+      liveStatus: 'DRAFT',
+      formStatus: 'DRAFT',
+    });
+    expect(veto).not.toBeNull();
+    expect(veto!.field).toBeUndefined();
+    expect(veto!.message).toContain('项目归属');
+  });
+
+  it('实时状态已归档 → 否决并指向 status 字段', () => {
+    const veto = checkEditSubmitVeto({
+      projectContextVerified: true,
+      liveStatus: 'ARCHIVED',
+      formStatus: 'DRAFT',
+    });
+    expect(veto).not.toBeNull();
+    expect(veto!.field).toBe('status');
+  });
+
+  it('弹窗打开后状态变为 ACTIVE，表单仍为 DRAFT → 否决（ACTIVE 不可回 DRAFT）', () => {
+    const veto = checkEditSubmitVeto({
+      projectContextVerified: true,
+      liveStatus: 'ACTIVE',
+      formStatus: 'DRAFT',
+    });
+    expect(veto).not.toBeNull();
+    expect(veto!.field).toBe('status');
+    expect(veto!.message).toContain('已变为');
+  });
+
+  it('弹窗打开后状态变为 REVIEW，表单为 DRAFT → 通过（REVIEW 允许 DRAFT）', () => {
+    expect(
+      checkEditSubmitVeto({
+        projectContextVerified: true,
+        liveStatus: 'REVIEW',
+        formStatus: 'DRAFT',
+      }),
+    ).toBeNull();
+  });
+
+  it('状态未变化 → 通过', () => {
+    expect(
+      checkEditSubmitVeto({
+        projectContextVerified: true,
+        liveStatus: 'DRAFT',
+        formStatus: 'REVIEW',
+      }),
+    ).toBeNull();
+  });
+
+  it('无实时状态可复核（记录已从列表消失）→ 不拦截，后端为最终兜底', () => {
+    expect(
+      checkEditSubmitVeto({
+        projectContextVerified: true,
+        liveStatus: undefined,
+        formStatus: 'DRAFT',
+      }),
+    ).toBeNull();
   });
 });
 
