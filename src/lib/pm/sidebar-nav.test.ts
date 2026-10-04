@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { chosenProjectKey, highlightedModule, moduleDestination, projectLayoutRemountKey } from "./sidebar-nav.ts";
+import { chosenProjectKey, highlightedModule, moduleDestination, projectKeyFromPath, projectLayoutRemountKey } from "./sidebar-nav.ts";
 
 const origin = (href: string) => ({ href, index: 0, focus: {}, scrollTop: 0, scrollLeft: 0 });
 
@@ -41,4 +41,14 @@ it("keeps a chosen project key that is still in the list", () => {
 
 it("falls back to the current project key when the chosen key is gone", () => {
   assert.equal(chosenProjectKey("GONE", [{ key: "HC" }], "HC"), "HC");
+});
+
+it("extracts the live project key from a /p/<key> path", () => {
+  assert.equal(projectKeyFromPath("/p/OPS2"), "OPS2");
+  assert.equal(projectKeyFromPath("/p/OPS2/issues"), "OPS2");
+  assert.equal(projectKeyFromPath("/p/OPS2/requirements/3"), "OPS2");
+  assert.equal(projectKeyFromPath("/p/OPS2?tab=1"), "OPS2");
+  assert.equal(projectKeyFromPath("/projects"), null);
+  assert.equal(projectKeyFromPath("/"), null);
+  assert.equal(projectKeyFromPath("/p/"), null);
 });

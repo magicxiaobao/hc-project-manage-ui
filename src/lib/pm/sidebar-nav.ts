@@ -33,6 +33,17 @@ export function highlightedModule(pathname: string, projectKey: string, origin: 
   return moduleFromProjectPath(pathname, projectKey);
 }
 
+/**
+ * Codex review 4175472566：登录态下从 URL 提取当前项目键。
+ * 演示项目的项目从 usePm().projects 查到时走完整演示导航；查不到（真实后
+ * 端项目）但路径是 /p/<key>/... 时，走仅含真实后端模块（项目首页/需求/
+ * 任务/追溯）的精简导航，而不是退回通用分支。
+ */
+export function projectKeyFromPath(pathname: string): string | null {
+  const match = /^\/p\/([^/?#]+)/.exec(barePath(pathname));
+  return match ? match[1] : null;
+}
+
 export function moduleDestination(module: SidebarModule, projectKey: string): string {
   return module === "board" ? `/p/${projectKey}` : `/p/${projectKey}/${module}`;
 }

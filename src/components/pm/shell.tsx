@@ -17,6 +17,7 @@ import {
 import { ContentSkeleton } from "@/components/biz/skeleton";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { bindPmPersistence, usePm } from "@/lib/pm/store";
+import { projectKeyFromPath } from "@/lib/pm/sidebar-nav";
 import type { Person } from "@/lib/pm/domain";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
@@ -46,6 +47,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const project = projects.find(
     (entry) => pathname === `/p/${entry.key}` || pathname.startsWith(`/p/${entry.key}/`),
   );
+  // Codex review 4175472566：登录态下真实后端项目的路径 /p/<key> 匹配不到演示
+  // 项目时，从 URL 取键交给侧栏渲染仅含真实后端模块的分支，而不是退回通用分支。
+  const liveProjectKey = isAuthenticated && !project ? projectKeyFromPath(pathname) : null;
   const unread = notices.filter((notice) => !notice.read).length;
   const [searchOpen, setSearchOpen] = useState(false);
   const goToItem = useGoToItem();
@@ -153,6 +157,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         project={project}
         projects={projects}
         itemOrigin={itemOrigin}
+        liveProjectKey={liveProjectKey}
         onClose={() => setNavOpen(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -174,7 +179,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <span className="min-w-0 truncate">
             {ready ? (
-              <span className="type-emphasis">{project ? project.name : "恒川"}</span>
+              <span className="type-emphasis">{project ? project.name : (liveProjectKey ?? "恒川")}</span>
             ) : (
               <Loading variant="inline" label="加载中" />
             )}

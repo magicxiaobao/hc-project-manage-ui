@@ -552,7 +552,12 @@ function TraceMatrixTab({ projectId, projectKey }: { projectId: number; projectK
                         }）`
                       : ""}
                   </span>
-                  {row.taskSummaries.length === 0 && row.testCaseSummaries.length === 0 && row.defectSummaries.length === 0 ? (
+                  {row.taskSummaries.length === 0 &&
+                  row.testCaseSummaries.length === 0 &&
+                  row.defectSummaries.length === 0 &&
+                  // Codex review 4175472565：版本证据也是关联对象的一种——有版
+                  // 本证据但无任务/用例/缺陷时，不能再报“无关联对象（覆盖缺口）”。
+                  row.versionEvidence.total === 0 ? (
                     <span className="text-warning">无关联对象（覆盖缺口）</span>
                   ) : null}
                 </div>

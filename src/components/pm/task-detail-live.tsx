@@ -120,10 +120,27 @@ export function TaskDetailLive({
     if (transitionTarget == null || task == null) return;
     const fromStatus = task.status;
     const toStatus = transitionTarget;
+    // Codex review 4175472573：先解析弹窗里填的执行人，再算原因规则——代操作
+    // 审计要求 actor ≠ assignee 时必填原因；用任务当前 assigneeId（未分配时为
+    // null）会漏判“开始时顺手把任务指派给他人”的场景。
+    const needsProposedAssignee = taskNeedsAssigneeConfirm(fromStatus, toStatus, task.assigneeId);
+    let proposedAssignee: number | null = null;
+    if (needsProposedAssignee) {
+      // Codex review 4175402481：执行人 ID 用严格的十进制正整数解析
+      // （Number("9007199254740993") 会四舍五入、"1e3"/"0x10" 也会被接受，
+      // 可能把请求发给错误的用户）。
+      const parsed = parseOptionalPositiveInt(assigneeInput);
+      if (parsed == null) {
+        setFormError("请填写执行人 ID（正整数）。");
+        return;
+      }
+      proposedAssignee = parsed;
+    }
+    const effectiveAssignee = proposedAssignee ?? task.assigneeId;
     const needsReason =
       taskNeedsReason(toStatus) ||
       taskNeedsReopenReason(fromStatus, toStatus) ||
-      taskNeedsActorReason(toStatus, task.assigneeId, actorId);
+      taskNeedsActorReason(toStatus, effectiveAssignee, actorId);
 
     const payload: TaskTransitionPayload = { taskId, status: toStatus };
     const trimmedReason = reason.trim();
@@ -133,20 +150,9 @@ export function TaskDetailLive({
     }
     if (trimmedReason) payload.reason = trimmedReason;
 
-    // 开始未分配任务：认领时一并确认执行人
-    if (toStatus === "IN_PROGRESS") {
-      const current = task.assigneeId;
-      if (taskNeedsAssigneeConfirm(fromStatus, toStatus, current)) {
-        // Codex review 4175402481：执行人 ID 用严格的十进制正整数解析
-        // （Number("9007199254740993") 会四舍五入、"1e3"/"0x10" 也会被接受，
-        // 可能把请求发给错误的用户）。
-        const parsed = parseOptionalPositiveInt(assigneeInput);
-        if (parsed == null) {
-          setFormError("请填写执行人 ID（正整数）。");
-          return;
-        }
-        payload.assigneeId = parsed;
-      }
+    // 开始未分配任务：认领时一并确认执行人（上方已解析并校验，直接复用）
+    if (proposedAssignee != null) {
+      payload.assigneeId = proposedAssignee;
     }
     // 完成：交付物可选填（后端 deliverables 缺省时取原因，至少要有原因/说明）
     if (toStatus === "COMPLETED") {
@@ -240,6 +246,13 @@ export function TaskDetailLive({
     : "当前无法确认该记录归属于此项目，操作区已禁用。";
   const targets = taskTransitionTargets(detail.status);
   const comments: CommentView[] = commentsQuery.data?.list ?? [];
+  // Codex review 4175472573：弹窗的原因必填标签要跟随用户在输入框里填的执行人
+  // 实时变化——输入他人 ID 时原因变为必填；输入非法/为空时回落到任务当前执行人。
+  const transitionShowAssignee =
+    transitionTarget != null && taskNeedsAssigneeConfirm(detail.status, transitionTarget, detail.assigneeId);
+  const transitionEffectiveAssignee = transitionShowAssignee
+    ? (parseOptionalPositiveInt(assigneeInput) ?? detail.assigneeId)
+    : detail.assigneeId;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
@@ -470,15 +483,17 @@ export function TaskDetailLive({
             reasonRequired={
               taskNeedsReason(transitionTarget) ||
               taskNeedsReopenReason(detail.status, transitionTarget) ||
-              taskNeedsActorReason(transitionTarget, detail.assigneeId, actorId)
+              // Codex review 4175472573：用弹窗里填的执行人（若已输入）算代操作
+              // 审计规则，而不是任务当前执行人。
+              taskNeedsActorReason(transitionTarget, transitionEffectiveAssignee, actorId)
             }
             assigneeInput={assigneeInput}
             onAssigneeInput={setAssigneeInput}
             // Codex review 4175337103：只有未分配 TODO 开始时执行人输入才会被提交
             //（submitTransition 仅 taskNeedsAssigneeConfirm 时读值）；其余流转隐藏该
             // 字段，避免“填了却被静默忽略”的误导。
-            showAssignee={taskNeedsAssigneeConfirm(detail.status, transitionTarget, detail.assigneeId)}
-            assigneeRequired={taskNeedsAssigneeConfirm(detail.status, transitionTarget, detail.assigneeId)}
+            showAssignee={transitionShowAssignee}
+            assigneeRequired={transitionShowAssignee}
             showDeliverables={transitionTarget === "COMPLETED"}
             deliverables={deliverables}
             onDeliverables={setDeliverables}

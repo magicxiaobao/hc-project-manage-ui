@@ -184,7 +184,20 @@ function RequirementPicker({
           ))}
         </div>
       ) : null}
-      <div className="flex gap-2">
+      {/*
+        注意：此处也不能让回车冒泡到外层任务表单。直输 ID 栏不在上面的回车拦截
+        包裹范围内（Codex 4175472569）：任务必填字段已填好时在此按回车，会绕过
+        addByIds 直接提交整单、丢掉刚输入的 ID。回车即按“添加”处理。
+      */}
+      <div
+        className="flex gap-2"
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            addByIds();
+          }
+        }}
+      >
         <div className="flex-1">
           <TextField value={idInput} onChange={setIdInput} aria-label="按 ID 直接添加需求">
             <Input placeholder="按 ID 直接添加，逗号分隔，如 12,34" />

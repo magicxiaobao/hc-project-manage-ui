@@ -118,6 +118,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const refreshToken = readStorage(REFRESH_TOKEN_STORAGE_KEY);
     const user = getPersistedUser();
     if (token && refreshToken && user) {
+      // Codex review 4175472562：另一个 tab 可能把本 tab 的持久会话替换成了另
+      // 一个账号——hydrate 用 localStorage 的用户覆盖内存态时若不作废查询缓存，
+      // 新账号会直接命中旧账号的缓存（query key 不携带用户身份，login/logout
+      // 的清理走不到这条路径）。只在“内存已有用户且身份发生变化”时清缓存：
+      // 正常刷新恢复（内存无用户）无需清理，登出已在 logout/invalidate 里清过。
+      const prevUser = get().user;
+      if (prevUser && prevUser.userId !== user.userId) {
+        // 顺带递增会话代际：丢弃旧会话在途的 token 刷新结果，防止它覆盖新账号凭证。
+        sessionGeneration += 1;
+        clearQueryCache();
+      }
       set({ user, token, isAuthenticated: true });
       return;
     }

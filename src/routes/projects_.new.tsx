@@ -79,6 +79,10 @@ function LiveCreateProject() {
   const [keyExists, setKeyExists] = useState<boolean | null>(null);
   const [checkingKey, setCheckingKey] = useState(false);
   const [formError, setFormError] = useState("");
+  // Codex review 4175472567：提交按钮只在 mutation 开始后才禁用，唯一性预检
+  // 在途时表单仍可编辑/重复提交——两个 handler 可能各自通过检查、建出两个项目。
+  // submitting 覆盖“预检 + 创建”整个异步操作，锁住期间禁止再次提交。
+  const [submitting, setSubmitting] = useState(false);
   // Codex review 4175265689：可用性检查是异步的，过期的响应不能覆盖新输入
   // 的状态。每次检查递增代际，只有最新一次请求的响应才允许写回。
   const keyCheckGeneration = useRef(0);
@@ -131,6 +135,7 @@ function LiveCreateProject() {
       return;
     }
     setFormError("");
+    setSubmitting(true);
     try {
       // 提交前再确认一次唯一性，堵住失焦校验与提交之间的竞态
       if (await projectApi.checkKeyExists(key)) {
@@ -151,6 +156,8 @@ function LiveCreateProject() {
       void navigate({ to: "/projects" });
     } catch (error) {
       toast.error(toUserMessage(error, "创建项目失败"));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -211,9 +218,9 @@ function LiveCreateProject() {
           <Button
             type="submit"
             variant="primary"
-            isDisabled={createProject.isPending || keyExists === true}
+            isDisabled={submitting || createProject.isPending || keyExists === true}
           >
-            {createProject.isPending ? "创建中…" : "创建"}
+            {submitting || createProject.isPending ? "创建中…" : "创建"}
           </Button>
           <Button type="button" variant="outline" onPress={() => void navigate({ to: "/projects" })}>
             取消
