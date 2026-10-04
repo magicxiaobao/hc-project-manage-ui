@@ -12,7 +12,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
-import { clampPageToTotal } from "@/lib/pagination";
+import { shouldClampPage } from "@/lib/pagination";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, SeverityChip, StatusChip } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
 import { priorityLabel } from "@/lib/pm/domain";
@@ -85,11 +85,9 @@ export function DefectListLive({ projectId }: { projectId: number }) {
   // 注意：只在当前页请求完成后钳制——isSuccess 为 true 但 isFetching 仍为 true 时，
   // 返回的是失效缓存（旧 total），此时钳制会把用户错误拉回上一页（Codex round-2 复现）。
   useEffect(() => {
-    if (listQuery.isSuccess && !listQuery.isFetching) {
-      const clamped = clampPageToTotal(page, total, PAGE_SIZE);
-      if (clamped !== null) setPage(clamped);
-    }
-  }, [listQuery.isSuccess, listQuery.isFetching, page, total, totalPages]);
+    const clamped = shouldClampPage(listQuery.isSuccess, listQuery.isFetching, page, total, PAGE_SIZE);
+    if (clamped !== null) setPage(clamped);
+  }, [listQuery.isSuccess, listQuery.isFetching, page, total]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">

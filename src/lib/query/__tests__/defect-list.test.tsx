@@ -31,7 +31,7 @@ import {
   parseIdListText,
   validateDefectCreateInput,
 } from '../../defect-create';
-import { clampPageToTotal } from '../../pagination';
+import { clampPageToTotal, shouldClampPage } from '../../pagination';
 
 function defect(overrides: Partial<DefectResponse>): DefectResponse {
   return {
@@ -276,6 +276,18 @@ describe('defect-create 表单纯函数', () => {
     expect(clampPageToTotal(1, 20, 20)).toBeNull();
     expect(clampPageToTotal(2, 21, 20)).toBeNull();
     expect(clampPageToTotal(2, 0, 20)).toBe(1);
+  });
+
+  it('shouldClampPage：重取中不钳制（回归：删掉 !isFetching 守卫此用例会红）', () => {
+    // 结算后越界 → 钳制
+    expect(shouldClampPage(true, false, 2, 20, 20)).toBe(1);
+    // 重取中（isSuccess=true、isFetching=true，旧 total）→ 不钳制
+    expect(shouldClampPage(true, true, 2, 20, 20)).toBeNull();
+    // 未成功 → 不钳制
+    expect(shouldClampPage(false, false, 2, 20, 20)).toBeNull();
+    expect(shouldClampPage(false, true, 2, 20, 20)).toBeNull();
+    // 范围内 → 不钳制
+    expect(shouldClampPage(true, false, 1, 20, 20)).toBeNull();
   });
 });
 
