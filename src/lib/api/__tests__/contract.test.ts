@@ -1456,38 +1456,22 @@ describe('缺陷契约（P2）', () => {
   });
 
   it('GET /defect/v1/board，返回分组缺陷与看板列', async () => {
-    // 后端列配置：十列恒存在，id 为 `status-${status}`；defectsByStatus 仅含出现过的状态键
-    const statuses = [
-      'NEW',
-      'ASSIGNED',
-      'IN_PROGRESS',
-      'PENDING_VERIFICATION',
-      'RESOLVED',
-      'CLOSED',
-      'REOPEN',
-      'REJECTED',
-      'VERIFIED',
-      'TESTING',
+    // 后端列配置忠实于 DefectBoardColumnCatalog：十列恒存在，按生命周期顺序排列，
+    // id 为 `status-${status}`；defectsByStatus 仅含出现过的状态键（空项目为空对象）
+    const columnsSpec = [
+      ['NEW', '新建', '#faad14'],
+      ['ASSIGNED', '已分配', '#13c2c2'],
+      ['IN_PROGRESS', '处理中', '#1890ff'],
+      ['PENDING_VERIFICATION', '待验证', '#faad14'],
+      ['TESTING', '测试中', '#722ed1'],
+      ['RESOLVED', '已解决', '#52c41a'],
+      ['VERIFIED', '已验证', '#52c41a'],
+      ['CLOSED', '已关闭', '#8c8c8c'],
+      ['REOPEN', '重新打开', '#fa8c16'],
+      ['REJECTED', '已拒绝', '#ff4d4f'],
     ] as const;
-    const labels: Record<string, string> = {
-      NEW: '新建',
-      ASSIGNED: '已分配',
-      IN_PROGRESS: '处理中',
-      PENDING_VERIFICATION: '待验证',
-      RESOLVED: '已解决',
-      CLOSED: '已关闭',
-      REOPEN: '重新打开',
-      REJECTED: '已拒绝',
-      VERIFIED: '已验证',
-      TESTING: '测试中',
-    };
-    const columns = statuses.map((s) => ({
-      id: `status-${s}`,
-      name: labels[s],
-      status: s,
-      color: '#999',
-      count: s === 'NEW' ? 1 : 0,
-    }));
+    const buildColumns = (counts: Record<string, number>) =>
+      columnsSpec.map(([s, name, color]) => ({ id: `status-${s}`, name, status: s, color, count: counts[s] ?? 0 }));
     const fetchMock = mockFetchSequence([
       {
         body: {
@@ -1495,7 +1479,7 @@ describe('缺陷契约（P2）', () => {
           msg: 'ok',
           result: {
             defectsByStatus: { NEW: [{ id: 301, title: '登录按钮无响应' }] },
-            columns,
+            columns: buildColumns({ NEW: 1 }),
           },
         },
       },
@@ -1503,19 +1487,24 @@ describe('缺陷契约（P2）', () => {
         body: {
           code: 1,
           msg: 'ok',
-          result: { defectsByStatus: {}, columns },
+          result: { defectsByStatus: {}, columns: buildColumns({}) },
         },
       },
     ]);
     const board = await defectApi.getDefectBoardData(7);
-    await defectApi.getDefectBoardData();
+    const emptyBoard = await defectApi.getDefectBoardData();
 
     // 消费端按 Partial 处理：存在的键用 ?? []，缺席的键为 undefined
     expect((board.defectsByStatus.NEW ?? [])[0].id).toBe(301);
     expect(board.defectsByStatus.CLOSED).toBeUndefined();
     expect(board.columns).toHaveLength(10);
-    expect(board.columns[0]).toEqual({ id: 'status-NEW', name: '新建', status: 'NEW', color: '#999', count: 1 });
+    expect(board.columns[0]).toEqual({ id: 'status-NEW', name: '新建', status: 'NEW', color: '#faad14', count: 1 });
+    expect(board.columns.map((c) => c.status)).toEqual(columnsSpec.map(([s]) => s));
     expect(board.columns.find((c) => c.status === 'CLOSED')?.count).toBe(0);
+    // 空分组：defectsByStatus 为空对象，十列仍完整且计数全零
+    expect(emptyBoard.defectsByStatus).toEqual({});
+    expect(emptyBoard.columns).toHaveLength(10);
+    expect(emptyBoard.columns.every((c) => c.count === 0)).toBe(true);
     const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url0).toBe('/api/defect/v1/board?projectId=7');
     expect(init0.method).toBe('GET');
