@@ -560,8 +560,12 @@ export function TestRunDetailLive({
         )}
       </section>
 
-      {/* 测试报告：只读聚合视图（P2：p2-testrun-report），默认折叠、展开后才请求 */}
-      <TestRunReportSection testRunId={testRunId} projectKey={projectKey} />
+      {/* 测试报告：只读聚合视图（P2：p2-testrun-report），默认折叠、展开后才请求。
+          仅 COMPLETED 轮可生成报告（后端 GET /testRun/v1/{id}/report 对非 COMPLETED
+          抛 TestRunTransitionIllegal），其它状态不渲染入口。 */}
+      {run.status === "COMPLETED" ? (
+        <TestRunReportSection testRunId={testRunId} projectKey={projectKey} />
+      ) : null}
 
       {dialogs}
     </div>
