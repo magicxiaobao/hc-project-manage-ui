@@ -274,9 +274,14 @@ export function DefectCreateDialog({
   };
 
   return (
-    <AppModal open={open} title="新建缺陷" onClose={close} size="lg">
+    <>
+      {/*
+        blocker 必须独立于 AppModal 挂载：弹窗关闭（提交成功）不能卸载一个正在
+        等待用户作答的路由拦截，否则那次导航会永远挂起（P2）。
+      */}
       {blocker}
-      {dialog}
+      <AppModal open={open} title="新建缺陷" onClose={close} size="lg">
+        {dialog}
       <div className="flex flex-col gap-4">
         <div>
           <TextField value={form.title} onChange={(next) => set({ title: next })} aria-label="标题">
@@ -388,6 +393,7 @@ export function DefectCreateDialog({
           </Button>
         </div>
       </div>
-    </AppModal>
+      </AppModal>
+    </>
   );
 }

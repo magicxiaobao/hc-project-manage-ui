@@ -77,6 +77,21 @@ function RouteBlocker({ shouldBlockFn }: { shouldBlockFn: () => boolean }) {
   // enableBeforeUnload 复用 shouldBlockFn：markClean()/确认放弃后的 ref 级放行
   // 同样作用于刷新/关标签页，避免"已确认离开却仍弹原生确认框"。
   const blocker = useBlocker({ shouldBlockFn, enableBeforeUnload: shouldBlockFn, withResolver: true });
+  const blockerRef = useRef(blocker);
+  useEffect(() => {
+    blockerRef.current = blocker;
+  });
+  // P2：卸载时若仍有待决的离开导航，必须显式结束它。useBlocker 的卸载清理只会
+  // 注销 history.block，不会解决已创建的 resolver Promise——否则那次导航会永远
+  // 挂起（复现：提交在途时按浏览器后退→确认框暂不作答→请求成功关闭弹窗）。
+  // 能走到卸载说明宿主已因提交成功/确认放弃而关闭，数据无丢失风险，直接放行，
+  // 即尊重用户最初的离开意图。
+  useEffect(() => {
+    return () => {
+      const pending = blockerRef.current;
+      if (pending.status === "blocked") pending.proceed?.();
+    };
+  }, []);
   if (blocker.status !== "blocked") return null;
   return (
     <DiscardConfirmDialog

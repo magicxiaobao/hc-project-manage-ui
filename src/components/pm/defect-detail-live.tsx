@@ -432,7 +432,6 @@ export function DefectDetailLive({
         size="lg"
         onClose={requestEditClose}
       >
-        {editBlocker}
         {editGuardDialog}
         {editForm != null ? (
           <div className="flex flex-col gap-4">
@@ -531,6 +530,11 @@ export function DefectDetailLive({
           </div>
         ) : null}
       </AppModal>
+      {/*
+        editBlocker 必须独立于编辑弹窗挂载：弹窗关闭（保存成功）不能卸载一个
+        正在等待用户作答的路由拦截，否则那次导航会永远挂起（P2）。
+      */}
+      {editBlocker}
 
       <AppModal
         open={severityOpen}
