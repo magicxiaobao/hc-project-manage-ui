@@ -159,6 +159,13 @@ export function TestSuiteDetailLive({
     if (clamped !== null) setLinkedPage(clamped);
   }, [linkedQuery.isSuccess, linkedQuery.isFetching, linkedPage, linkedTotal]);
   const candidateTotal = candidateQuery.data?.total ?? 0;
+  const candidateTotalPages = Math.max(1, Math.ceil(candidateTotal / CANDIDATE_PAGE_SIZE));
+  // 候选空态口径（codex r7 P2-1）：后端分页是项目用例全量口径（含已归属本套件的），
+  // 前端只展示可添加的。空态文案必须区分"全局空"与"本页空"，否则与分页条自相矛盾：
+  // 只有单页且本页全部被过滤时，才能断言"本项目没有可添加的用例"；多页场景下
+  // 本页为空只说明本页无可添加用例（其它页可能有），末页为空亦然。
+  const candidateSinglePageAllLinked =
+    candidateTotal > 0 && candidateTotal <= CANDIDATE_PAGE_SIZE && candidates.length === 0;
   useEffect(() => {
     const clamped = shouldClampPage(
       candidateQuery.isSuccess,
@@ -530,7 +537,11 @@ export function TestSuiteDetailLive({
           <EmptyHint>
             {appliedTitle
               ? `没有标题包含「${appliedTitle}」的可添加用例。`
-              : "本项目没有可添加的用例（全部已归属本套件）。"}
+              : candidateTotal === 0
+                ? "本项目还没有任何用例。"
+                : candidateSinglePageAllLinked
+                  ? "本项目没有可添加的用例（全部已归属本套件）。"
+                  : "本页暂无可添加用例，请尝试翻页或调整搜索条件。"}
           </EmptyHint>
         ) : null}
         {candidateQuery.isSuccess && candidates.length > 0 ? (
@@ -564,8 +575,7 @@ export function TestSuiteDetailLive({
         {candidateQuery.isSuccess && candidateTotal > CANDIDATE_PAGE_SIZE ? (
           <div className="mt-2 flex items-center justify-between gap-3">
             <span className="type-meta">
-              共 {candidateTotal} 条 · 第 {candidatePage} /{" "}
-              {Math.max(1, Math.ceil(candidateTotal / CANDIDATE_PAGE_SIZE))} 页
+              共 {candidateTotal} 条项目用例 · 第 {candidatePage} / {candidateTotalPages} 页
             </span>
             <div className="flex gap-2">
               <Button
@@ -579,7 +589,7 @@ export function TestSuiteDetailLive({
               <Button
                 size="sm"
                 variant="ghost"
-                isDisabled={candidatePage >= Math.ceil(candidateTotal / CANDIDATE_PAGE_SIZE)}
+                isDisabled={candidatePage >= candidateTotalPages}
                 onPress={() => setCandidatePage((current) => current + 1)}
               >
                 下一页
