@@ -70,13 +70,13 @@ export function useDefectStatusOptions() {
  * 缺陷看板数据：走 GET /defect/v1/board?projectId=（全量，非分页），
  * 返回 defectsByStatus（按状态分组，空状态键缺失，消费端按 Partial 处理）与
  * columns（后端 DefectBoardColumnCatalog 给出的十列顺序/中文名/颜色）。
- * projectId 无效时 disabled（看板始终按项目过滤）。
+ * projectId 无效（非正整数）时 disabled（看板始终按项目过滤）。
  */
 export function useDefectBoard(projectId: number | null | undefined) {
   return useQuery({
     queryKey: queryKeys.defect.board(projectId ?? null),
     queryFn: (): Promise<DefectBoardResponse> => defectApi.getDefectBoardData(projectId as number),
-    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+    enabled: typeof projectId === 'number' && Number.isInteger(projectId) && projectId > 0,
   });
 }
 
@@ -89,7 +89,7 @@ export function useDefectStatistics(projectId: number | null | undefined) {
   return useQuery({
     queryKey: queryKeys.defect.statistics(projectId ?? null),
     queryFn: (): Promise<DefectStatisticsResponse> => defectApi.getDefectStatistics(projectId as number),
-    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+    enabled: typeof projectId === 'number' && Number.isInteger(projectId) && projectId > 0,
   });
 }
 

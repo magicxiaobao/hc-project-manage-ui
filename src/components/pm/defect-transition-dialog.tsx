@@ -14,7 +14,7 @@
  * - 成功后经 useUpdateDefectStatus 的 onSuccess 失效缺陷域+需求域缓存，
  *   看板/列表/详情数据一致
  */
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
 import { AppModal, OptionSelect } from "@/components/biz";
@@ -68,8 +68,10 @@ export function DefectTransitionDialog({
   const [actorInput, setActorInput] = useState("");
   const [transitionError, setTransitionError] = useState<string | null>(null);
 
-  // 每次打开重置表单（拖拽到不同列/换卡片重开时不残留上次输入）
-  useEffect(() => {
+  // 每次打开重置表单（拖拽到不同列/换卡片重开时不残留上次输入）。
+  // 用 useLayoutEffect 而非 useEffect：在绘制前同步清空，避免重开首帧闪现旧输入
+  // （原内联实现在打开前同步重置，抽取后必须保持同等语义）。
+  useLayoutEffect(() => {
     if (open) {
       transitionMutation.reset();
       setPickedTarget(target);
@@ -172,7 +174,13 @@ export function DefectTransitionDialog({
                 label: defectTransitionLabel(fromStatus, toStatus, statusLabelOf),
               })),
             ]}
-            onChange={(next) => setPickedTarget(next ? (next as DefectStatus) : null)}
+            onChange={(next) => {
+              // 目标切换时清空执行人输入与错误：actorInput 是目标相关的
+              // （assignee/tester/verifier），沿用旧值会串味成错误的人
+              setPickedTarget(next ? (next as DefectStatus) : null);
+              setActorInput("");
+              setTransitionError(null);
+            }}
           />
         ) : null}
         {transitionActor === "verifier" ? (

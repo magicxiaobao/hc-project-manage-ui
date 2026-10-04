@@ -25,9 +25,11 @@ import {
   DragOverlay,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -50,10 +52,22 @@ import type {
   DefectStatus,
 } from "@/lib/api/defect-types";
 import { DefectTransitionDialog } from "@/components/pm/defect-transition-dialog";
+import { cardDndId, columnDndId, resolveBoardDropTarget } from "@/lib/defect-board";
 
-/** dnd id 前缀：卡片 `card:<id>`、列 `column:<DefectStatus>`（互不碰撞） */
-const cardDndId = (id: number) => `card:${id}`;
-const columnDndId = (status: string) => `column:${status}`;
+/**
+ * 看板碰撞检测：优先命中指针所在的列容器。
+ * 空列/列顶部空白处只有列级 droppable，若只用 closestCorners，高列短卡片场景下
+ * 源卡片的角距离可能小于相邻空列，合法跨列拖放会被误判为"同列不动作"吞掉
+ * （Codex 本地评审 P2）。列内本就无排序语义，命中列即解析为该列状态；
+ * 指针不在任何列内（如列间缝隙）时回退 closestCorners。
+ */
+const boardCollisionDetection: CollisionDetection = (args) => {
+  const columnCollision = pointerWithin(args).find((collision) =>
+    String(collision.id).startsWith("column:"),
+  );
+  if (columnCollision) return [columnCollision];
+  return closestCorners(args);
+};
 
 interface TransitionRequest {
   defectId: number;
@@ -108,7 +122,11 @@ function DefectBoardCard({
   projectKey: string;
   onTransition: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  // 注意：只展开 listeners，不展开 attributes——attributes 含 role="button"/tabIndex，
+  // 会让包着详情 <Link> 的 span 变成"可聚焦的假按钮"（键盘 Enter 无效、SR 朗读的
+  // 键盘拖拽指令实际不存在，且形成交互元素嵌套）。手柄仅做指针拖拽，键盘入口为
+  // 卡片「流转」按钮（弹窗内选目标）。
+  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cardDndId(defect.id),
   });
   return (
@@ -126,12 +144,10 @@ function DefectBoardCard({
       >
         <div className="flex items-start gap-1.5">
           <span className="type-caption shrink-0 text-default-400">#{defect.id}</span>
-          {/* 拖拽手柄：仅标题行可拖，避免与链接/按钮点击冲突 */}
+          {/* 拖拽手柄：仅标题行可拖，避免与链接/按钮点击冲突（仅指针拖拽） */}
           <span
-            {...attributes}
             {...listeners}
             className="min-w-0 flex-1 cursor-grab touch-none"
-            aria-label="拖拽移动缺陷"
           >
             <Link
               to="/p/$projectKey/defects/$defectId"
@@ -174,6 +190,7 @@ function DefectBoardColumnView({
   const { setNodeRef, isOver } = useDroppable({ id: columnDndId(column.status) });
   return (
     <section
+      ref={setNodeRef}
       aria-label={`${column.name}列`}
       data-board-column={column.status}
       className={`flex h-full w-72 max-w-full shrink-0 flex-col rounded-sm bg-line/70 px-2 pt-2 md:w-auto md:min-w-56 md:flex-1 ${
@@ -191,7 +208,7 @@ function DefectBoardColumnView({
         </h2>
         <span className="type-caption">{cards.length}</span>
       </header>
-      <div ref={setNodeRef} className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
+      <div className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
         {cards.length === 0 ? (
           <div className="type-caption px-2 py-6 text-center">这一列暂无缺陷</div>
         ) : null}
@@ -267,13 +284,7 @@ export function DefectBoardLive({ projectId, projectKey }: { projectId: number; 
     if (!defect) return;
 
     const overId = event.over ? String(event.over.id) : "";
-    let targetStatus: DefectStatus | null = null;
-    if (overId.startsWith("column:")) {
-      targetStatus = overId.slice("column:".length) as DefectStatus;
-    } else if (overId.startsWith("card:")) {
-      const overDefect = byId.get(Number(overId.slice("card:".length)));
-      targetStatus = overDefect?.status ?? null;
-    }
+    const targetStatus = resolveBoardDropTarget(overId, (cardId) => byId.get(cardId)?.status);
     if (targetStatus == null) return;
     if (targetStatus === defect.status) return; // 同列内拖拽：后端无排序语义，不动作
 
@@ -322,7 +333,7 @@ export function DefectBoardLive({ projectId, projectKey }: { projectId: number; 
       {boardQuery.isSuccess && (board?.columns.length ?? 0) > 0 ? (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={boardCollisionDetection}
           onDragStart={(event: DragStartEvent) => {
             const id = String(event.active.id);
             setActiveCardId(id.startsWith("card:") ? Number(id.slice("card:".length)) : null);
@@ -362,6 +373,7 @@ export function DefectBoardLive({ projectId, projectKey }: { projectId: number; 
 
       {transition != null ? (
         <DefectTransitionDialog
+          key={transition.defectId}
           defectId={transition.defectId}
           fromStatus={transition.fromStatus}
           target={transition.target}

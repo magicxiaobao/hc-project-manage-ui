@@ -16,6 +16,7 @@ import { queryKeys } from '../keys';
 import { useDefectBoard, useDefectStatistics } from '../hooks/useDefects';
 import { api } from '../../api/client';
 import { defectApi } from '../../api/defect';
+import { resolveBoardDropTarget } from '../../defect-board';
 import type {
   DefectBoardResponse,
   DefectResponse,
@@ -158,5 +159,62 @@ describe('useDefectStatistics 统计接口', () => {
     expect(html).toContain('pending:true');
     expect(html).toContain('fetch:idle');
     expect(getSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('projectId 门控收紧（Codex 本地评审 NOTE：0/负数/小数亦 disabled）', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])('useDefectBoard(%s) → 不发起请求', (projectId) => {
+    const getSpy = vi.spyOn(api, 'get').mockResolvedValue(boardResponse());
+    function Smoke() {
+      const { fetchStatus } = useDefectBoard(projectId);
+      return <div>{`fetch:${fetchStatus}`}</div>;
+    }
+    const html = renderToString(
+      <QueryClientProvider client={createQueryClient()}>
+        <Smoke />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('fetch:idle');
+    expect(getSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -3, 2.5])('useDefectStatistics(%s) → 不发起请求', (projectId) => {
+    const getSpy = vi.spyOn(api, 'get').mockResolvedValue(statisticsResponse());
+    function Smoke() {
+      const { fetchStatus } = useDefectStatistics(projectId);
+      return <div>{`fetch:${fetchStatus}`}</div>;
+    }
+    const html = renderToString(
+      <QueryClientProvider client={createQueryClient()}>
+        <Smoke />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('fetch:idle');
+    expect(getSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveBoardDropTarget 拖放落点解析（Codex 本地评审 P2 回归）', () => {
+  const statusOfCard = (cardId: number) =>
+    ({ 11: 'NEW', 22: 'IN_PROGRESS' })[cardId] as 'NEW' | 'IN_PROGRESS' | undefined;
+
+  it('列命中 → 该列状态（含空列）', () => {
+    expect(resolveBoardDropTarget('column:VERIFIED', statusOfCard)).toBe('VERIFIED');
+    expect(resolveBoardDropTarget('column:CLOSED', statusOfCard)).toBe('CLOSED');
+  });
+
+  it('卡片命中 → 该卡片当前状态', () => {
+    expect(resolveBoardDropTarget('card:11', statusOfCard)).toBe('NEW');
+    expect(resolveBoardDropTarget('card:22', statusOfCard)).toBe('IN_PROGRESS');
+  });
+
+  it('未知卡片 / 未知前缀 → null（无合法落点，不动作）', () => {
+    expect(resolveBoardDropTarget('card:999', statusOfCard)).toBeNull();
+    expect(resolveBoardDropTarget('', statusOfCard)).toBeNull();
+    expect(resolveBoardDropTarget('other:x', statusOfCard)).toBeNull();
   });
 });
