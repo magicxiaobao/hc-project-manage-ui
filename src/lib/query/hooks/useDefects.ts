@@ -205,13 +205,31 @@ export function useUpdateDefectStatus() {
 /**
  * 重新评定缺陷严重度：走 POST /defect/v1/{defectId}/severity（CAS 命令，
  * expectedSeverity 为客户端已读取的旧值，远端已变更时后端拒绝并经
- * toUserMessage 展示，调用方应重试）。
+ * toUserMessage 展示）。
+ *
+ * mutation options 抽为纯函数以便独立测试 onError 行为。
  */
-export function useChangeDefectSeverity() {
-  const queryClient = useQueryClient();
-  return useMutation({
+export function buildChangeDefectSeverityOptions(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  return {
     mutationFn: ({ defectId, data }: { defectId: number; data: DefectSeverityChangePayload }) =>
       defectApi.changeSeverity(defectId, data),
     onSuccess: () => invalidateDefectDomain(queryClient),
-  });
+    onError: (
+      _error: unknown,
+      variables: { defectId: number; data: DefectSeverityChangePayload },
+    ) => {
+      // CAS 冲突（业务码 10035）后必须回取最新严重度，否则页面内再次提交
+      // 必然重复冲突；弹窗文案「请刷新后重试」依赖的就是这次失效
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.defect.detail(variables.defectId),
+      });
+    },
+  };
+}
+
+export function useChangeDefectSeverity() {
+  const queryClient = useQueryClient();
+  return useMutation(buildChangeDefectSeverityOptions(queryClient));
 }

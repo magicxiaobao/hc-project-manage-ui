@@ -7,10 +7,17 @@
  *   （忠实于后端 DefectStateMachineConfig 拓扑，老前端 DEFECT_TRANSITIONS_BY_STATUS
  *   镜像一致；非法流转由后端状态机拒绝并经 toUserMessage 展示），
  *   执行 POST /defect/v1/updateStatus；指派边（→ASSIGNED/→NEW）必需处理人 ID，
- *   →TESTING 必需测试人 ID，→VERIFIED 必需验证人 ID，
+ *   →TESTING 必需测试人 ID，
+ *   →VERIFIED 的验证人恒为当前登录者（后端 DefectStateMachineServiceProvider
+ *   在 VERIFY 事件上用 operatorId 覆盖 verifierId；请求仍需携带 verifierId
+ *   以通过 transitionDefect 的 requireVerifier fail-fast，此处取当前登录用户 ID，
+ *   与老前端 actorId 语义一致，不再要求手填），
  *   →REJECTED/→REOPEN/→CLOSED/→PENDING_VERIFICATION/→RESOLVED
  *   以及 TESTING→IN_PROGRESS（返回开发）必需原因（最长 500 字符）
- * - 编辑：POST /defect/v1/updateDefect（严重度与状态流转不在此入口）
+ * - 编辑：POST /defect/v1/updateDefect（严重度与状态流转不在此入口）。
+ *   空文本按后端 null-skip 语义转为 null（= 保留原值，不清空；后端目前
+ *   不支持通过编辑清空字段）。附件（attachments）不读不写：P2 明确排除附件
+ *   操作，写回已读旧值会覆盖并发附件变更。
  * - 严重度重定级：POST /defect/v1/{defectId}/severity（CAS 命令，
  *   expectedSeverity 为当前已读取值，原因必填 1～500 字符）
  *
@@ -34,7 +41,13 @@ import {
 } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
 import { priorityLabel, statusLabel } from "@/lib/pm/domain";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { parseOptionalPositiveInt } from "@/lib/task-create";
+import {
+  buildDefectUpdatePayload,
+  editFormFromDefect,
+} from "@/lib/defect-detail";
+import type { DefectEditFormInput } from "@/lib/defect-detail";
 import {
   defectNeedsActor,
   defectNeedsReason,
@@ -53,7 +66,6 @@ import {
   DEFECT_SEVERITIES,
 } from "@/lib/api/defect-types";
 import type {
-  DefectResponse,
   DefectSeverity,
   DefectStatus,
   DefectTransitionPayload,
@@ -113,40 +125,6 @@ function TextBlock({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-interface DefectEditForm {
-  title: string;
-  description: string;
-  defectType: string;
-  priority: string;
-  reporterId: string;
-  foundDate: string;
-  estimatedFixDate: string;
-  reproductionSteps: string;
-  expectedResult: string;
-  actualResult: string;
-  environment: string;
-  attachments: string;
-  tags: string;
-}
-
-function editFormFrom(detail: DefectResponse): DefectEditForm {
-  return {
-    title: detail.title ?? "",
-    description: detail.description ?? "",
-    defectType: detail.defectType ?? "",
-    priority: detail.priority ?? "",
-    reporterId: detail.reporterId != null ? String(detail.reporterId) : "",
-    foundDate: detail.foundDate ?? "",
-    estimatedFixDate: detail.estimatedFixDate ?? "",
-    reproductionSteps: detail.reproductionSteps ?? "",
-    expectedResult: detail.expectedResult ?? "",
-    actualResult: detail.actualResult ?? "",
-    environment: detail.environment ?? "",
-    attachments: detail.attachments ?? "",
-    tags: detail.tags ?? "",
-  };
-}
-
 export function DefectDetailLive({
   defectId,
   projectKey,
@@ -161,6 +139,13 @@ export function DefectDetailLive({
   // 上下文里展示并允许操作其它项目的缺陷。解析中/解析失败时不误判。
   const routeProjectQuery = useProjectIdByKey(projectKey);
 
+  // →VERIFIED 的验证人恒为当前登录者：后端在 VERIFY 事件上用 operatorId
+  // 覆盖请求里的 verifierId，但 transitionDefect 的 requireVerifier 仍要求
+  // 请求携带 verifierId（fail-fast）。此处取当前登录用户 ID（与老前端
+  // actorId 语义一致），不再要求手填。
+  const sessionUserId = useAuthStore((state) => state.user?.userId);
+  const sessionVerifierId = parseOptionalPositiveInt(sessionUserId ?? "");
+
   const transitionMutation = useUpdateDefectStatus();
   const updateMutation = useUpdateDefect();
   const severityMutation = useChangeDefectSeverity();
@@ -171,7 +156,7 @@ export function DefectDetailLive({
   const [transitionError, setTransitionError] = useState<string | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState<DefectEditForm | null>(null);
+  const [editForm, setEditForm] = useState<DefectEditFormInput | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
 
   const [severityOpen, setSeverityOpen] = useState(false);
@@ -214,7 +199,11 @@ export function DefectDetailLive({
     );
   }
   // 写操作区（状态流转/编辑/严重度）只有在路由项目解析成功且与记录的
-  // projectId 精确一致时才渲染。解析中/解析失败时只读展示。
+  // projectId 精确一致时才渲染。解析中/解析失败（无可用数据）时只读展示。
+  // 注意：routeProjectQuery 的 data 与 queryKey 中的 projectKey 绑定，
+  // 后台重取失败时保留的旧 data 仍属于同一 projectKey，归属判定依然有效；
+  // 三个提交函数入口会再次检查 projectContextVerified，弹窗打开后归属
+  // 翻转也无法提交（后端项目权限校验仍为最终兜底）。
   const projectContextVerified =
     typeof routeProjectId === "number" &&
     detail.projectId != null &&
@@ -239,6 +228,11 @@ export function DefectDetailLive({
   const submitTransition = () => {
     if (transitionTarget == null) return;
     if (transitionMutation.isPending) return;
+    // 弹窗打开后项目归属若变为未确认（如路由项目解析翻转），禁止提交
+    if (!projectContextVerified) {
+      setTransitionError("项目归属已变化，无法提交。请刷新页面后重试。");
+      return;
+    }
     const payload: DefectTransitionPayload = { id: defectId, status: transitionTarget };
 
     const trimmedReason = reason.trim();
@@ -252,15 +246,21 @@ export function DefectDetailLive({
     }
     if (trimmedReason) payload.reason = trimmedReason;
 
-    if (transitionActor != null) {
+    if (transitionActor === "verifier") {
+      // 验证人恒为当前登录者（后端覆盖），取会话用户 ID；缺失则阻断
+      if (sessionVerifierId == null) {
+        setTransitionError("无法获取当前登录用户信息，无法执行验证。");
+        return;
+      }
+      payload.verifierId = sessionVerifierId;
+    } else if (transitionActor != null) {
       const parsed = parseOptionalPositiveInt(actorInput);
       if (parsed == null) {
         setTransitionError(`请填写${ACTOR_FIELD_LABELS[transitionActor]}（正整数）。`);
         return;
       }
       if (transitionActor === "assignee") payload.assigneeId = parsed;
-      else if (transitionActor === "tester") payload.testerId = parsed;
-      else payload.verifierId = parsed;
+      else payload.testerId = parsed;
     }
 
     setTransitionError(null);
@@ -277,13 +277,18 @@ export function DefectDetailLive({
 
   const openEdit = () => {
     updateMutation.reset();
-    setEditForm(editFormFrom(detail));
+    setEditForm(editFormFromDefect(detail));
     setEditError(null);
     setEditOpen(true);
   };
 
   const submitEdit = () => {
     if (editForm == null || updateMutation.isPending) return;
+    // 弹窗打开后项目归属若变为未确认（如路由项目解析翻转），禁止提交
+    if (!projectContextVerified) {
+      setEditError("项目归属已变化，无法提交。请刷新页面后重试。");
+      return;
+    }
     const title = editForm.title.trim();
     if (!title) {
       setEditError("标题不能为空。");
@@ -298,28 +303,9 @@ export function DefectDetailLive({
       setEditError("报告人用户 ID 格式非法，请输入正整数或留空。");
       return;
     }
-    const noneEmpty = (value: string) => {
-      const trimmed = value.trim();
-      return trimmed === "" ? null : trimmed;
-    };
     setEditError(null);
     updateMutation.mutate(
-      {
-        id: defectId,
-        title,
-        description: noneEmpty(editForm.description),
-        defectType: noneEmpty(editForm.defectType),
-        priority: (editForm.priority || undefined) as DefectResponse["priority"] | undefined,
-        reporterId,
-        foundDate: noneEmpty(editForm.foundDate),
-        estimatedFixDate: noneEmpty(editForm.estimatedFixDate),
-        reproductionSteps: noneEmpty(editForm.reproductionSteps),
-        expectedResult: noneEmpty(editForm.expectedResult),
-        actualResult: noneEmpty(editForm.actualResult),
-        environment: noneEmpty(editForm.environment),
-        attachments: noneEmpty(editForm.attachments),
-        tags: noneEmpty(editForm.tags),
-      },
+      buildDefectUpdatePayload(defectId, editForm),
       {
         onSuccess: () => {
           toast.success("缺陷已更新");
@@ -342,6 +328,11 @@ export function DefectDetailLive({
 
   const submitSeverity = () => {
     if (severityMutation.isPending) return;
+    // 弹窗打开后项目归属若变为未确认（如路由项目解析翻转），禁止提交
+    if (!projectContextVerified) {
+      setSeverityError("项目归属已变化，无法提交。请刷新页面后重试。");
+      return;
+    }
     if (targetSeverity === detail.severity) {
       setSeverityError("目标严重度与当前一致，无需变更。");
       return;
@@ -498,7 +489,13 @@ export function DefectDetailLive({
               submitTransition();
             }}
           >
-            {transitionActor != null ? (
+            {transitionActor === "verifier" ? (
+              <p className="type-body text-default-500" aria-label="验证人">
+                验证人：当前登录用户
+                {sessionVerifierId != null ? `（ID ${sessionVerifierId}）` : "（未获取到登录信息）"}。
+                后端将以当前操作者记为验证人。
+              </p>
+            ) : transitionActor != null ? (
               <TextField value={actorInput} onChange={setActorInput} aria-label={ACTOR_FIELD_LABELS[transitionActor]}>
                 <Label>{ACTOR_FIELD_LABELS[transitionActor]}（必填，无对应人员无法完成流转）</Label>
                 <Input placeholder="输入用户 ID（正整数）" inputMode="numeric" />
@@ -552,7 +549,7 @@ export function DefectDetailLive({
               />
               <TextField value={editForm.reporterId} onChange={(next) => setEditForm({ ...editForm, reporterId: next })} aria-label="报告人用户 ID">
                 <Label>报告人用户 ID</Label>
-                <Input placeholder="正整数，留空则清空" inputMode="numeric" />
+                <Input placeholder="正整数，留空则不修改" inputMode="numeric" />
               </TextField>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -594,7 +591,7 @@ export function DefectDetailLive({
               </TextField>
             </div>
             <p className="type-caption text-default-500">
-              说明：严重度请走「重定严重度」CAS 入口，状态请走上方「状态流转」——此处不允许直接改。
+              说明：留空的字段将保留原值（后端不支持通过编辑清空）；严重度请走「重定严重度」CAS 入口，状态请走上方「状态流转」——此处不允许直接改。
             </p>
             {editError ? <p className="type-body text-danger">{editError}</p> : null}
             <div className="flex justify-end gap-2">

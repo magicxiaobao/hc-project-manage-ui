@@ -15,6 +15,12 @@
  *   changeSeverity 走 POST /defect/v1/{defectId}/severity（CAS，reason 客户端先 trim）
  * - queryKey 形状：['hc', 'defect', 'detail', id]
  * - useDefectDetail 门控：id 为 null/无效 → disabled，不发起请求
+ * - buildDefectUpdatePayload：标题 trim、空文本→null（后端 null-skip 语义）、
+ *   reporterId 留空→null、attachments 刻意省略（不覆盖并发附件变更）
+ * - buildChangeDefectSeverityOptions：onError 失效详情查询（CAS 冲突后回取可重试）；
+ *   onSuccess 失效缺陷域 + 需求域
+ * - →VERIFIED 验证人取当前登录用户（后端用 operatorId 覆盖），defectNeedsActor
+ *   仍返回 'verifier'（requireVerifier fail-fast 仍需携带）
  *
  * 运行：pnpm vitest run src/lib/query/__tests__/defect-detail.test.tsx
  */
@@ -25,6 +31,7 @@ import { createQueryClient } from '../client';
 import { queryKeys } from '../keys';
 import {
   DEFECT_TRANSITIONS_BY_STATUS,
+  buildChangeDefectSeverityOptions,
   defectNeedsActor,
   defectNeedsReason,
   defectTransitionLabel,
@@ -34,6 +41,7 @@ import {
 import { api } from '../../api/client';
 import { defectApi } from '../../api/defect';
 import type { DefectStatus } from '../../api/defect-types';
+import { buildDefectUpdatePayload, editFormFromDefect } from '../../defect-detail';
 
 const EXPECTED_TOPOLOGY: Record<DefectStatus, DefectStatus[]> = {
   NEW: ['ASSIGNED', 'REJECTED'],
@@ -197,5 +205,89 @@ describe('useDefectDetail 门控', () => {
     }
     expect(getSpy).not.toHaveBeenCalled();
     getSpy.mockRestore();
+  });
+});
+
+describe('编辑载荷组装（buildDefectUpdatePayload）', () => {
+  const baseForm = {
+    title: '  登录页崩溃  ',
+    description: '步骤略',
+    defectType: '功能',
+    priority: 'HIGH',
+    reporterId: '3',
+    foundDate: '2026-10-04T10:00:00',
+    estimatedFixDate: '',
+    reproductionSteps: '',
+    expectedResult: '',
+    actualResult: '',
+    environment: '',
+    tags: '',
+  };
+
+  it('标题 trim；空文本 → null（后端 null-skip = 保留原值）', () => {
+    const payload = buildDefectUpdatePayload(9, baseForm);
+    expect(payload).toEqual({
+      id: 9,
+      title: '登录页崩溃',
+      description: '步骤略',
+      defectType: '功能',
+      priority: 'HIGH',
+      reporterId: 3,
+      foundDate: '2026-10-04T10:00:00',
+      estimatedFixDate: null,
+      reproductionSteps: null,
+      expectedResult: null,
+      actualResult: null,
+      environment: null,
+      tags: null,
+    });
+  });
+
+  it('reporterId 留空 → null（保留原值，不清空）；非法输入由调用方先拦截，此处透传解析结果', () => {
+    expect(buildDefectUpdatePayload(9, { ...baseForm, reporterId: '' }).reporterId).toBeNull();
+    expect(buildDefectUpdatePayload(9, { ...baseForm, reporterId: '   ' }).reporterId).toBeNull();
+    // parseOptionalPositiveInt 语义（与 task-create 共用）：纯数字即接受
+    expect(buildDefectUpdatePayload(9, { ...baseForm, reporterId: '007' }).reporterId).toBe(7);
+  });
+
+  it('attachments 刻意省略：不读不写，避免覆盖并发附件变更', () => {
+    const payload = buildDefectUpdatePayload(9, baseForm);
+    expect('attachments' in payload).toBe(false);
+  });
+
+  it('editFormFromDefect 不回填 attachments：编辑表单不持有该字段', () => {
+    const form = editFormFromDefect({
+      id: 9,
+      title: 't',
+      attachments: 'a.pdf',
+    } as never);
+    expect('attachments' in form).toBe(false);
+    expect(form.title).toBe('t');
+  });
+});
+
+describe('严重度 CAS 失败路径（buildChangeDefectSeverityOptions）', () => {
+  it('onError 失效缺陷详情查询：冲突后回取最新严重度，页面内可重试', () => {
+    const client = createQueryClient();
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+    const options = buildChangeDefectSeverityOptions(client);
+    options.onError(new Error('冲突'), {
+      defectId: 9,
+      data: { expectedSeverity: 'MAJOR', targetSeverity: 'CRITICAL', reason: 'x' },
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.defect.detail(9),
+    });
+    invalidateSpy.mockRestore();
+  });
+
+  it('onSuccess 仍走缺陷域 + 需求域失效', () => {
+    const client = createQueryClient();
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+    const options = buildChangeDefectSeverityOptions(client);
+    options.onSuccess();
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.defect.all });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.requirement.all });
+    invalidateSpy.mockRestore();
   });
 });
