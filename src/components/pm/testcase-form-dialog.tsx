@@ -44,13 +44,15 @@ import {
   TEST_CASE_STATUS_LABELS,
   TEST_CASE_TYPES,
 } from "@/lib/api/testCase-types";
+import { allowedTargetStatuses } from "@/lib/testcase-form";
+import type { TestCaseStatus } from "@/lib/api/testCase-types";
 
 const TYPE_OPTIONS = TEST_CASE_TYPES.map((type) => ({ id: type, label: type }));
 const PRIORITY_OPTIONS = TEST_CASE_PRIORITIES.map((priority) => ({
   id: priority,
   label: priority,
 }));
-const STATUS_OPTIONS = (["DRAFT", "ACTIVE", "REVIEW"] as const).map((status) => ({
+const CREATE_STATUS_OPTIONS = (["DRAFT", "ACTIVE", "REVIEW"] as const).map((status) => ({
   id: status,
   label: TEST_CASE_STATUS_LABELS[status],
 }));
@@ -60,6 +62,8 @@ export function TestCaseFormDialog({
   projectId,
   mode,
   testCaseId,
+  editStatus,
+  submitVeto,
   initial,
   onClose,
 }: {
@@ -68,6 +72,18 @@ export function TestCaseFormDialog({
   mode: "create" | "edit";
   /** 编辑模式时的用例 id */
   testCaseId?: number;
+  /**
+   * 编辑模式时记录的当前状态：状态下拉按后端状态机收敛
+   * （allowedTargetStatuses，如 ACTIVE 不可回 DRAFT）。新建模式不传，
+   * 默认三态。
+   */
+  editStatus?: TestCaseStatus;
+  /**
+   * 提交前复核：返回非空字符串表示拒绝提交并 toast 该文案。
+   * 详情页传入 projectContextVerified 翻转时的拦截（弹窗已打开后归属
+   * 查询重取失败/项目被删，提交入口再次检查，不只靠挂载条件）。
+   */
+  submitVeto?: () => string | null;
   /** 初始表单值（create 时传 emptyTestCaseFormInput()，edit 时传回填值） */
   initial: TestCaseFormInput;
   onClose: () => void;
@@ -87,9 +103,21 @@ export function TestCaseFormDialog({
   // 弹窗打开且脏时才布防：同时拦截浏览器后退/刷新/关标签页（P1 finding）
   const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(open && isDirty);
 
+  // 编辑模式按记录当前状态收敛可选目标（后端 TestCaseStatusEnum.canTransitionTo）；
+  // 新建模式默认三态（DRAFT/ACTIVE/REVIEW，ARCHIVED 永不出现在写入侧）。
+  const STATUS_OPTIONS =
+    mode === "edit" && editStatus
+      ? allowedTargetStatuses(editStatus).map((status) => ({
+          id: status,
+          label: TEST_CASE_STATUS_LABELS[status],
+        }))
+      : CREATE_STATUS_OPTIONS;
+
   const set = (patch: Partial<TestCaseFormInput>) => {
     setForm((current) => ({ ...current, ...patch }));
-    // 编辑该字段时清除其字段级错误
+    // 编辑该字段时清除其字段级错误；服务端提交错误也在编辑后清除，
+    // 避免旧错残留误导（pi NOTE-7）
+    setSubmitError("");
     setFieldErrors((current) => {
       const next = { ...current };
       let changed = false;
@@ -120,8 +148,16 @@ export function TestCaseFormDialog({
 
   const handleSubmit = () => {
     if (isPending) return;
+    // 归属复核：详情页 projectContextVerified 翻转时拒绝提交（codex P2 #2）
+    const veto = submitVeto?.();
+    if (veto) {
+      toast.error(veto);
+      return;
+    }
     const errors = validateTestCaseFormInput(form, {
       includeVerifiesRequirementIds: mode === "create",
+      // 编辑模式：清空已有负责人按老前端口径显式拒绝（codex P2 #5）
+      originalAssigneeId: mode === "edit" ? initial.assigneeId : undefined,
     });
     if (errors.length > 0) {
       const nextFieldErrors: Record<string, string> = {};

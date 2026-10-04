@@ -10,9 +10,12 @@
  * - assigneeId：空白=未设置（null），否则严格正整数
  * - estimatedDuration：空白=未设置（null），否则 1-480 的整数分钟
  * - verifiesRequirementIds（仅新建）：逗号分隔的需求 ID，≤200，非法 token 报错
- * - 更新载荷：字段级更新；空文本 → undefined（字段省略，后端只应用非空字段
- *   = 保留原值，目前不支持通过编辑清空字段——口径同 defect 域，区别仅在
- *   testCase 契约类型用 `T | undefined` 而非 `T | null`）；
+ * - 更新载荷：字段级更新；description 恒发送 trim 后字符串（'' = 清空，
+ *   后端 updateEditableFields 用 `!= null` 判定，支持写入空字符串——忠实老前端
+ *   TestCaseForm.vue）；preconditions/testData/environmentRequirements/tags
+ *   空文本 → undefined（字段省略，后端保留原值，忠实老前端 trimOptional）；
+ *   assigneeId 空白 → undefined（保留原值），清空已有负责人由校验显式拒绝
+ *   （老前端 TestCaseForm.vue:105），不静默忽略；
  *   verifiesRequirementIds 不在更新载荷里（类型已排除，静默 no-op 陷阱）
  */
 import { parseIdListText } from './defect-create';
@@ -20,6 +23,7 @@ import { parseOptionalPositiveInt } from './task-create';
 import type {
   TestCaseCreatePayload,
   TestCaseResponse,
+  TestCaseStatus,
   TestCaseUpdatePayload,
 } from './api/testCase-types';
 import {
@@ -122,13 +126,53 @@ const isWritableStatus = (value: string): boolean =>
   (TEST_CASE_STATUSES as readonly string[]).includes(value) && value !== 'ARCHIVED';
 
 /**
+ * 编辑时可选的目标状态（忠实后端 TestCaseStatusEnum.canTransitionTo；
+ * ARCHIVED 目标一律走 invalid 专用入口，不在编辑表单出现；普通更新入口对
+ * ARCHIVED 记录直接拒绝——见 TestCaseServiceImpl.updateTestCase /
+ * validateOrdinaryStatusChange）：
+ * - DRAFT → DRAFT / ACTIVE / REVIEW
+ * - ACTIVE → ACTIVE / REVIEW（ACTIVE→DRAFT 后端拒绝）
+ * - REVIEW → REVIEW / ACTIVE / DRAFT
+ * - ARCHIVED → 无（不可编辑）
+ */
+export function allowedTargetStatuses(
+  current: TestCaseStatus,
+): Array<Exclude<TestCaseStatus, 'ARCHIVED'>> {
+  switch (current) {
+    case 'DRAFT':
+      return ['DRAFT', 'ACTIVE', 'REVIEW'];
+    case 'ACTIVE':
+      return ['ACTIVE', 'REVIEW'];
+    case 'REVIEW':
+      return ['REVIEW', 'ACTIVE', 'DRAFT'];
+    case 'ARCHIVED':
+    default:
+      return [];
+  }
+}
+
+/**
+ * 归档入口允许的源状态（忠实后端 TestCaseServiceImpl.archiveTestCases：
+ * "只有草稿或生效测试用例可以归档"）。
+ */
+export function canArchiveTestCase(status: TestCaseStatus): boolean {
+  return status === 'DRAFT' || status === 'ACTIVE';
+}
+
+/**
  * 校验表单输入，返回字段级错误列表（空表示通过）。
  * includeVerifiesRequirementIds 为 true 时才校验验证需求栏（新建表单）；
  * 编辑表单不渲染该栏，不校验。
+ * originalAssigneeId 为编辑前负责人的原始值（initial.assigneeId）：原有负责人
+ * 被清空时按老前端 TestCaseForm.vue:105 口径显式拒绝（"当前更新契约不支持
+ * 清空负责人"），而不是静默保留原值。
  */
 export function validateTestCaseFormInput(
   input: TestCaseFormInput,
-  options: { includeVerifiesRequirementIds?: boolean } = {},
+  options: {
+    includeVerifiesRequirementIds?: boolean;
+    originalAssigneeId?: string | null;
+  } = {},
 ): TestCaseFormFieldError[] {
   const errors: TestCaseFormFieldError[] = [];
 
@@ -174,6 +218,13 @@ export function validateTestCaseFormInput(
 
   if (input.assigneeId.trim() !== '' && parseOptionalPositiveInt(input.assigneeId) === null) {
     errors.push({ field: 'assigneeId', message: '负责人 ID 必须为正整数' });
+  } else if (
+    options.originalAssigneeId != null &&
+    options.originalAssigneeId.trim() !== '' &&
+    input.assigneeId.trim() === ''
+  ) {
+    // 老前端 TestCaseForm.vue:105 口径：更新契约不支持清空已有负责人，显式报错
+    errors.push({ field: 'assigneeId', message: '当前更新契约不支持清空负责人' });
   }
 
   if (!input.testSteps.trim()) {
@@ -255,9 +306,14 @@ export function buildTestCaseCreatePayload(
 
 /**
  * 由编辑表单组装 POST /testCase/v1/updateTestCase 载荷（id 必传，字段级更新）。
- * - 空文本 → null：null = 保留原值、不清空（沿用 defect-detail.ts 同一口径）
+ * - description：恒发送 trim 后的字符串（'' = 清空；后端 updateEditableFields
+ *   用 `!= null` 判定，支持写入空字符串——忠实老前端 TestCaseForm.vue 的
+ *   `description: form.description.trim()`）
+ * - preconditions/testData/environmentRequirements/tags：空文本 → undefined
+ *   （字段省略，后端保留原值；忠实老前端的 trimOptional）
+ * - assigneeId：空白 → undefined（保留原值）；清空已有负责人由校验显式拒绝
+ *   （老前端 TestCaseForm.vue:105），不静默忽略
  * - verifiesRequirementIds 明确不承载（更新接口收到会静默忽略，静默 no-op 陷阱）
- * - assigneeId：空白 → null（保留原值）；非法输入由调用方先拦截
  */
 export function buildTestCaseUpdatePayload(
   testCaseId: number,
@@ -266,7 +322,7 @@ export function buildTestCaseUpdatePayload(
   return {
     id: testCaseId,
     title: input.title.trim(),
-    description: undefinedIfBlank(input.description),
+    description: input.description.trim(),
     caseNumber: undefinedIfBlank(input.caseNumber),
     testType: whiteList(input.testType, TEST_CASE_TYPES, '功能测试'),
     priority: whiteList(input.priority, TEST_CASE_PRIORITIES, '中'),

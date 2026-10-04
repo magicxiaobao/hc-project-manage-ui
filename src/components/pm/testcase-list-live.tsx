@@ -27,13 +27,14 @@ import {
   PageHeading,
 } from "@/components/biz";
 import { editFormFromTestCase, emptyTestCaseFormInput } from "@/lib/testcase-form";
+import { canArchiveTestCase } from "@/lib/testcase-form";
 import {
   toUserMessage,
   useArchiveTestCase,
   useDuplicateTestCase,
   useTestCaseList,
 } from "@/lib/query";
-import type { TestCaseQueryRequest } from "@/lib/api/testCase-types";
+import type { TestCaseQueryRequest, TestCaseResponse } from "@/lib/api/testCase-types";
 import {
   TEST_CASE_PRIORITIES,
   TEST_CASE_STATUS_LABELS,
@@ -71,7 +72,10 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
+  // 编辑快照：打开瞬间捕获记录，弹窗生命周期不依赖实时分页结果。
+  // 否则编辑期间他人归档/改状态导致重取后记录脱离当前页，脏表单会被
+  // 直接卸载而无"是否放弃修改"提示（codex P2 #3）。
+  const [editingCase, setEditingCase] = useState<TestCaseResponse | null>(null);
   const [archiveId, setArchiveId] = useState<number | null>(null);
 
   const bean = useMemo<TestCaseQueryRequest>(() => {
@@ -145,8 +149,6 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
     });
   };
 
-  const editingCase =
-    editId !== null ? listQuery.data?.list.find((item) => item.id === editId) ?? null : null;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
@@ -253,7 +255,7 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
                 <Button
                   size="sm"
                   variant="ghost"
-                  onPress={() => setEditId(item.id)}
+                  onPress={() => setEditingCase(item)}
                   aria-label={`编辑用例 ${item.id}`}
                 >
                   编辑
@@ -272,6 +274,9 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
                   variant="ghost"
                   className="text-danger"
                   onPress={() => setArchiveId(item.id)}
+                  // 后端 archiveTestCases 只允许 DRAFT/ACTIVE 归档（codex P2 #4）；
+                  // REVIEW 点归档会直接 400，入口侧禁用
+                  isDisabled={!canArchiveTestCase(item.status)}
                   aria-label={`归档用例 ${item.id}`}
                 >
                   归档
@@ -313,8 +318,9 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
           projectId={projectId}
           mode="edit"
           testCaseId={editingCase.id}
+          editStatus={editingCase.status}
           initial={editFormFromTestCase(editingCase)}
-          onClose={() => setEditId(null)}
+          onClose={() => setEditingCase(null)}
         />
       ) : null}
 

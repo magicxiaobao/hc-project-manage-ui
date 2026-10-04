@@ -29,8 +29,10 @@ import { testCaseApi } from '../../api/testCase';
 import type { PageResult } from '../../api/types';
 import type { TestCaseResponse } from '../../api/testCase-types';
 import {
+  allowedTargetStatuses,
   buildTestCaseCreatePayload,
   buildTestCaseUpdatePayload,
+  canArchiveTestCase,
   editFormFromTestCase,
   emptyTestCaseFormInput,
   validateTestCaseFormInput,
@@ -358,7 +360,7 @@ describe('validateTestCaseFormInput 字段级校验', () => {
 });
 
 describe('buildTestCaseCreatePayload / buildTestCaseUpdatePayload', () => {
-  it('新建载荷：字段完整，空文本转 null，验证需求去重', () => {
+  it('新建载荷：字段完整，空文本转 undefined，验证需求去重', () => {
     const payload = buildTestCaseCreatePayload(
       { ...validInput(), verifiesRequirementIdsText: '11,22,11' },
       7,
@@ -395,16 +397,58 @@ describe('buildTestCaseCreatePayload / buildTestCaseUpdatePayload', () => {
     expect(payload).not.toHaveProperty('projectId');
   });
 
-  it('更新载荷：空文本 → undefined（字段省略，后端只应用非空字段 = 保留原值）', () => {
+  it('更新载荷：description 恒发送 trim 字符串（空 = 清空，后端支持写入空串）', () => {
     const payload = buildTestCaseUpdatePayload(5, {
       ...validInput(),
-      description: '',
+      description: '   ',
       assigneeId: '',
       estimatedDuration: '',
+      preconditions: '',
     });
-    expect(payload.description).toBeUndefined();
+    // 忠实老前端 TestCaseForm.vue：description.trim() 恒发送，'' 清空字段
+    expect(payload.description).toBe('');
+    // trimOptional 口径：其余可选文本空白 → undefined（保留原值）
+    expect(payload.preconditions).toBeUndefined();
     expect(payload.assigneeId).toBeUndefined();
     expect(payload.estimatedDuration).toBeUndefined();
+  });
+
+  it('编辑校验：清空已有负责人被显式拒绝（老前端 TestCaseForm.vue:105 口径）', () => {
+    const errors = validateTestCaseFormInput(
+      { ...validInput(), assigneeId: '  ' },
+      { originalAssigneeId: '12' },
+    );
+    expect(errors).toContainEqual({
+      field: 'assigneeId',
+      message: '当前更新契约不支持清空负责人',
+    });
+  });
+
+  it('编辑校验：原本无负责人时留空不报错；新建模式不检查原值', () => {
+    const errors = validateTestCaseFormInput(
+      { ...validInput(), assigneeId: '' },
+      { originalAssigneeId: '' },
+    );
+    expect(errors.filter((e) => e.field === 'assigneeId')).toHaveLength(0);
+    const createErrors = validateTestCaseFormInput({ ...validInput(), assigneeId: '' });
+    expect(createErrors.filter((e) => e.field === 'assigneeId')).toHaveLength(0);
+  });
+});
+
+describe('状态机门控（忠实后端 TestCaseStatusEnum.canTransitionTo）', () => {
+  it('allowedTargetStatuses：按当前状态收敛目标', () => {
+    expect(allowedTargetStatuses('DRAFT')).toEqual(['DRAFT', 'ACTIVE', 'REVIEW']);
+    // ACTIVE→DRAFT 后端拒绝（TestCaseStatusEnum:69）
+    expect(allowedTargetStatuses('ACTIVE')).toEqual(['ACTIVE', 'REVIEW']);
+    expect(allowedTargetStatuses('REVIEW')).toEqual(['REVIEW', 'ACTIVE', 'DRAFT']);
+    expect(allowedTargetStatuses('ARCHIVED')).toEqual([]);
+  });
+
+  it('canArchiveTestCase：只有草稿/生效用例可以归档（TestCaseServiceImpl.archiveTestCases）', () => {
+    expect(canArchiveTestCase('DRAFT')).toBe(true);
+    expect(canArchiveTestCase('ACTIVE')).toBe(true);
+    expect(canArchiveTestCase('REVIEW')).toBe(false);
+    expect(canArchiveTestCase('ARCHIVED')).toBe(false);
   });
 });
 

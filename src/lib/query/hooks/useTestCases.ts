@@ -60,9 +60,16 @@ export function useTestCaseDetail(id: number | null | undefined) {
   });
 }
 
-/** 用例域变更的缓存失效：只失效用例域（用例不嵌套进需求追溯图，缺陷域无需失效） */
+/**
+ * 用例域变更的缓存失效：失效用例域 + 需求域。
+ * 需求追溯图/影响范围/矩阵展示关联用例（见 trace-view-live.tsx 的"测试用例"
+ * BucketCard）：新建验证关系、复制关联用例、改标题/状态、归档都会改变追溯
+ * 数据，只失效用例域会让 30 秒内返回追溯页的用户复用旧缓存。
+ * 跨域失效沿用 defect 域 invalidateDefectDomain 的先例。
+ */
 function invalidateTestCaseDomain(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.testCase.all });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.requirement.all });
 }
 
 /**

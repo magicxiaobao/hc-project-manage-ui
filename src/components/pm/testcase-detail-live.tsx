@@ -26,6 +26,7 @@ import {
   PageHeading,
 } from "@/components/biz";
 import { editFormFromTestCase } from "@/lib/testcase-form";
+import { canArchiveTestCase } from "@/lib/testcase-form";
 import {
   toUserMessage,
   useArchiveTestCase,
@@ -131,15 +132,25 @@ export function TestCaseDetailLive({
   // projectId 精确一致时才渲染。解析中/解析失败（无可用数据）时只读展示。
   // 注意：routeProjectQuery 的 data 与 queryKey 中的 projectKey 绑定，
   // 后台重取失败时保留的旧 data 仍属于同一 projectKey，归属判定依然有效；
-  // 三个提交函数入口会再次检查 projectContextVerified，弹窗打开后归属
+  // 三个提交函数入口会再次检查 projectContextVerified（复制/归档在 handler
+  // 入口查，编辑经 TestCaseFormDialog 的 submitVeto 查），弹窗打开后归属
   // 翻转也无法提交（后端项目权限校验仍为最终兜底）。
   const projectContextVerified =
     typeof routeProjectId === "number" &&
     detail.projectId != null &&
     detail.projectId === routeProjectId;
+  // ARCHIVED 记录：后端普通更新/复制/归档入口一律拒绝（TestCaseServiceImpl
+  // validateOrdinaryStatusChange / duplicate / archiveTestCases），深链访问
+  // 时不渲染写操作区（codex P2 #4，pi NOTE-4）
+  const canWrite = projectContextVerified && detail.status !== "ARCHIVED";
+  // 归档入口只允许 DRAFT/ACTIVE（后端 archiveTestCases 抛
+  // "只有草稿或生效测试用例可以归档"，codex P2 #4）
+  const canArchive = canWrite && canArchiveTestCase(detail.status);
   const projectContextNotice = routeProjectQuery.isPending
     ? "正在确认项目归属，操作区稍后可用…"
-    : "当前无法确认该记录归属于此项目，操作区已禁用。";
+    : detail.status === "ARCHIVED"
+      ? "该用例已归档，不可编辑、复制或归档。"
+      : "当前无法确认该记录归属于此项目，操作区已禁用。";
 
   const executionCount = detail.executionCount ?? 0;
   const passCount = detail.passCount ?? 0;
@@ -264,7 +275,7 @@ export function TestCaseDetailLive({
         </dl>
       </section>
 
-      {projectContextVerified ? (
+      {canWrite ? (
         <section aria-label="操作">
           <h2 className="type-emphasis mb-2">操作</h2>
           <div className="flex flex-wrap gap-2">
@@ -279,14 +290,16 @@ export function TestCaseDetailLive({
             >
               {duplicateMutation.isPending ? "复制中…" : "复制"}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-danger"
-              onPress={() => setArchiveOpen(true)}
-            >
-              归档
-            </Button>
+            {canArchive ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-danger"
+                onPress={() => setArchiveOpen(true)}
+              >
+                归档
+              </Button>
+            ) : null}
           </div>
         </section>
       ) : (
@@ -302,6 +315,11 @@ export function TestCaseDetailLive({
           projectId={detail.projectId}
           mode="edit"
           testCaseId={detail.id}
+          editStatus={detail.status}
+          // 弹窗打开后归属翻转（查询重取失败/项目被删）时提交入口再次拦截（codex P2 #2）
+          submitVeto={() =>
+            projectContextVerified ? null : "项目归属已变化，无法提交。请刷新页面后重试。"
+          }
           initial={editFormFromTestCase(detail)}
           onClose={() => setEditOpen(false)}
         />

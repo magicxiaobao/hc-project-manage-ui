@@ -37,5 +37,7 @@ export function TestCasePriorityChip({ priority }: { priority: string }) {
   const tone =
     (PRIORITY_TONE as Record<string, StateTone>)[priority] ?? "neutral";
   const known = (TEST_CASE_PRIORITIES as readonly string[]).includes(priority);
+  // 空值回退为 "-"，避免渲染出"优先级 "的残缺文案（pi NOTE-6）
+  if (!priority) return <StateChip tone="neutral">-</StateChip>;
   return <StateChip tone={tone}>{known ? priority : `优先级 ${priority}`}</StateChip>;
 }
