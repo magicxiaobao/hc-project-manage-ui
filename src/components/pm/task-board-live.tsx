@@ -23,7 +23,7 @@
  *   代操作原因审计（actor≠assignee 必填原因）暂不做；
  * - 无离线缓存/撤销拖拽（老前端的拖拽快照+撤销仅本地体验增强）。
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -363,13 +363,15 @@ export function TaskBoardLive({
   }
 
   /**
-   * r8 R2/R3 + r9 P2-4：看板权威刷新协调器。
+   * r8 R2/R3 + r9 P2-4 + r10 P2-3：看板权威刷新协调器。
    * - refetchQueries 必须传 throwOnError:true：默认吞错误会导致刷新失败
    *   静默通过，catch 永不进入（r8 R2 死代码根因）；
    * - 成功判定走 confirmAuthoritativeRefresh（纯函数，可单测）：
-   *   代次未被推进 + 查询确为 success + dataUpdatedAt 严格大于刷新开始前
-   *   的快照。被 cancelQueries 取消（并发卡片流转/列排序调了同查询键
-   *   cancelQueries）的 refetch 不更新 dataUpdatedAt、不 reject，一律不计
+   *   代次未被推进 + 查询确为 success + dataUpdateCount 严格大于刷新开始前
+   *   的快照。r10 P2-3 起用成功计数代替墙钟 dataUpdatedAt——同一毫秒/
+   *   时钟精度受限/时钟回拨时真实 GET 成功也可能不满足严格递增；
+   *   被 cancelQueries 取消（并发卡片流转/列排序调了同查询键
+   *   cancelQueries）的 refetch 不产生 success dispatch，一律不计
    *   作权威成功（r8 R3）；
    * - r9 P2-4 ①：所有乐观 setQueryData 都经 markOptimisticWrite 推进代次、
    *   标记为非权威——本地写入的 dataUpdatedAt 不能再冒充权威凭据；
@@ -387,9 +389,29 @@ export function TaskBoardLive({
   function markOptimisticWrite() {
     boardRefreshSeq.current += 1;
   }
+  /**
+   * r10 P1-2：权威成功后的统一清理——把 awaitingRefresh 里的卡片从
+   * movingCardIds 解锁。协调器内（authoritativeBoardRefresh）与协调器外
+   * （顶部横幅重试/重连自动刷新/列 CRUD 失效刷新，见下方 effect）共用。
+   */
+  function unlockAwaitingCards() {
+    const awaiting = awaitingRefresh.current;
+    if (awaiting.size === 0) return;
+    const ids = [...awaiting];
+    awaiting.clear();
+    setMovingCardIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+  }
   async function authoritativeBoardRefresh(): Promise<boolean> {
     const seq = ++boardRefreshSeq.current;
-    const updatedAtBefore = queryClient.getQueryState(columnsKey)?.dataUpdatedAt ?? 0;
+    // r10 P2-3：用 dataUpdateCount（success dispatch 计数器）代替墙钟
+    // dataUpdatedAt——同一毫秒/时钟精度受限/时钟回拨时真实 GET 成功也可能
+    // 不满足严格递增；计数器与墙钟无关
+    const updateCountBefore =
+      queryClient.getQueryState(columnsKey)?.dataUpdateCount ?? 0;
     try {
       // throwOnError 走第二个 options 参数（RefetchOptions），filters 里没有该字段
       await queryClient.refetchQueries(
@@ -402,26 +424,57 @@ export function TaskBoardLive({
     const state = queryClient.getQueryState(columnsKey);
     const confirmed = confirmAuthoritativeRefresh({
       status: state?.status === "success" ? "success" : state?.status === "error" ? "error" : "pending",
-      dataUpdatedAt: state?.dataUpdatedAt ?? 0,
-      updatedAtBefore,
+      dataUpdateCount: state?.dataUpdateCount ?? 0,
+      updateCountBefore,
       seq,
       currentSeq: boardRefreshSeq.current,
     });
     if (!confirmed) return false;
     lastAuthoritySeq.current = seq;
     // r9 P2-4 ②：本次权威成功——所有等待中的卡片数据已新鲜，自动解锁
-    const awaiting = awaitingRefresh.current;
-    if (awaiting.size > 0) {
-      const ids = [...awaiting];
-      awaiting.clear();
-      setMovingCardIds((current) => {
-        const next = new Set(current);
-        for (const id of ids) next.delete(id);
-        return next;
-      });
-    }
+    unlockAwaitingCards();
     return true;
   }
+
+  /**
+   * r10 P1-2：协调器之外的权威 GET 成功也要统一解锁。
+   * 顶部横幅重试已改走 authoritativeBoardRefresh；重连自动刷新
+   * （refetchOnReconnect:'always'）与列 CRUD 失效刷新（invalidateBoardDomain）
+   * 由 React Query 自行触发，不经过协调器。这里观察 columnsKey 的真实拉取：
+   * - 本地乐观 setQueryData 从不翻转 isFetching，且每次乐观写入都先经
+   *   markOptimisticWrite 推进代次；
+   * 因此"观察到拉取开始 → 拉取结束且 success → dataUpdateCount 推进 →
+   * 期间代次未变"即为一次非乐观的权威 GET 成功，可安全解锁等待中的卡片。
+   */
+  const unlockFetchStartSeq = useRef<number | null>(null);
+  const unlockHandledUpdateCount = useRef(0);
+  useEffect(() => {
+    if (columnsQuery.isFetching) {
+      if (unlockFetchStartSeq.current == null) {
+        unlockFetchStartSeq.current = boardRefreshSeq.current;
+      }
+      return;
+    }
+    if (unlockFetchStartSeq.current == null) return;
+    const startSeq = unlockFetchStartSeq.current;
+    unlockFetchStartSeq.current = null;
+    const state = queryClient.getQueryState(columnsKey);
+    const count = state?.dataUpdateCount ?? 0;
+    if (
+      state?.status === "success" &&
+      count > unlockHandledUpdateCount.current &&
+      boardRefreshSeq.current === startSeq
+    ) {
+      unlockHandledUpdateCount.current = count;
+      unlockAwaitingCards();
+    }
+  }, [
+    columnsQuery.isFetching,
+    columnsQuery.status,
+    columnsQuery.dataUpdatedAt,
+    columnsKey,
+    queryClient,
+  ]);
 
   /**
    * 执行卡片流转：乐观把卡片搬到目标列末尾 → POST task/v1/updateStatus；
@@ -543,6 +596,20 @@ export function TaskBoardLive({
     return false;
   }
 
+  /**
+   * r10 P1-2：顶部错误横幅的重试走权威刷新协调器（而不是裸
+   * columnsQuery.refetch()）——协调器在权威成功后统一清理
+   * awaitingRefresh/movingCardIds，否则重试成功后错误横幅消失、
+   * 卡片却仍被锁定。看板详情仍单独 refetch（与列查询无关）。
+   */
+  async function retryTopBannerRefresh(): Promise<void> {
+    void boardDetail.refetch();
+    const ok = await authoritativeBoardRefresh();
+    if (!ok) {
+      toast.error("看板刷新失败，请稍后重试");
+    }
+  }
+
   const confirmDeleteColumn = () => {
     const target = deleteTarget;
     if (!target || deleteColumn.isPending) return;
@@ -557,17 +624,24 @@ export function TaskBoardLive({
     });
   };
 
-  // r8 R1 + r7 F4：loading/错误分支一律受"尚未展示过页面"约束——任一查询
-  // 曾成功即保留已挂载的子树（列表/弹窗/脏表单）；后台重取重新 pending 不再
-  // 卸载它们（否则新建列弹窗的草稿会在网络重连自动重取时丢失）。
-  // 仅从未成功过才切换 loading/错误页；后台刷新失败只在顶部展示错误横幅 + 重试。
-  // r9 P2-3：loading 骨架单独看列数据——boardDetail 先成功会把 lastGoodBoardName
-  // 置位，若 loading 闸门用它会把"列查询仍 pending"的首屏误判为已加载，
-  // 先闪出"这个看板还没有列"的空态。列数据未到前一律保持骨架。
+  // r8 R1 + r7 F4 + r10 P1-1：loading/错误分支一律受"页面子树是否已展示"约束。
+  // r10 P1-1：r9 修复 3 把 loading 闸门改成只看列数据到达（columnsEverArrived），
+  // 但"子树已展示"这个概念丢了——列查询首次失败→页面展示（允许新建列）→
+  // 填写草稿→点重试→无数据查询重新 pending→loading 闸门命中→卸载整棵子树，
+  // BoardColumnFormDialog 的草稿丢失且 dirty guard 无法拦截（条件卸载不是路由
+  // 导航）。因此另行记录子树是否已展示过（按看板 id）：首次加载等列数据，
+  // 子树一旦展示，后台重试的重新 pending 不再卸载它（只保留顶部错误横幅）。
+  // 仅从未展示过才切换 loading/错误页。
+  // r9 P2-3 保持：boardDetail 先成功不再放宽 loading 闸门——列数据未到前
+  // 一律保持骨架，避免先闪出"这个看板还没有列"的空态。
   const everLoaded = everColumnsLoaded.current || lastGoodBoardName.current != null;
-  const columnsEverArrived =
-    everColumnsLoaded.current || lastGoodColumns.current.length > 0;
-  if ((boardDetail.isPending || columnsQuery.isPending) && !columnsEverArrived) {
+  const subtreeBoardId = useRef<number | null>(null);
+  const boardSubtreeShown = useRef(false);
+  if (subtreeBoardId.current !== boardId) {
+    subtreeBoardId.current = boardId;
+    boardSubtreeShown.current = false;
+  }
+  if ((boardDetail.isPending || columnsQuery.isPending) && !boardSubtreeShown.current) {
     return (
       <div className="flex items-center gap-2 px-4 py-8 text-sm text-default-500">
         <Spinner size="sm" />
@@ -596,6 +670,10 @@ export function TaskBoardLive({
     );
   }
   const showRefreshBanner = (loadFailed || refetchFailed) && everLoaded;
+
+  // r10 P1-1：走到这里说明本轮渲染了主子树（列表/弹窗/脏表单）——后续
+  // 任何查询的重新 pending（重试/重连）都不再卸载它
+  boardSubtreeShown.current = true;
 
   const boardName =
     boardDetail.data?.boardName ?? lastGoodBoardName.current ?? `看板 #${boardId}`;
@@ -628,10 +706,7 @@ export function TaskBoardLive({
           <Button
             size="sm"
             variant="ghost"
-            onPress={() => {
-              void boardDetail.refetch();
-              void columnsQuery.refetch();
-            }}
+            onPress={() => void retryTopBannerRefresh()}
           >
             重试
           </Button>

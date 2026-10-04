@@ -158,7 +158,10 @@ export function TaskTransitionReasonDialog({
   };
 
   const close = () => {
-    if (busy) return;
+    // r10 P1-1：refreshFailed 时卡片仍锁定（父组件 keepLocked），此时关闭
+    // 弹窗会丢掉唯一的重试入口（弹窗内的"重试刷新"按钮；toast 会自动消失），
+    // 因此禁用取消直到重试完成（成功后 retryRefresh 会自行 markClean 关闭）
+    if (busy || refreshFailed) return;
     guard(doClose);
   };
 
@@ -253,6 +256,10 @@ export function TaskTransitionReasonDialog({
                   setAssigneeInput(value);
                   setAssigneeError(null);
                   setSubmitError(null);
+                  // r10 P2-5：执行人变更可能解除"执行人不是本人→原因必填"
+                  // 的动态守卫（必填星号消失），同步清除残留的原因字段错误，
+                  // 否则"执行人不是本人时……需要原因"会一直显示
+                  setFieldError(null);
                 }}
                 isDisabled={inputLocked}
                 aria-label="执行人 ID"
@@ -313,7 +320,8 @@ export function TaskTransitionReasonDialog({
             ) : null}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onPress={close} isDisabled={busy || refreshing}>
+            {/* r10 P1-1：refreshFailed 时禁用取消（见 close 的注释），只保留重试刷新入口 */}
+            <Button variant="ghost" onPress={close} isDisabled={busy || refreshing || refreshFailed}>
               取消
             </Button>
             {refreshFailed ? (

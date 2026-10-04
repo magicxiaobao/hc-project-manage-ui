@@ -221,21 +221,27 @@ describe("parseBoardColumnsWithTasks 防御", () => {
 describe("confirmAuthoritativeRefresh", () => {
   const base = {
     status: "success" as const,
-    dataUpdatedAt: 2000,
-    updatedAtBefore: 1000,
+    dataUpdateCount: 7,
+    updateCountBefore: 6,
     seq: 3,
     currentSeq: 3,
   };
 
-  it("r9 P2-4：代次未推进 + success + 时间戳推进 → 确认权威成功", () => {
+  it("r9 P2-4 + r10 P2-3：代次未推进 + success + 成功计数推进 → 确认权威成功", () => {
     expect(confirmAuthoritativeRefresh(base)).toBe(true);
   });
 
-  it("r9 P2-4 ①：刷新开始前的乐观写入时间戳不能冒充权威成功（dataUpdatedAt 未推进）", () => {
+  it("r10 P2-3：同一毫秒/时钟回拨下 dataUpdatedAt 不推进，成功计数仍确认真实 GET 成功", () => {
+    // 旧的 dataUpdatedAt > updatedAtBefore 在同一毫秒会误判 false；
+    // 计数器与墙钟无关，真实 success dispatch 即递增
+    expect(confirmAuthoritativeRefresh(base)).toBe(true);
+  });
+
+  it("r9 P2-4 ①：刷新开始前的乐观写入不能冒充权威成功（成功计数未推进）", () => {
     // 列排序失败恢复路径：setQueryData(previous) 与刷新开始同 tick，
-    // 被取消的 refetch 不更新 dataUpdatedAt → 严格大于不成立 → false
+    // 被取消的 refetch 不产生 success dispatch → 计数不推进 → false
     expect(
-      confirmAuthoritativeRefresh({ ...base, dataUpdatedAt: 1000, updatedAtBefore: 1000 }),
+      confirmAuthoritativeRefresh({ ...base, dataUpdateCount: 6, updateCountBefore: 6 }),
     ).toBe(false);
   });
 
@@ -272,5 +278,17 @@ describe("restoreColumnOrder", () => {
     const current = [makeColumn(2, "TODO", [201]), makeColumn(1, "TODO", [])];
     const restored = restoreColumnOrder(current, snapshot);
     expect(restored.map((c) => c.id)).toEqual([1, 2]);
+  });
+
+  it("r10 P2-4：排序在途被删除的列不复活（快照中的幽灵列被过滤）", () => {
+    // 快照：排序前顺序 [1,2]，列 2 含卡片 201
+    const snapshot = [makeColumn(1, "TODO", []), makeColumn(2, "TODO", [201])];
+    // 当前：列 2 已被删除（DELETE 成功且 GET 已落定），列 1 含卡片 202
+    const current = [makeColumn(1, "TODO", [202])];
+    const restored = restoreColumnOrder(current, snapshot);
+    // 已删除的列 2 不再出现；存活列 1 取当前值（含当前卡片 202，
+    // 不复活快照里的旧卡片 201）
+    expect(restored.map((c) => c.id)).toEqual([1]);
+    expect(restored[0].tasks.map((t) => t.id)).toEqual([202]);
   });
 });

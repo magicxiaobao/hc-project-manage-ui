@@ -174,23 +174,28 @@ export function cardTransitionNeedsText(from: TaskStatus, to: TaskStatus): boole
 }
 
 /**
- * r9 P2-4：看板权威刷新成功判定（纯函数，协调器用）。
+ * r9 P2-4 + r10 P2-3：看板权威刷新成功判定（纯函数，协调器用）。
  *
- * 旧条件 `dataUpdatedAt >= startedAt` 会被同 tick 的乐观 setQueryData 满足
- * （setQueryData 同步更新 dataUpdatedAt；列排序失败恢复路径实测 GET 无成功
- * 响应却返回 true，导致提前解锁）。新条件要求三者同时成立：
- * - 代次未被推进（currentSeq === seq）：期间无新的权威刷新、也无乐观写入
- *   （调用方每次乐观 setQueryData 都推进代次，把本地写入标记为非权威）；
+ * r10-3：旧条件 `dataUpdatedAt > updatedAtBefore` 依赖墙钟严格递增——
+ * React Query 用 Date.now() 写 dataUpdatedAt，同一毫秒/时钟精度受限/
+ * 时钟回拨时，真实 GET 成功也可能不满足，导致误报"刷新失败"并保留锁定
+ * （缓存已是权威数据，仍返回 false）。
+ * 新条件改用 dataUpdateCount：每次 success dispatch 递增的整数计数器
+ * （真实拉取与 setQueryData 都会递增），与墙钟无关。配合代次守卫即可
+ * 区分"真实 GET 成功"与"本地乐观写入"（调用方每次乐观 setQueryData
+ * 都先经 markOptimisticWrite 推进代次）：
+ * - 代次未被推进（currentSeq === seq）：期间无新的权威刷新、也无乐观写入；
  * - 查询状态确为 success；
- * - dataUpdatedAt 严格大于刷新开始前快照（updatedAtBefore）：刷新开始前已
- *   存在的乐观写入时间戳不能再被计作权威凭据；被 cancel 取消的 refetch 不
- *   更新 dataUpdatedAt，自然判 false。
+ * - dataUpdateCount 严格大于刷新开始前的快照（updateCountBefore）：
+ *   刷新开始前已存在的乐观写入计数不能再被计作权威凭据；被 cancel 取消的
+ *   refetch 不产生 success dispatch（不更新 dataUpdatedAt 也不递增计数），
+ *   自然判 false（r8 R3）。
  */
 export function confirmAuthoritativeRefresh(args: {
   status: "success" | "error" | "pending";
-  dataUpdatedAt: number;
-  /** 本次刷新开始前该查询的 dataUpdatedAt 快照 */
-  updatedAtBefore: number;
+  dataUpdateCount: number;
+  /** 本次刷新开始前该查询的 dataUpdateCount 快照 */
+  updateCountBefore: number;
   /** 本次刷新取号 */
   seq: number;
   /** 判定时刻的最新代次 */
@@ -199,14 +204,19 @@ export function confirmAuthoritativeRefresh(args: {
   return (
     args.currentSeq === args.seq &&
     args.status === "success" &&
-    args.dataUpdatedAt > args.updatedAtBefore
+    args.dataUpdateCount > args.updateCountBefore
   );
 }
 
 /**
- * r9 P2-5：列排序失败的操作级恢复——只按快照恢复列顺序，各列的卡片
- * （其它在途/已成功的流转结果）原样保留，不做整板快照覆盖。
+ * r9 P2-5 + r10 P2-4：列排序失败的操作级恢复——只按快照恢复列顺序，各列的
+ * 卡片（其它在途/已成功的流转结果）原样保留，不做整板快照覆盖。
  * 快照中没有的新列追加到末尾。
+ *
+ * r10-4：仅恢复快照中"当前仍存在"的列——排序在途被删除的列不再用
+ * `?? column` 复活（否则幽灵列会连同快照里的旧卡片一起回来，后续刷新
+ * 再失败便持续展示；卡片已移动到其他列时还会出现旧副本）。
+ * 所有列对象一律取当前值（卡片以当前为准）。
  */
 export function restoreColumnOrder(
   current: KanbanBoardColumn[],
@@ -215,7 +225,9 @@ export function restoreColumnOrder(
   const currentById = new Map(current.map((column) => [column.id, column]));
   const snapshotIds = new Set(snapshot.map((column) => column.id));
   return [
-    ...snapshot.map((column) => currentById.get(column.id) ?? column),
+    ...snapshot
+      .map((column) => currentById.get(column.id))
+      .filter((column): column is KanbanBoardColumn => column !== undefined),
     ...current.filter((column) => !snapshotIds.has(column.id)),
   ];
 }
