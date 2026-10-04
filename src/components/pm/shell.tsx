@@ -17,6 +17,7 @@ import {
 import { ContentSkeleton } from "@/components/biz/skeleton";
 import { useGoToItem } from "@/components/pm/use-go-item";
 import { bindPmPersistence, usePm } from "@/lib/pm/store";
+import { projectKeyFromPath } from "@/lib/pm/sidebar-nav";
 import type { Person } from "@/lib/pm/domain";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
@@ -46,6 +47,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const project = projects.find(
     (entry) => pathname === `/p/${entry.key}` || pathname.startsWith(`/p/${entry.key}/`),
   );
+  // Codex review 4175510487：登录态的 /p/<key> 路径一律走真实后端分支——
+  // 后端项目的 key 若恰好撞上演示 seed key（HC/PAY/OPS，见 src/lib/pm/seed.ts），
+  // 演示项目同样会匹配到 project，此时必须让 live 分支胜出；否则真实后端项目
+  // 会被渲染成完整的演示侧栏（含演示数据的仪表盘/缺陷/测试等入口）。
+  const liveProjectKey = isAuthenticated ? projectKeyFromPath(pathname) : null;
   const unread = notices.filter((notice) => !notice.read).length;
   const [searchOpen, setSearchOpen] = useState(false);
   const goToItem = useGoToItem();
@@ -153,6 +159,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         project={project}
         projects={projects}
         itemOrigin={itemOrigin}
+        liveProjectKey={liveProjectKey}
         onClose={() => setNavOpen(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -174,7 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
           <span className="min-w-0 truncate">
             {ready ? (
-              <span className="type-emphasis">{project ? project.name : "恒川"}</span>
+              <span className="type-emphasis">{liveProjectKey ?? (project ? project.name : "恒川")}</span>
             ) : (
               <Loading variant="inline" label="加载中" />
             )}

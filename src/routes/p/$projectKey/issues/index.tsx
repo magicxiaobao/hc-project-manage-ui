@@ -1,29 +1,32 @@
+/**
+ * 任务列表 index 路由（P1：p1-task-list 移自 issues.tsx；issues.tsx 现为登录态布局路由）。
+ */
 import { createFileRoute } from "@tanstack/react-router";
 import { Button, Spinner } from "@heroui/react";
 import { EmptyHint } from "@/components/biz";
-import { TraceView } from "@/components/pm/trace-view";
-import { TraceViewLive } from "@/components/pm/trace-view-live";
+import { ListView } from "@/components/pm/list-view";
+import { TaskListLive } from "@/components/pm/task-list-live";
 import { useAuthStore } from "@/lib/api/auth-store";
 import { toUserMessage, useProjectIdByKey } from "@/lib/query";
 
-export const Route = createFileRoute("/p/$projectKey/trace")({
+export const Route = createFileRoute("/p/$projectKey/issues/")({
   component: Page,
 });
 
 function Page() {
   const { projectKey } = Route.useParams();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  // 登录态：需求追溯走真实后端（projectKey → id 解析 + trace/impact/matrix/hierarchy）。
-  // 未登录：保留演示追溯视图（usePm 种子数据）。
-  if (!isAuthenticated) return <TraceView projectKey={projectKey} />;
-  return <LiveTraceView projectKey={projectKey} />;
+  // Codex review 4175631821：未登录时 index 路由保留演示列表；
+  // 深链接子路由（$taskId/new）走各自的登录守卫，不再被布局路由的演示分支吞掉。
+  if (!isAuthenticated) return <ListView projectKey={projectKey} />;
+  return <LiveTaskList projectKey={projectKey} />;
 }
 
 /**
- * P1 p1-requirement-trace：路由 key（字符串）→ 后端 id（数字）→ 追溯真实数据。
- * 演示数据不再用于已登录的追溯视图。
+ * P1 p1-task-list：路由 key（字符串）→ 后端 id（数字）→ POST /task/v1/findByPage。
+ * 演示数据不再用于已登录的任务列表。
  */
-function LiveTraceView({ projectKey }: { projectKey: string }) {
+function LiveTaskList({ projectKey }: { projectKey: string }) {
   const resolution = useProjectIdByKey(projectKey);
 
   if (resolution.isPending) {
@@ -50,5 +53,5 @@ function LiveTraceView({ projectKey }: { projectKey: string }) {
     );
   }
 
-  return <TraceViewLive projectId={resolution.data} projectKey={projectKey} />;
+  return <TaskListLive projectId={resolution.data} projectKey={projectKey} />;
 }

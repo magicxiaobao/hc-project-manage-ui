@@ -7,7 +7,11 @@
  *   变更契约前先更新契约测试（src/lib/api/__tests__/contract.test.ts）。
  */
 export * from './types';
+export * from './requirement-types';
+export * from './task-types';
 export * from './client';
 export { authApi } from './auth';
 export { projectApi } from './project';
+export { requirementApi } from './requirement';
+export { taskApi } from './task';
 export { useAuthStore } from './auth-store';

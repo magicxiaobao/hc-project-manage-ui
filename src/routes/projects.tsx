@@ -1,14 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button, Card, CardBody, Chip, Spinner } from "@heroui/react";
 import { useEffect, useState } from "react";
-import { PageHeading, ProjectCard } from "@/components/biz";
+import { PageHeading } from "@/components/biz";
 import { AppShell } from "@/components/pm/shell";
-import { columnOf } from "@/lib/pm/domain";
-import { usePm } from "@/lib/pm/store";
-import { ApiBusinessError } from "@/lib/api/client";
+import { DemoProjectList } from "@/components/pm/demo-project-list";
 import { useAuthStore } from "@/lib/api/auth-store";
-import { projectApi } from "@/lib/api/project";
-import type { ProjectResponse } from "@/lib/api/types";
+import { toUserMessage, useProjectList } from "@/lib/query";
 
 export const Route = createFileRoute("/projects")({ component: ProjectsPage });
 
@@ -21,48 +18,36 @@ function ProjectsPage() {
 }
 
 /**
- * Phase 0 垂直切片：已登录时走真实后端 /project/v1/findByPage 渲染项目列表。
+ * P1 p1-store-migration：已登录时走 react-query useProjectList
+ *（POST /project/v1/findByPage），不再直调 projectApi、不再引用 usePm 演示 store。
+ *
+ * Codex review 4175337074：用 PageResult.total 做分页，不再只取第一页前 100 条。
  */
+const PROJECT_PAGE_SIZE = 20;
+
 function LiveProjectList() {
-  const [projects, setProjects] = useState<ProjectResponse[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError, error, refetch, isRefetching } = useProjectList({
+    page,
+    pageSize: PROJECT_PAGE_SIZE,
+  });
 
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PROJECT_PAGE_SIZE));
+  // Codex review 4175402475：页码越界（删除/权限变化导致当前页变空）时自动回到
+  // 最后一页；空的越界页仍渲染分页器，避免用户被困在"暂无项目"无处可回。
+  // Codex review 4175583399（P1）：此 effect 必须在所有 early return 之前调用——
+  // 首屏 isLoading 时组件早返回，若 effect 写在早返回之后，首屏 hook 数与恢复后
+  // 的 hook 数不一致，违反 hooks 顺序（Rendered more hooks than during the
+  // previous render）。无条件调用，内部用 isLoading/total 门控跳过。
   useEffect(() => {
-    let cancelled = false;
-    projectApi
-      .getProjectList({ page: 1, pageSize: 100 })
-      .then((page) => {
-        if (!cancelled) setProjects(page.list);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof ApiBusinessError ? err.message : "加载项目列表失败");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
+    if (!isLoading && total > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [isLoading, total, totalPages, page]);
 
-  if (error) {
-    return (
-      <div className="flex items-center gap-3 py-8 text-sm text-danger">
-        <span>加载失败：{error}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onPress={() => {
-            setError(null);
-            setReloadKey((key) => key + 1);
-          }}
-        >
-          重试
-        </Button>
-      </div>
-    );
-  }
-  if (!projects) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-default-500">
         <Spinner size="sm" />
@@ -70,11 +55,30 @@ function LiveProjectList() {
       </div>
     );
   }
-  if (projects.length === 0) {
+  if (isError) {
+    return (
+      <div className="flex items-center gap-3 py-8 text-sm text-danger">
+        <span>加载失败：{toUserMessage(error, "加载项目列表失败")}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          isDisabled={isRefetching}
+          onPress={() => {
+            void refetch();
+          }}
+        >
+          重试
+        </Button>
+      </div>
+    );
+  }
+  const projects = data?.list ?? [];
+  if (projects.length === 0 && total === 0) {
     return <p className="py-8 text-sm text-default-500">暂无项目</p>;
   }
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    <>
+      <div className="grid gap-3 md:grid-cols-2">
       {projects.map((p) => (
         <Card key={p.id} className="w-full">
           <CardBody className="flex flex-col items-start gap-2">
@@ -88,22 +92,50 @@ function LiveProjectList() {
             <span className="type-meta">
               状态 {p.status} · 负责人 {p.projectManagerName ?? "未指定"} · 成员 {p.memberCount ?? 0} 人
             </span>
-            {/* Phase 0：后端项目暂不提供“进入项目”跳转——目标路由（/p/$projectKey）只从本地
-                usePm 种子数据解析项目，跳转会导致“没有找到这个项目”或误操作 demo 数据。
-                待后端项目路由接入后再恢复。 */}
+            {/* P1 p1-project-detail-live：后端项目可进入 /p/$projectKey，路由内解析 projectKey → id 后走 findById。 */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onPress={() => {
+                void navigate({ to: "/p/$projectKey", params: { projectKey: p.projectKey } });
+              }}
+            >
+              进入项目
+            </Button>
           </CardBody>
         </Card>
       ))}
-    </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="type-meta">
+          共 {total} 个项目 · 第 {page} / {totalPages} 页
+        </span>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={page <= 1 || isLoading}
+            onPress={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            上一页
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={page >= totalPages || isLoading}
+            onPress={() => setPage((current) => current + 1)}
+          >
+            下一页
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
 
 function ProjectsBody() {
   const navigate = useNavigate();
   const { isAuthenticated, hydrate, logout } = useAuthStore();
-  const projects = usePm((state) => state.projects);
-  const items = usePm((state) => state.items);
-  const people = usePm((state) => state.people);
 
   useEffect(() => {
     hydrate();
@@ -130,40 +162,13 @@ function ProjectsBody() {
               登录后端
             </Button>
           )}
-          {/* Phase 0：后端模式暂不提供“新建项目”——/projects/new 只写本地 usePm 演示数据，
-              不会发送到后端，会造成“建了但后端没有”的误解。待后端创建接口接入后再恢复。 */}
-          {!isAuthenticated && (
-            <Button variant="primary" onPress={() => void navigate({ to: "/projects/new" })}>
-              新建项目
-            </Button>
-          )}
+          <Button variant="primary" onPress={() => void navigate({ to: "/projects/new" })}>
+            新建项目
+          </Button>
         </div>
       </div>
-      {isAuthenticated ? (
-        <LiveProjectList />
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {projects.map((project) => {
-            const owned = items.filter((item) => item.projectId === project.id);
-            const open = owned.filter((item) => {
-              const column = columnOf(item.kind, item.status);
-              return column !== "done" && column !== "cancelled";
-            }).length;
-            return (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                lead={people.find((person) => person.id === project.leadId)}
-                openCount={open}
-                total={owned.length}
-                onOpen={() => {
-                  void navigate({ to: "/p/$projectKey", params: { projectKey: project.key } });
-                }}
-              />
-            );
-          })}
-        </div>
-      )}
+      {/* P1 p1-store-migration：登录态走 react-query，演示分支已抽为 DemoProjectList；本路由不再引用 usePm。 */}
+      {isAuthenticated ? <LiveProjectList /> : <DemoProjectList />}
     </div>
   );
 }

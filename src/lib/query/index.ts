@@ -1,0 +1,48 @@
+/**
+ * Phase 1 react-query 数据层入口。
+ *
+ * 约定：
+ * - 所有后端数据获取走这里的 hooks，不在组件里手写 useQuery + fetch/URL。
+ * - queryKey 一律走 queryKeys.* 工厂，不手写数组。
+ * - 错误展示用 toUserMessage(err) 转中文文案；登录失效用 isAuthExpiredError 识别。
+ */
+export { createQueryClient, isRetryableQueryError } from './client';
+export { clearQueryCache, setQueryCacheClearer } from './session';
+export { queryKeys } from './keys';
+export { isAuthExpiredError, toUserMessage } from './error';
+export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey, useProjectList, resolveProjectIdByKey } from './hooks/useProjects';
+export type { ProjectListParams } from './hooks/useProjects';
+export { useRequirementList, useRequirementOptions } from './hooks/useRequirements';
+export type { RequirementListParams, RequirementOptions } from './hooks/useRequirements';
+export { useTaskList } from './hooks/useTasks';
+export type { TaskListParams } from './hooks/useTasks';
+export {
+  TASK_TRANSITIONS_BY_STATUS,
+  useAssignTask,
+  useCreateTask,
+  useCreateTaskComment,
+  useTaskComments,
+  useTaskDetail,
+  useUpdateTaskStatus,
+  taskNeedsActorReason,
+  taskNeedsAssigneeConfirm,
+  taskNeedsReason,
+  taskNeedsReopenReason,
+  taskTransitionLabel,
+  taskTransitionTargets,
+} from './hooks/useTasks';
+export {
+  useAllowedTransitions,
+  useCreateRequirementComment,
+  useRequirementChildren,
+  useRequirementComments,
+  useRequirementDetail,
+  useRequirementHierarchy,
+  useRequirementImpact,
+  useRequirementTrace,
+  useTraceMatrix,
+  useTransitionHistory,
+  useTransitionRequirement,
+  transitionFieldRequirements,
+} from './hooks/useRequirements';
+export type { TraceMatrixParams, TransitionFieldRequirements } from './hooks/useRequirements';

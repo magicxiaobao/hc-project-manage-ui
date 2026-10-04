@@ -1,29 +1,33 @@
+/**
+ * 任务新建路由（P1：p1-task-create）。
+ *
+ * issues 布局路由的子路由：projectKey → id 解析后渲染
+ * TaskCreateLive（真实后端创建），提交成功后跳回任务列表。
+ * 未登录时渲染登录提示（Codex review 4175631821：布局路由不再拦截，由本页守卫）。
+ */
 import { createFileRoute } from "@tanstack/react-router";
 import { Button, Spinner } from "@heroui/react";
 import { EmptyHint } from "@/components/biz";
-import { TraceView } from "@/components/pm/trace-view";
-import { TraceViewLive } from "@/components/pm/trace-view-live";
+import { TaskCreateLive } from "@/components/pm/task-create-live";
 import { useAuthStore } from "@/lib/api/auth-store";
 import { toUserMessage, useProjectIdByKey } from "@/lib/query";
 
-export const Route = createFileRoute("/p/$projectKey/trace")({
+export const Route = createFileRoute("/p/$projectKey/issues/new")({
   component: Page,
 });
 
 function Page() {
   const { projectKey } = Route.useParams();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  // 登录态：需求追溯走真实后端（projectKey → id 解析 + trace/impact/matrix/hierarchy）。
-  // 未登录：保留演示追溯视图（usePm 种子数据）。
-  if (!isAuthenticated) return <TraceView projectKey={projectKey} />;
-  return <LiveTraceView projectKey={projectKey} />;
+  // Codex review 4175631821：布局路由不再做登录拦截，深链接可达时此处自行守卫。
+  if (!isAuthenticated) {
+    return <EmptyHint>{"登录后新建任务。"}</EmptyHint>;
+  }
+  return <LiveTaskCreate projectKey={projectKey} />;
 }
 
-/**
- * P1 p1-requirement-trace：路由 key（字符串）→ 后端 id（数字）→ 追溯真实数据。
- * 演示数据不再用于已登录的追溯视图。
- */
-function LiveTraceView({ projectKey }: { projectKey: string }) {
+/** P1 p1-task-create：路由 key（字符串）→ 后端 id（数字）→ TaskCreateLive。 */
+function LiveTaskCreate({ projectKey }: { projectKey: string }) {
   const resolution = useProjectIdByKey(projectKey);
 
   if (resolution.isPending) {
@@ -50,5 +54,5 @@ function LiveTraceView({ projectKey }: { projectKey: string }) {
     );
   }
 
-  return <TraceViewLive projectId={resolution.data} projectKey={projectKey} />;
+  return <TaskCreateLive projectId={resolution.data} projectKey={projectKey} />;
 }

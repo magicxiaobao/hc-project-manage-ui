@@ -14,6 +14,7 @@ export function ProjectSidebar({
   projects,
   itemOrigin,
   onClose,
+  liveProjectKey,
 }: {
   open: boolean;
   pathname: string;
@@ -21,6 +22,11 @@ export function ProjectSidebar({
   projects: Project[];
   itemOrigin: unknown;
   onClose: () => void;
+  /**
+   * Codex review 4175472566：登录态下真实后端项目的键（从 URL 提取）。
+   * 演示项目查不到时用它渲染仅含真实后端模块的分支，而不是退回通用分支。
+   */
+  liveProjectKey?: string | null;
 }) {
   const [compact, setCompact] = useState<boolean | null>(null);
   useEffect(() => {
@@ -34,9 +40,32 @@ export function ProjectSidebar({
     return () => media.removeEventListener("change", update);
   }, [onClose]);
   const current = project ? highlightedModule(pathname, project.key, itemOrigin) : undefined;
+  // 真实后端项目：只展示 P1 已接入的模块（项目详情/需求/任务/追溯），其余模块
+  // （仪表盘/缺陷/测试/版本/甘特等）仍是演示数据范围，不在分支里露出来。
+  const liveCurrent = liveProjectKey ? highlightedModule(pathname, liveProjectKey, itemOrigin) : undefined;
+  // Codex review 4175510487：登录态下 live 分支优先于演示项目分支——
+  // 后端项目的 key 撞上演示 seed key 时也走真实后端分支，不渲染演示侧栏。
   const content = (
     <>
-        {project ? (
+        {liveProjectKey ? (
+          <>
+            <div className="type-section px-1">{liveProjectKey}</div>
+            <div className="type-caption px-1">真实后端项目</div>
+            <div className="my-4 h-px bg-border" />
+            <nav aria-label="项目模块（真实后端）" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+              <div role="group" aria-label="项目" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">项目</h2>
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey" active={liveCurrent === "board"} activeOptions={{ exact: true }} icon={<Kanban className="size-4" />} label="项目详情" onClose={onClose} />
+              </div>
+              <div role="group" aria-label="需求与任务" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">需求与任务</h2>
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/requirements" active={liveCurrent === "requirements"} icon={<ListTree className="size-4" />} label="需求" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/issues" active={liveCurrent === "issues"} icon={<SquareCheckBig className="size-4" />} label="任务" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/trace" active={liveCurrent === "trace"} icon={<Waypoints className="size-4" />} label="追溯" onClose={onClose} />
+              </div>
+            </nav>
+          </>
+        ) : project ? (
           <>
             <div className="my-4 h-px bg-border" />
             <nav aria-label="项目模块" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
@@ -81,13 +110,14 @@ export function ProjectSidebar({
             </nav>
           </>
         )}
-        <div className="type-caption mt-auto px-1 pt-4">{project ? project.summary : "把事项拖到允许的状态列。"}</div>
+        <div className="type-caption mt-auto px-1 pt-4">{liveProjectKey ? "真实后端数据（需求/任务/追溯已接入）" : project ? project.summary : "把事项拖到允许的状态列。"}</div>
     </>
   );
   return (
     <>
       <aside className="hidden w-[230px] shrink-0 flex-col border-r border-border bg-surface px-4 pt-6 pb-4 lg:flex">
-        {project ? (
+        {/* 4175510487：live 分支优先时不渲染演示项目的名称/切换器（避免 key 碰撞时顶部显示演示项目名） */}
+        {!liveProjectKey && project ? (
           <ProjectName project={project} projects={projects} current={current} onClose={onClose} />
         ) : null}
         {content}
@@ -95,7 +125,8 @@ export function ProjectSidebar({
       {compact && open ? (
         <AppModal open title="项目导航" label="项目导航" onClose={onClose} size="sm" dialogClassName="project-nav-dialog" bodyClassName="min-h-0 overflow-auto">
           <div className="flex min-h-0 flex-col">
-            {project ? (
+            {/* 4175510487：live 分支优先时不渲染演示项目的名称/切换器（避免 key 碰撞时顶部显示演示项目名） */}
+            {!liveProjectKey && project ? (
               <ProjectName project={project} projects={projects} current={current} onClose={onClose} />
             ) : null}
             {content}
