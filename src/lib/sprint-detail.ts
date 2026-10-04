@@ -10,10 +10,14 @@
  * - ⚠️ GET sprint/v1/burndown/{sprintId} 与 statistics/{sprintId} 是
  *   Controller TODO 空壳（返回 Map.of()），P3 明确排除，不建模
  *
- * - normalizeBurndownData：防御归一（缺失→空数组；长度截齐最短；
- *   非有限数→0；dates 非字符串丢弃）
+ * - normalizeBurndownData：防御归一（缺失→空数组；三数组按索引 zip，
+ *   日期非法则整行丢弃以保持索引对齐；数值非法→0 并钳制非负；长度截齐最短）
  * - buildBurndownGeometry：归一化数据 → SVG 坐标（剩余故事点折线、
  *   理想线=首日剩余→0 的直线、每日工时柱走右轴），不依赖图表库
+ * - summarizeBurndown：汇总口径。⚠️ values[0] 是"首日剩余"而非"总量"
+ *   （后端 values[i]=max(总量-completedUpTo(day_i),0)），总量/已完成必须由
+ *   调用方传入冲刺详情统计（totalStoryPoints/completedStoryPoints），
+ *   绝不能拿首日剩余冒充"总故事点"（r16-5）
  */
 
 /** 归一化后的燃尽数据：三数组等长 */
@@ -23,34 +27,36 @@ export interface NormalizedBurndownData {
   dailyHours: number[];
 }
 
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
-
-function asFiniteNumberArray(value: unknown): number[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => (typeof item === "number" && Number.isFinite(item) ? item : 0));
+/** 非法/非有限/负数 → 0；燃尽值语义非负，钳制保证几何计算不越界（r16-4） */
+function toNonNegativeNumber(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, value);
 }
 
 /**
  * 防御归一燃尽图原始数据。
- * 后端冲刺不存在时返回空 Map（字段缺失）；三数组长度理论一致，
- * 仍截齐最短防止错位。
+ * 后端冲刺不存在时返回空 Map（字段缺失）；三数组先按索引 zip 再过滤：
+ * 日期非法则整行丢弃（不能只丢日期——否则日期/数值索引错位，r16-3），
+ * 数值非法→0 并钳制非负；最后长度截齐最短防止错位。
  */
 export function normalizeBurndownData(raw: unknown): NormalizedBurndownData {
   const empty: NormalizedBurndownData = { dates: [], values: [], dailyHours: [] };
   if (typeof raw !== "object" || raw === null) return empty;
   const record = raw as Record<string, unknown>;
-  const dates = asStringArray(record.dates);
-  const values = asFiniteNumberArray(record.values);
-  const dailyHours = asFiniteNumberArray(record.dailyHours);
-  const length = Math.min(dates.length, values.length, dailyHours.length);
-  return {
-    dates: dates.slice(0, length),
-    values: values.slice(0, length),
-    dailyHours: dailyHours.slice(0, length),
-  };
+  const rawDates = Array.isArray(record.dates) ? record.dates : [];
+  const rawValues = Array.isArray(record.values) ? record.values : [];
+  const rawHours = Array.isArray(record.dailyHours) ? record.dailyHours : [];
+  const length = Math.min(rawDates.length, rawValues.length, rawHours.length);
+  const dates: string[] = [];
+  const values: number[] = [];
+  const dailyHours: number[] = [];
+  for (let i = 0; i < length; i++) {
+    if (typeof rawDates[i] !== "string") continue;
+    dates.push(rawDates[i] as string);
+    values.push(toNonNegativeNumber(rawValues[i]));
+    dailyHours.push(toNonNegativeNumber(rawHours[i]));
+  }
+  return { dates, values, dailyHours };
 }
 
 /** 'YYYY-MM-DD' → 'MM-DD'；不匹配时原样返回 */
@@ -208,17 +214,39 @@ export function buildBurndownGeometry(
   };
 }
 
-/** 燃尽汇总：总故事点（首日剩余）、已完成、总工时 */
-export function summarizeBurndown(data: NormalizedBurndownData): {
-  totalPoints: number;
-  completedPoints: number;
+/** 燃尽汇总口径 */
+export interface BurndownSummary {
+  /**
+   * 故事点总量：必须取冲刺详情统计（SprintResponse.totalStoryPoints）。
+   * 后端 values[0] 是"首日剩余"（总量−首日完成），绝不能标为"总故事点"（r16-5）；
+   * 详情未返回总量时为 null，调用方改用首日剩余/区间消耗的诚实口径展示。
+   */
+  totalPoints: number | null;
+  /** 已完成故事点：取冲刺详情统计（SprintResponse.completedStoryPoints），缺失为 null */
+  completedPoints: number | null;
+  /** 首日剩余故事点（values[0]，后端口径，非总量） */
+  firstDayRemaining: number;
+  /** 图表窗口内消耗 = 首日剩余 − 末日剩余 */
+  windowCompleted: number;
+  /** 累计工时（dailyHours 求和） */
   totalHours: number;
-} {
-  const totalPoints = data.values.length > 0 ? data.values[0] : 0;
+}
+
+/**
+ * 燃尽汇总。总量/已完成由调用方传入冲刺详情统计；不传时总量相关为 null，
+ * 调用方不得用首日剩余冒充。
+ */
+export function summarizeBurndown(
+  data: NormalizedBurndownData,
+  totals?: { totalPoints?: number | null; completedPoints?: number | null },
+): BurndownSummary {
+  const firstDayRemaining = data.values.length > 0 ? data.values[0] : 0;
   const remaining = data.values.length > 0 ? data.values[data.values.length - 1] : 0;
   return {
-    totalPoints,
-    completedPoints: Math.max(totalPoints - remaining, 0),
+    totalPoints: totals?.totalPoints ?? null,
+    completedPoints: totals?.completedPoints ?? null,
+    firstDayRemaining,
+    windowCompleted: Math.max(firstDayRemaining - remaining, 0),
     totalHours: round2(data.dailyHours.reduce((sum, hours) => sum + hours, 0)),
   };
 }

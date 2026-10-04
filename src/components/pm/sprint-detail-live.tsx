@@ -21,7 +21,7 @@
  *
  * 登录态由路由层守卫（未登录渲染 EmptyHint）；本组件只处理已登录分支。
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button, Label, ProgressBar, Spinner, Tabs, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
@@ -76,8 +76,20 @@ function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** 燃尽图 Tab：GET /sprint/v1/burndownChart/{id} → SVG 自绘 */
-function BurndownPanel({ sprintId }: { sprintId: number }) {
+/**
+ * 燃尽图 Tab：GET /sprint/v1/burndownChart/{id} → SVG 自绘。
+ * totalPoints/completedPoints 取冲刺详情统计（r16-5）；缺失时图注改用
+ * "首日剩余/区间消耗"诚实口径，绝不拿首日剩余冒充"总故事点"。
+ */
+function BurndownPanel({
+  sprintId,
+  totalPoints,
+  completedPoints,
+}: {
+  sprintId: number;
+  totalPoints?: number | null;
+  completedPoints?: number | null;
+}) {
   const query = useSprintBurndown(sprintId);
   if (query.isPending) {
     return <Loading variant="section" label="正在加载燃尽图…" />;
@@ -99,7 +111,7 @@ function BurndownPanel({ sprintId }: { sprintId: number }) {
     // NotFind。能走到这里通常是冲刺无计划日期/无任务。
     return <EmptyHint>暂无燃尽图数据：冲刺可能没有计划日期或任务。</EmptyHint>;
   }
-  const summary = summarizeBurndown(normalized);
+  const summary = summarizeBurndown(normalized, { totalPoints, completedPoints });
   const { padding } = BURNDOWN_SIZE;
   const remainingEnd = normalized.values[normalized.values.length - 1] ?? 0;
   return (
@@ -108,7 +120,7 @@ function BurndownPanel({ sprintId }: { sprintId: number }) {
         <svg
           viewBox={`0 0 ${geometry.width} ${geometry.height}`}
           role="img"
-          aria-label={`燃尽图：剩余故事点从 ${summary.totalPoints} 降至 ${remainingEnd}，累计工时 ${summary.totalHours} 小时`}
+          aria-label={`燃尽图：剩余故事点从 ${summary.firstDayRemaining} 降至 ${remainingEnd}，累计工时 ${summary.totalHours} 小时`}
           className="w-full min-w-[560px]"
         >
           {/* 左轴网格 + 刻度（剩余故事点） */}
@@ -218,8 +230,16 @@ function BurndownPanel({ sprintId }: { sprintId: number }) {
           每日工时（右轴）
         </span>
         <span className="ml-auto">
-          总故事点 {summary.totalPoints} · 已完成 {summary.completedPoints} · 累计工时{" "}
-          {summary.totalHours} 小时
+          {summary.totalPoints != null ? (
+            <>
+              总故事点 {summary.totalPoints} · 已完成 {summary.completedPoints ?? 0} ·{" "}
+            </>
+          ) : (
+            <>
+              首日剩余 {summary.firstDayRemaining} · 区间消耗 {summary.windowCompleted} ·{" "}
+            </>
+          )}
+          累计工时 {summary.totalHours} 小时
         </span>
       </figcaption>
     </figure>
@@ -247,12 +267,18 @@ export function SprintDetailLive({
   const [draft, setDraft] = useState<string | null>(null);
   const [savedText, setSavedText] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState("");
+  // 已同步为草稿/基线的服务端文本版本。后台重取返回新文本时：草稿不脏
+  // 才用新文本重设基线（r16-2）；脏草稿一律保留，避免静默覆盖用户输入。
+  const syncedServerTextRef = useRef<string | null>(null);
   useEffect(() => {
-    if (retro.isSuccess && draft === null) {
+    if (!retro.isSuccess) return;
+    const isDirty = draft !== null && savedText !== null && draft !== savedText;
+    if (draft === null || (!isDirty && serverText !== syncedServerTextRef.current)) {
+      syncedServerTextRef.current = serverText;
       setDraft(serverText);
       setSavedText(serverText);
     }
-  }, [retro.isSuccess, serverText, draft]);
+  }, [retro.isSuccess, serverText, draft, savedText]);
   const dirty = draft !== null && savedText !== null && draft !== savedText;
   // 整页表单守卫：blocker/dialog 必须在 early return 分支之上渲染，
   // 否则加载页/错误页切换时守卫离线（表单 UX 约定）。
@@ -447,18 +473,24 @@ function DetailBody({
           </Tabs.List>
         </Tabs.ListContainer>
         <Tabs.Panel id="burndown">
-          <BurndownPanel sprintId={sprintId} />
+          <BurndownPanel
+            sprintId={sprintId}
+            totalPoints={sprint.totalStoryPoints}
+            completedPoints={sprint.completedStoryPoints}
+          />
         </Tabs.Panel>
         <Tabs.Panel id="retrospective">
-          {retroPending || draft === null ? (
-            <Loading variant="section" label="正在加载冲刺回顾…" />
-          ) : retroError ? (
+          {/* 错误判定必须在 loading 之前：首次 GET 失败时 isPending=false
+              但 draft 仍为 null，原顺序恒命中 loading 使错误/重试不可达（r16-1） */}
+          {retroError ? (
             <div className="flex flex-col items-start gap-3 py-8">
               <p className="type-body text-danger">冲刺回顾加载失败：{retroError}</p>
               <Button variant="ghost" onPress={onRetroRetry}>
                 重试
               </Button>
             </div>
+          ) : retroPending || draft === null ? (
+            <Loading variant="section" label="正在加载冲刺回顾…" />
           ) : (
             <div className="flex max-w-3xl flex-col gap-3">
               <TextField value={draft} onChange={onDraftChange} isDisabled={saving}>

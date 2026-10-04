@@ -38,16 +38,42 @@ describe("normalizeBurndownData", () => {
     });
   });
 
-  it("非有限数（NaN/Infinity）归 0；dates 非字符串丢弃", () => {
+  it("非有限数（NaN/Infinity）归 0；dates 非字符串则整行丢弃（索引对齐）", () => {
     const normalized = normalizeBurndownData({
       dates: ["2026-10-01", 12345, "2026-10-03"],
       values: [10, NaN, Infinity],
       dailyHours: [4, -Infinity, 8],
     });
-    expect(normalized.dates).toEqual(["2026-10-01", "2026-10-03"]);
-    // dates 丢弃一项后截齐为 2
+    // 下标 1 的日期非法→整行丢弃："2026-10-03" 仍与 values[2]/hours[2] 配对，
+    // 而不是与错位后的 values[1]（旧实现会把 03 配给 NaN→0）
     expect(normalized).toEqual({
       dates: ["2026-10-01", "2026-10-03"],
+      values: [10, 0],
+      dailyHours: [4, 8],
+    });
+  });
+
+  it("日期/数值错位回归：null 日期整行丢弃后 D3 仍配对 2/3（r16-3）", () => {
+    const normalized = normalizeBurndownData({
+      dates: ["2026-10-01", null, "2026-10-03"],
+      values: [10, 6, 2],
+      dailyHours: [1, 2, 3],
+    });
+    expect(normalized).toEqual({
+      dates: ["2026-10-01", "2026-10-03"],
+      values: [10, 2],
+      dailyHours: [1, 3],
+    });
+  });
+
+  it("负值钳制为 0（r16-4）：不产生越界折线与负 SVG 柱高", () => {
+    const normalized = normalizeBurndownData({
+      dates: ["2026-10-01", "2026-10-02"],
+      values: [10, -2],
+      dailyHours: [4, -1],
+    });
+    expect(normalized).toEqual({
+      dates: ["2026-10-01", "2026-10-02"],
       values: [10, 0],
       dailyHours: [4, 0],
     });
@@ -155,20 +181,45 @@ describe("buildBurndownGeometry", () => {
 });
 
 describe("summarizeBurndown", () => {
-  it("总故事点=首日剩余；已完成=首日-末日；总工时求和", () => {
+  const data = {
+    dates: ["2026-10-01", "2026-10-02", "2026-10-03"],
+    values: [10, 6, 4],
+    dailyHours: [4.5, 2, 1.5],
+  };
+
+  it("总量/已完成取冲刺详情统计；values[0] 只作为首日剩余（r16-5）", () => {
+    // 后端 values[0]=总量−首日完成：总量 10、首日完成 4 → values[0]=6；
+    // 旧实现会标成"总故事点 6"，正确应为详情统计的 10
     expect(
-      summarizeBurndown({
-        dates: ["2026-10-01", "2026-10-02", "2026-10-03"],
-        values: [10, 6, 4],
-        dailyHours: [4.5, 2, 1.5],
-      }),
-    ).toEqual({ totalPoints: 10, completedPoints: 6, totalHours: 8 });
+      summarizeBurndown(
+        { ...data, values: [6, 4, 2] },
+        { totalPoints: 10, completedPoints: 8 },
+      ),
+    ).toEqual({
+      totalPoints: 10,
+      completedPoints: 8,
+      firstDayRemaining: 6,
+      windowCompleted: 4,
+      totalHours: 8,
+    });
   });
 
-  it("空数据汇总为 0", () => {
+  it("未传统计时总量为 null（调用方改用首日剩余/区间消耗口径）", () => {
+    expect(summarizeBurndown(data)).toEqual({
+      totalPoints: null,
+      completedPoints: null,
+      firstDayRemaining: 10,
+      windowCompleted: 6,
+      totalHours: 8,
+    });
+  });
+
+  it("空数据汇总为 0/null", () => {
     expect(summarizeBurndown({ dates: [], values: [], dailyHours: [] })).toEqual({
-      totalPoints: 0,
-      completedPoints: 0,
+      totalPoints: null,
+      completedPoints: null,
+      firstDayRemaining: 0,
+      windowCompleted: 0,
       totalHours: 0,
     });
   });
