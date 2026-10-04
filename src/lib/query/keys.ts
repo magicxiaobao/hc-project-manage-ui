@@ -7,7 +7,7 @@
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
-function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -33,6 +33,8 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
     hierarchy: (projectId: number | null = null) => [...all, 'hierarchy', projectId] as const,
     /** 评论查询：params 为分页参数对象（如 { page, pageSize }） */
     comments: (id: number | string, params: Record<string, unknown> = {}) => [...all, 'comments', id, params] as const,
+    /** 发布门禁实时预览：GET /release/v1/{id}/previewGates */
+    gates: (id: number | string) => [...all, 'gates', id] as const,
     /** 按业务 key（项目 key 等）解析 id 的查询 */
     byKey: (key: string) => [...all, 'byKey', key] as const,
     /** 缺陷看板数据：GET /defect/v1/board?projectId= */
@@ -54,4 +56,5 @@ export const queryKeys = {
   testRun: domainKeys('testRun'),
   version: domainKeys('version'),
   releaseEnvironment: domainKeys('releaseEnvironment'),
+  release: domainKeys('release'),
 };

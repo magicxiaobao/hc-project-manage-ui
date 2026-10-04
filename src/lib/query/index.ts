@@ -105,3 +105,23 @@ export {
   useUpdateReleaseEnvironment,
 } from './hooks/useReleaseEnvironments';
 export type { ReleaseEnvironmentListParams } from './hooks/useReleaseEnvironments';
+export {
+  normalizeReleaseListParams,
+  useApproveRelease,
+  useCancelRelease,
+  useCopyReleaseAsDraft,
+  useCreateReleaseDraft,
+  useDeleteReleaseDraft,
+  usePreviewReleaseGates,
+  useRecordFailed,
+  useRecordReleased,
+  useRejectRelease,
+  useReleaseDetail,
+  useReleaseList,
+  useRevokeReleaseWaiver,
+  useRollbackReleaseAsDraft,
+  useSubmitRelease,
+  useUpdateReleaseDraft,
+  useWaiveReleaseGate,
+} from './hooks/useReleases';
+export type { ReleaseListParams } from './hooks/useReleases';

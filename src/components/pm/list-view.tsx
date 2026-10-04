@@ -72,7 +72,10 @@ export function ListView({ projectKey }: { projectKey: string }) {
   const scope = deriveListScope(search);
   const priority = search.priority ?? "all";
   const grouped = search.grouped ?? true;
-  const closedGroups = search.closedGroups ?? [];
+  // P2 p2-release-lifecycle：新增子路由后 useSearch({from:"/p/$projectKey"})
+  // 的合并 search 类型退化，closedGroups 显式标注避免隐式 any（纯类型修正，
+  // 运行时语义不变）。
+  const closedGroups: ListGroupId[] = search.closedGroups ?? [];
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkColumn, setBulkColumn] = useState<ColumnId | "cancelled" | "">("");
   const goToItem = useGoToItem();

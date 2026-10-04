@@ -137,6 +137,17 @@ export function VersionListLive({ projectId, projectKey }: { projectId: number; 
           variant="ghost"
           onPress={() =>
             void navigate({
+              to: "/p/$projectKey/releases",
+              params: { projectKey },
+            })
+          }
+        >
+          发布列表
+        </Button>
+        <Button
+          variant="ghost"
+          onPress={() =>
+            void navigate({
               to: "/p/$projectKey/release-environments",
               params: { projectKey },
             })
