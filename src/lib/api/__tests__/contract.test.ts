@@ -42,6 +42,23 @@
  * - POST /defect/v1/advancedSearch，请求体 { page, pageSize, bean: DefectAdvancedQuery }
  *   （batch/batchUpdateStatus/advancedSearchList/xlsx 导出为 P2 明确排除项）
  *
+ * 用例/套件契约（P2；来自后端 TestCaseController/TestSuiteController + 老前端）：
+ * - POST /testCase/v1/createTestCase，请求体 TestCaseCreatePayload，返回新建用例 id
+ * - POST /testCase/v1/updateTestCase，载荷含 id 的字段级更新
+ * - POST /testCase/v1/valid/{id} 与 invalid/{id}，启用/归档，id 拼在路径上
+ * - GET /testCase/v1/findById/{id}，返回用例详情
+ * - POST /testCase/v1/findByPage，请求体 { page, pageSize, bean }，bean.projectId 必填
+ * - POST /testCase/v1/deleteTestCase/{id}（软删；老前端称为 archiveTestCase）
+ * - POST /testCase/v1/duplicateTestCase/{id}，返回新用例 id
+ * - POST /testCase/v1/advancedSearch，请求体 { page, pageSize, bean: TestCaseAdvancedQuery }
+ * - POST /testSuite/v1/createTestSuite，请求体 TestSuiteCreatePayload，返回新建套件 id
+ * - POST /testSuite/v1/updateTestSuite，载荷含 id 的字段级更新
+ * - POST /testSuite/v1/valid/{id} 与 invalid/{id}，启用/归档，id 拼在路径上
+ * - GET /testSuite/v1/findById/{id}，返回套件详情
+ * - POST /testSuite/v1/findByPage，请求体 { page, pageSize, bean }
+ *   （batchDeleteTestCase/advancedSearchExport 为 P2 明确排除项；
+ *    老前端遗留路径 /test-suite/* 在后端 testSuite/v1 无对应端点，不建模）
+ *
  * 运行：npm run test:contract（需先 npm install）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +69,8 @@ import { projectApi } from '../project';
 import { requirementApi } from '../requirement';
 import { taskApi } from '../task';
 import { defectApi } from '../defect';
+import { testCaseApi } from '../testCase';
+import { testSuiteApi } from '../testSuite';
 import type { ProjectCreatePayload, ProjectUpdatePayload } from '../types';
 
 const memStore = new Map<string, string>();
@@ -1583,6 +1602,265 @@ describe('缺陷契约（P2）', () => {
         orderBy: 'updateTime',
         orderDirection: 'DESC',
       },
+    });
+  });
+});
+
+describe('测试用例契约（P2）', () => {
+  it('POST /testCase/v1/createTestCase，返回新建用例 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 401 } }]);
+    const payload = {
+      title: '登录接口返回异常',
+      description: 'POST /auth/v1/login 返回 500',
+      caseNumber: 'TC-2026-0001',
+      testType: '功能测试' as const,
+      priority: '高' as const,
+      status: 'DRAFT' as const,
+      projectId: 7,
+      preconditions: '系统处于可登录状态',
+      testSteps: '1. 输入账号密码；2. 点击登录',
+      expectedResult: '返回 token 并跳转首页',
+      verifiesRequirementIds: [101, 102],
+    };
+    const id = await testCaseApi.createTestCase(payload);
+
+    expect(id).toBe(401);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/createTestCase');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it('POST /testCase/v1/updateTestCase，载荷含 id 的字段级更新', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await testCaseApi.updateTestCase({
+      id: 401,
+      projectId: 7,
+      title: '登录接口返回异常（修订）',
+      priority: '中',
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/updateTestCase');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 401,
+      projectId: 7,
+      title: '登录接口返回异常（修订）',
+      priority: '中',
+    });
+  });
+
+  it('POST /testCase/v1/valid/{id} 与 invalid/{id}，id 拼在路径上', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await testCaseApi.validTestCase(401);
+    await testCaseApi.invalidTestCase(401);
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/testCase/v1/valid/401');
+    expect(init1.method).toBe('POST');
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/testCase/v1/invalid/401');
+    expect(init2.method).toBe('POST');
+  });
+
+  it('GET /testCase/v1/findById/{id}，返回用例详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 401, title: '登录接口返回异常', projectId: 7 } } },
+    ]);
+    const res = await testCaseApi.findById(401);
+
+    expect(res.id).toBe(401);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/findById/401');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /testCase/v1/findByPage，请求体 { page, pageSize, bean }；bean.projectId 必填', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 401, title: '登录接口返回异常' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testCaseApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE', priority: '高' },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE', priority: '高' },
+    });
+  });
+
+  it('POST /testCase/v1/deleteTestCase/{id}（软删；老前端称为 archiveTestCase）', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await testCaseApi.deleteTestCase(401);
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/deleteTestCase/401');
+    expect(init.method).toBe('POST');
+  });
+
+  it('POST /testCase/v1/duplicateTestCase/{id}，返回新用例 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 402 } }]);
+    const id = await testCaseApi.duplicateTestCase(401);
+
+    expect(id).toBe(402);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/duplicateTestCase/401');
+    expect(init.method).toBe('POST');
+  });
+
+  it('POST /testCase/v1/advancedSearch，高级查询条件拼在 bean 内', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 401, title: '登录接口返回异常' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testCaseApi.advancedSearch({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        keyword: '登录',
+        statusList: ['ACTIVE', 'REVIEW'],
+        priorityList: ['高', '中'],
+        testTypeList: ['功能测试'],
+        projectIds: [7],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/advancedSearch');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        keyword: '登录',
+        statusList: ['ACTIVE', 'REVIEW'],
+        priorityList: ['高', '中'],
+        testTypeList: ['功能测试'],
+        projectIds: [7],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
+  });
+});
+
+describe('测试套件契约（P2）', () => {
+  it('POST /testSuite/v1/createTestSuite，返回新建套件 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 501 } }]);
+    const payload = {
+      suiteName: '登录模块回归套件',
+      projectId: 7,
+      description: '登录/鉴权相关回归用例集合',
+      suiteType: '回归测试',
+      status: 'DRAFT' as const,
+    };
+    const id = await testSuiteApi.createTestSuite(payload);
+
+    expect(id).toBe(501);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/createTestSuite');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it('POST /testSuite/v1/updateTestSuite，载荷含 id 的字段级更新', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await testSuiteApi.updateTestSuite({
+      id: 501,
+      suiteName: '登录模块回归套件（v2）',
+      projectId: 7,
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/updateTestSuite');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 501,
+      suiteName: '登录模块回归套件（v2）',
+      projectId: 7,
+    });
+  });
+
+  it('POST /testSuite/v1/valid/{id} 与 invalid/{id}，id 拼在路径上', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await testSuiteApi.validTestSuite(501);
+    await testSuiteApi.invalidTestSuite(501);
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/testSuite/v1/valid/501');
+    expect(init1.method).toBe('POST');
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/testSuite/v1/invalid/501');
+    expect(init2.method).toBe('POST');
+  });
+
+  it('GET /testSuite/v1/findById/{id}，返回套件详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 501, suiteName: '登录模块回归套件', projectId: 7 } } },
+    ]);
+    const res = await testSuiteApi.findById(501);
+
+    expect(res.id).toBe(501);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/findById/501');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /testSuite/v1/findByPage，请求体 { page, pageSize, bean }', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 501, suiteName: '登录模块回归套件' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testSuiteApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE' },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE' },
     });
   });
 });
