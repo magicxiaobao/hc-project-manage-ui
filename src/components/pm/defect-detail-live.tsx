@@ -152,6 +152,7 @@ export function DefectDetailLive({
     guard: guardEditClose,
     dialog: editGuardDialog,
     blocker: editBlocker,
+    markClean: markCleanEdit,
   } = useUnsavedChangesGuard(editOpen && isEditDirty);
   const clearEditFieldError = (field: string) =>
     setEditFieldErrors((current) => {
@@ -273,6 +274,8 @@ export function DefectDetailLive({
       {
         onSuccess: () => {
           toast.success("缺陷已更新");
+          // 成功 = 已授权离开：同步置位 cleanRef（同新建弹窗，防同次提交卸载误判）
+          markCleanEdit();
           setEditOpen(false);
         },
         onError: (error) => {

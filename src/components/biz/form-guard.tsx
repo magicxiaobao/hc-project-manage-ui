@@ -17,7 +17,7 @@
  * dirty 的判定由各表单自己负责（当前值 vs 初始值比较），本文件只管拦截。
  */
 import { useBlocker } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@heroui/react";
 import { AppModal } from "@/components/biz/app-modal";
 
@@ -108,9 +108,12 @@ function RouteBlocker({ shouldBlockFn }: { shouldBlockFn: () => boolean }) {
 
 export function useUnsavedChangesGuard(dirty: boolean) {
   const dirtyRef = useRef(dirty);
-  // render 阶段不写 ref：effect 中同步，并发渲染下更稳（blocker 回调只在
-  // history 事件里读取，discrete 事件前 effect 已 flush，不影响拦截时机）
-  useEffect(() => {
+  // P2：必须用 useLayoutEffect 同步 dirty。若保存成功关闭与异常卸载（如错误页
+  // 切换）落在同一次 React 提交，被删除的 RouteBlocker 的 passive cleanup 会先于
+  // 父组件的 passive effect 执行——用 useEffect 同步会在此读到过期的 dirtyRef 而
+  // 误判（误 reset 取消用户后退）。layout effect 在同次提交的 passive cleanup
+  // 之前执行，保证 cleanup 看到的是当前提交的值。
+  useLayoutEffect(() => {
     dirtyRef.current = dirty;
   }, [dirty]);
   const cleanRef = useRef(false);

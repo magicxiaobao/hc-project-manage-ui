@@ -172,7 +172,7 @@ export function DefectCreateDialog({
     requirementDraft.trim() !== "" ||
     taskDraft.trim() !== "";
   // 弹窗打开且脏时才布防：同时拦截浏览器后退/刷新/关标签页（P1 finding）
-  const { guard, dialog, blocker } = useUnsavedChangesGuard(open && isDirty);
+  const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(open && isDirty);
 
   const doClose = () => {
     setForm(emptyDefectCreateFormInput());
@@ -264,6 +264,9 @@ export function DefectCreateDialog({
     createDefect.mutate(buildDefectCreatePayload(input, projectId), {
       onSuccess: (id) => {
         toast.success(`缺陷已创建（#${id}）`);
+        // 成功 = 已授权离开：同步置位 cleanRef。若关闭与异常卸载（如错误页切换）
+        // 落在同一次 React 提交，blocker 的卸载兜底能正确 proceed 而不是误 reset。
+        markClean();
         // 成功关闭是程序化动作，直接 doClose（表单已提交，不算"放弃修改"）
         doClose();
       },
