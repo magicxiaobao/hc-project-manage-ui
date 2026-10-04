@@ -88,9 +88,17 @@ export function TraceViewLive({ projectId, projectKey }: { projectId: number; pr
     }
   }, [requirementsQuery.isPending, selectorTotal, selectorTotalPages, selectorPage]);
   const effectiveId = selectedId ?? requirements[0]?.id ?? null;
+  // Codex review 4175878109：换页或搜索后，旧的手动选择可能不在当前结果集里，
+  // 此时 effectiveId 仍会优先老 id，导致选择器无匹配选项而追溯/影响面板展示过期
+  // 需求。用户显式改页/改搜索条件即视为重新选集，丢弃旧选择。
   const applySelectorSearch = () => {
+    setSelectedId(null);
     setSelectorTitle(selectorTitleInput);
     setSelectorPage(1);
+  };
+  const applySelectorPage = (next: number) => {
+    setSelectedId(null);
+    setSelectorPage(next);
   };
   const selectorProps = {
     requirements,
@@ -104,7 +112,7 @@ export function TraceViewLive({ projectId, projectKey }: { projectId: number; pr
     page: selectorPage,
     totalPages: selectorTotalPages,
     total: selectorTotal,
-    onPageChange: (next: number) => setSelectorPage(next),
+    onPageChange: applySelectorPage,
   };
 
   return (

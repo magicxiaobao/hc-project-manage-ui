@@ -15,11 +15,13 @@ export function OptionSelect({
   value,
   options,
   onChange,
+  isDisabled,
 }: {
   label: string;
   value: string;
   options: SelectOption[];
   onChange: (id: string) => void;
+  isDisabled?: boolean;
 }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const canClear = options.some((option) => option.id === "");
@@ -29,6 +31,7 @@ export function OptionSelect({
       aria-label={label}
       fullWidth
       placeholder="请选择"
+      isDisabled={isDisabled}
       selectedKey={selected || null}
       onSelectionChange={(key) => {
         if (key == null) {

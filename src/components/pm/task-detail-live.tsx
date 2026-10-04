@@ -363,14 +363,27 @@ export function TaskDetailLive({
             submitAssign();
           }}
         >
+          {/* Codex review 4175878114：改派请求在途时禁用执行人/原因输入，避免成功
+              回调无条件清空时吞掉用户刚写下的下一笔改派输入（与评论输入的禁用
+              策略一致，见 requirement-detail-live.tsx）。 */}
           <div className="w-44">
-            <TextField value={assignAssignee} onChange={setAssignAssignee} aria-label="执行人用户 ID">
+            <TextField
+              value={assignAssignee}
+              onChange={setAssignAssignee}
+              aria-label="执行人用户 ID"
+              isDisabled={assignMutation.isPending}
+            >
               <Label>执行人用户 ID</Label>
               <Input placeholder="输入用户 ID" inputMode="numeric" />
             </TextField>
           </div>
           <div className="min-w-48 flex-1">
-            <TextField value={assignReason} onChange={setAssignReason} aria-label="改派原因">
+            <TextField
+              value={assignReason}
+              onChange={setAssignReason}
+              aria-label="改派原因"
+              isDisabled={assignMutation.isPending}
+            >
               <Label>改派原因（必填）</Label>
               <Input placeholder="为什么改派…" />
             </TextField>

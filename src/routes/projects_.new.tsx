@@ -47,13 +47,15 @@ function IsoDateInput({
   label,
   value,
   onChange,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (iso: string) => void;
+  disabled?: boolean;
 }) {
   return (
-    <TextField value={value} onChange={onChange}>
+    <TextField value={value} onChange={onChange} isDisabled={disabled}>
       <Label>{label}</Label>
       <Input type="date" />
     </TextField>
@@ -97,6 +99,10 @@ function LiveCreateProject() {
   // 在途时表单仍可编辑/重复提交——两个 handler 可能各自通过检查、建出两个项目。
   // submitting 覆盖“预检 + 创建”整个异步操作，锁住期间禁止再次提交。
   const [submitting, setSubmitting] = useState(false);
+  // Codex review 4175878112：提交 preflight（异步唯一性检查）期间表单字段可编辑，
+  // 但 handleSubmit 已捕获提交时的旧值——用户在检查中途的改动会被静默丢弃。
+  // 整个提交区间禁用全部表单控件，与提交按钮的禁用保持一致。
+  const formDisabled = submitting || createProject.isPending;
   // Codex review 4175265689：可用性检查是异步的，过期的响应不能覆盖新输入
   // 的状态。每次检查递增代际，只有最新一次请求的响应才允许写回。
   const keyCheckGeneration = useRef(0);
@@ -187,6 +193,7 @@ function LiveCreateProject() {
       >
         <TextField
           value={projectKey}
+          isDisabled={formDisabled}
           onChange={(value) => {
             setProjectKey(value.toUpperCase());
             setKeyExists(null);
@@ -205,7 +212,7 @@ function LiveCreateProject() {
         ) : keyExists === true ? (
           <p className="text-xs text-danger">项目键已存在，请换一个</p>
         ) : null}
-        <TextField value={projectName} onChange={setProjectName}>
+        <TextField value={projectName} onChange={setProjectName} isDisabled={formDisabled}>
           <Label>项目名称</Label>
           <Input placeholder="值班改进二期" />
         </TextField>
@@ -214,16 +221,17 @@ function LiveCreateProject() {
           value={projectType}
           options={typeOptions}
           onChange={setProjectType}
+          isDisabled={formDisabled}
         />
         <div className="grid gap-3 sm:grid-cols-2">
-          <IsoDateInput label="开始日期" value={startIso} onChange={setStartIso} />
-          <IsoDateInput label="结束日期" value={endIso} onChange={setEndIso} />
+          <IsoDateInput label="开始日期" value={startIso} onChange={setStartIso} disabled={formDisabled} />
+          <IsoDateInput label="结束日期" value={endIso} onChange={setEndIso} disabled={formDisabled} />
         </div>
-        <TextField value={managerIdText} onChange={setManagerIdText}>
+        <TextField value={managerIdText} onChange={setManagerIdText} isDisabled={formDisabled}>
           <Label>项目经理用户 ID</Label>
           <Input inputMode="numeric" placeholder="填写后端用户 ID" />
         </TextField>
-        <TextField value={description} onChange={setDescription}>
+        <TextField value={description} onChange={setDescription} isDisabled={formDisabled}>
           <Label>项目描述</Label>
           <TextArea placeholder="这个项目要解决什么" />
         </TextField>
