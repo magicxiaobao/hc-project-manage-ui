@@ -118,6 +118,23 @@ let sessionGeneration = 0;
  */
 let invalidatedRefreshObservedGeneration: number | null = null;
 
+/**
+ * storage 事件是否应触发 hydrate（本地评审 pi P2）：只响应身份键
+ * USER_INFO_STORAGE_KEY 与 key === null。
+ * - persistLogin 总是最后写 userInfo（token → refreshToken → userInfo），
+ *   该事件到达时三键齐全，hydrate 能看到完整会话；跨 tab 登录/换账号被感知。
+ * - clear()（登出删三键）触发 key === null，hydrate 走跨 tab 登出清理分支。
+ * - token/refreshToken 的单键事件故意忽略：单键变化只可能来自写入序列中断
+ *   （如配额异常导致后两个 setItem 没写）或不遵循三键协议的外部写入者
+ *   （这些键与老前端共享、灰度互认登录态），此时存储处于部分写入中间态；
+ *   若此时 hydrate，会把残缺会话判为僵尸并 clearStoredAuth()，删掉对方正在
+ *   写入的凭证，造成级联登出。token 单键轮转无需 hydrate——客户端每次请求
+ *   都从存储直读最新 token，身份未变。
+ */
+export function shouldHydrateOnStorageEvent(key: string | null): boolean {
+  return key === null || key === USER_INFO_STORAGE_KEY;
+}
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   token: null,
