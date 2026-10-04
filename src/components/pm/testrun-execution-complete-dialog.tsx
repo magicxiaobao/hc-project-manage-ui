@@ -167,14 +167,17 @@ export function TestExecutionCompleteDialog({
               options={RESULT_OPTIONS}
               onChange={(next) => {
                 const result = next as ExecutionCompleteInput["result"];
-                // 切离 失败/阻塞 时清空失败说明：其输入与 FieldError 仅在
-                // 失败/阻塞下渲染，残留值+残留错误会导致"看不见的错误拦截提交"
-                //（codex r10 P2-2）；set 会同步清除该字段的错误
-                set(
-                  result === "FAILED" || result === "BLOCKED"
-                    ? { result }
-                    : { result, failureMessage: "" },
-                );
+                const failureVisible =
+                  result === "FAILED" || result === "BLOCKED";
+                const notesVisible = result === "SKIPPED" || failureVisible;
+                // 切离 失败/阻塞 时清空失败说明，切到备注隐藏态（通过/未选）时
+                // 同步清空执行备注：其输入与 FieldError 仅在可见态渲染，
+                // 残留值+残留错误会导致"看不见的错误拦截提交"
+                //（codex r10 P2-2、r11 P2-1）；set 会同步清除对应字段的错误
+                const patch: Partial<ExecutionCompleteInput> = { result };
+                if (!failureVisible) patch.failureMessage = "";
+                if (!notesVisible) patch.executionNotes = "";
+                set(patch);
               }}
             />
             <FieldError message={fieldErrors.result} />
