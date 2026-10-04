@@ -37,7 +37,7 @@ export const boardApi = {
   /** 启用看板：id 拼在路径上 */
   validBoard: (id: number) => api.post<string>(`/board/v1/valid/${id}`),
 
-  /** 归档看板（逻辑删）：id 拼在路径上 */
+  /** 逻辑删看板：id 拼在路径上；后端 Board.invalid() 同置状态为"归档"（与 archive 同状态），非物理删除 */
   invalidBoard: (id: number) => api.post<string>(`/board/v1/invalid/${id}`),
 
   /** 看板详情：GET */
@@ -74,7 +74,7 @@ export const boardApi = {
       `/board/v1/sprint/${sprintId}/create?boardName=${encodeURIComponent(boardName)}`,
     ),
 
-  /** 归档看板：id 拼在路径上（与 invalid 语义不同，后端独立状态） */
+  /** 归档看板：id 拼在路径上；后端与 invalid() 同置状态为"归档"，语义相同 */
   archiveBoard: (id: number) => api.post<string>(`/board/v1/archive/${id}`),
 
   /** 激活看板：id 拼在路径上 */

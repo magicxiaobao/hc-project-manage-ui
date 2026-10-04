@@ -6,8 +6,8 @@
  *   注意：后端 findByPage/getBoardsByProject 只按 projectId 过滤，bean 中的
  *   boardName/boardType/status 条件被完全忽略——前端用 useBoardListAll 循环分页
  *   拉取项目真实全量看板（直到某页不足一页，不再假装"500 就是全量"），再做
- *   本地筛选（名称包含/类型/状态）+ 本地分页，避免"筛选不生效"与 total>500
- *   时的静默漏数。
+ *   本地筛选（名称包含/类型/状态）+ 本地分页，避免"筛选不生效"与 total
+ *   超过单页大小时的静默漏数。
  * - 筛选：看板名称（文本）/ 看板类型（老前端五类）/ 状态（活跃/归档/暂停/维护中）
  * - 新建/编辑：BoardFormDialog（POST createBoard/updateBoard），成功后列表缓存已失效
  * - 行操作：编辑（弹窗）、设为默认（POST setDefault/{id}，仅非默认显示）、
@@ -85,7 +85,7 @@ export function BoardListLive({ projectId }: { projectId: number; projectKey: st
   const [sprintBoardOpen, setSprintBoardOpen] = useState(false);
 
   // 后端忽略 bean 里的 boardName/boardType/status 条件（只按 projectId 过滤），
-  // 且单次请求 pageSize 上限可能截断（total>500 时静默漏数）：用 useBoardListAll
+  // 且单次请求 pageSize 上限可能截断（total 超过单页大小时静默漏数）：用 useBoardListAll
   // 循环拉取所有页拿到真实全量，筛选用下面的本地过滤实现——避免"筛选不生效"与漏数。
   const listQuery = useBoardListAll({ projectId });
 

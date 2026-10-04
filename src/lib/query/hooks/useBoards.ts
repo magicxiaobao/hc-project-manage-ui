@@ -64,9 +64,9 @@ export interface BoardListAllParams {
  * 看板全量列表（循环分页，供本地筛选+本地分页使用）：
  * 走 POST /board/v1/project/{projectId}/findByPage（bean 只带 projectId，
  * 后端忽略其它条件）。
- * 单次 pageSize=500 的请求在 total>500 时会静默漏数——这里循环拉取所有页
- * （直到某页返回不足 FETCH_ALL_PAGE_SIZE），返回合并后的 BoardResponse[]，
- * 不再假装"500 就是全量"。
+ * 单次 pageSize=500 的请求在 total>500 时会静默漏数——这里按
+ * FETCH_ALL_PAGE_SIZE=200 循环拉取所有页（直到某页返回不足一页），
+ * 返回合并后的 BoardResponse[]，不再假装"500 就是全量"。
  * key 用 list({ all: true, ... }) 与分页查询区分；失效走 queryKeys.board.all 全域。
  */
 export function useBoardListAll(params: BoardListAllParams = {}) {
@@ -159,7 +159,9 @@ export function useInvalidBoard() {
 }
 
 /**
- * 归档看板：走 POST /board/v1/archive/{id}（独立归档状态，与 invalid 语义不同）。
+ * 归档看板：走 POST /board/v1/archive/{id}。
+ * 注意：后端 archive() 与 invalid() 同置状态为"归档"（Board.java:170-172），
+ * 两者语义相同，非物理删除，均可激活恢复。
  * 成功后失效看板域缓存。
  */
 export function useArchiveBoard() {
