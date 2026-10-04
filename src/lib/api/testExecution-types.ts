@@ -19,10 +19,17 @@ export interface ExecutionDefectResponse {
 }
 
 /**
- * 完成执行载荷（忠实于后端 CompleteExecutionRequest 全字段；字段级可选）。
+ * 完成执行载荷（忠实于后端 CompleteExecutionRequest 全字段）。
+ * result 为后端 record 的必填分量（TestExecutionResult，复用 testRun-types 的
+ * 四态联合：PASSED/FAILED/BLOCKED/SKIPPED），服务在为空时直接拒绝；其余字段可选。
  * evidence*DocumentId 指向附件域文档 id（P2 不接入附件上传）。
  */
+export type { TestExecutionResult } from './testRun-types';
+import type { TestExecutionResult } from './testRun-types';
+
 export interface CompleteExecutionPayload {
+  /** 执行结果（必填，后端拒绝空值） */
+  result: TestExecutionResult;
   actualResult?: string;
   failureMessage?: string;
   executionNotes?: string;

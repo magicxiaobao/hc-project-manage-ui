@@ -221,6 +221,7 @@ export function TestCaseFormDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <TextField
+                isDisabled={isPending}
                 value={form.title}
                 onChange={(next) => set({ title: next })}
                 aria-label="标题"
@@ -234,6 +235,7 @@ export function TestCaseFormDialog({
             </div>
             <div>
               <TextField
+                isDisabled={isPending}
                 value={form.caseNumber}
                 onChange={(next) => set({ caseNumber: next })}
                 aria-label="用例编号"
@@ -249,6 +251,7 @@ export function TestCaseFormDialog({
 
           <div>
             <TextField
+              isDisabled={isPending}
               value={form.description}
               onChange={(next) => set({ description: next })}
               aria-label="描述"
@@ -265,6 +268,7 @@ export function TestCaseFormDialog({
                 测试类型<RequiredMark />
               </Label>
               <OptionSelect
+                isDisabled={isPending}
                 label="测试类型（必填）"
                 value={form.testType}
                 options={TYPE_OPTIONS}
@@ -277,6 +281,7 @@ export function TestCaseFormDialog({
                 优先级<RequiredMark />
               </Label>
               <OptionSelect
+                isDisabled={isPending}
                 label="优先级（必填）"
                 value={form.priority}
                 options={PRIORITY_OPTIONS}
@@ -289,6 +294,7 @@ export function TestCaseFormDialog({
                 状态<RequiredMark />
               </Label>
               <OptionSelect
+                isDisabled={isPending}
                 label="状态（必填）"
                 value={form.status}
                 options={STATUS_OPTIONS}
@@ -301,6 +307,7 @@ export function TestCaseFormDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <TextField
+                isDisabled={isPending}
                 value={form.assigneeId}
                 onChange={(next) => set({ assigneeId: next })}
                 aria-label="负责人 ID"
@@ -312,6 +319,7 @@ export function TestCaseFormDialog({
             </div>
             <div>
               <TextField
+                isDisabled={isPending}
                 value={form.estimatedDuration}
                 onChange={(next) => set({ estimatedDuration: next })}
                 aria-label="预计时长（分钟）"
@@ -325,6 +333,7 @@ export function TestCaseFormDialog({
 
           <div>
             <TextField
+              isDisabled={isPending}
               value={form.preconditions}
               onChange={(next) => set({ preconditions: next })}
               aria-label="前置条件"
@@ -336,6 +345,7 @@ export function TestCaseFormDialog({
 
           <div>
             <TextField
+              isDisabled={isPending}
               value={form.testSteps}
               onChange={(next) => set({ testSteps: next })}
               aria-label="测试步骤"
@@ -350,6 +360,7 @@ export function TestCaseFormDialog({
 
           <div>
             <TextField
+              isDisabled={isPending}
               value={form.expectedResult}
               onChange={(next) => set({ expectedResult: next })}
               aria-label="期望结果"
@@ -364,6 +375,7 @@ export function TestCaseFormDialog({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <TextField
+              isDisabled={isPending}
               value={form.testData}
               onChange={(next) => set({ testData: next })}
               aria-label="测试数据"
@@ -372,6 +384,7 @@ export function TestCaseFormDialog({
               <TextArea rows={2} placeholder="执行所需的测试数据" />
             </TextField>
             <TextField
+              isDisabled={isPending}
               value={form.environmentRequirements}
               onChange={(next) => set({ environmentRequirements: next })}
               aria-label="环境要求"
@@ -382,6 +395,7 @@ export function TestCaseFormDialog({
           </div>
 
           <TextField
+            isDisabled={isPending}
             value={form.tags}
             onChange={(next) => set({ tags: next })}
             aria-label="标签"
@@ -393,6 +407,7 @@ export function TestCaseFormDialog({
           {mode === "create" ? (
             <div>
               <TextField
+                isDisabled={isPending}
                 value={form.verifiesRequirementIdsText}
                 onChange={(next) => set({ verifiesRequirementIdsText: next })}
                 aria-label="验证需求 ID"

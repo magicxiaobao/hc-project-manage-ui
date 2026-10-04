@@ -2071,11 +2071,12 @@ describe('执行记录 API 契约', () => {
     expect(init.method).toBe('POST');
   });
 
-  it('POST /testExecution/v1/{id}/complete，字段级可选载荷', async () => {
+  it('POST /testExecution/v1/{id}/complete，result 必填（后端 CompleteExecutionRequest.record 分量）', async () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: { id: 5101, status: 'COMPLETED', result: 'FAILED' } } },
     ]);
     const exec = await testExecutionApi.completeExecution(5101, {
+      result: 'FAILED',
       actualResult: '登录报 500',
       failureMessage: 'NullPointerException at LoginService:42',
       executionNotes: 'staging 环境复现',
@@ -2085,7 +2086,9 @@ describe('执行记录 API 契约', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/testExecution/v1/5101/complete');
     expect(init.method).toBe('POST');
+    // result 必填：后端 record 分量，服务在为空时直接拒绝（codex 本地评审 finding 1）
     expect(JSON.parse(init.body as string)).toEqual({
+      result: 'FAILED',
       actualResult: '登录报 500',
       failureMessage: 'NullPointerException at LoginService:42',
       executionNotes: 'staging 环境复现',

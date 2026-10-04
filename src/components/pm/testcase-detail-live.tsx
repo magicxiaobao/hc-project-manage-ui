@@ -111,12 +111,16 @@ export function TestCaseDetailLive({
   // 定义在所有提前返回之前：isError/!detail/归属不符分支也要渲染 editDialog，
   // 弹窗生命周期不能依赖这些分支（pi run138 P2-1 子路径 B）。
   // detail 非空时与下方 projectContextVerified/liveStatus 取值完全一致。
+  // 归属取值（codex 本地评审 finding 3）：实时详情存在时以其 projectId 为准，
+  // 不可用打开时的旧快照覆盖"归属明确为空"——否则操作区已禁用的空归属记录
+  // 仍能通过旧快照放行保存；只有实时详情缺失时才回退快照。
+  const liveProjectId = detail ? detail.projectId : editSnapshot?.projectId;
   const editSubmitVeto = (form: TestCaseFormInput) =>
     checkEditSubmitVeto({
       projectContextVerified:
         typeof routeProjectQuery.data === "number" &&
-        (detail?.projectId ?? editSnapshot?.projectId) != null &&
-        (detail?.projectId ?? editSnapshot?.projectId) === routeProjectQuery.data,
+        liveProjectId != null &&
+        liveProjectId === routeProjectQuery.data,
       liveStatus: detail?.status ?? editSnapshot?.detail.status ?? null,
       formStatus: form.status,
     });
