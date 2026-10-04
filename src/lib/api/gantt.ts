@@ -60,7 +60,7 @@ export const milestoneApi = {
   updateMilestone: (data: MilestoneUpdatePayload) =>
     api.post<void>('/milestone/update', data),
 
-  /** 删除里程碑：POST /milestone/delete/{id}（硬删除） */
+  /** 删除里程碑：POST /milestone/delete/{id}（逻辑删，@TableLogic） */
   deleteMilestone: (id: number) => api.post<void>(`/milestone/delete/${id}`),
 
   /** 里程碑分页查询：POST /milestone/page，标准分页请求体 */

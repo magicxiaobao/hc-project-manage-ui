@@ -77,15 +77,16 @@ export interface MilestoneCreatePayload {
 /**
  * 里程碑更新载荷（忠实于后端 MilestoneUpdateRequest：
  * "字段出现即提交"——*Submitted 由后端 @JsonSetter 自动置位，客户端只发要改的字段，
- * 绝不发送 xxxSubmitted（发了即 400 零写入））
+ * 绝不发送 xxxSubmitted（发了即 400 零写入）；
+ * 日期字段出现且为 null = 显式清空（后端按 null 落库）
  */
 export interface MilestoneUpdatePayload {
   id: number;
   projectId?: number;
   name?: string;
   status?: MilestoneStatus | string;
-  startDate?: string;
-  endDate?: string;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 /** 里程碑查询条件（忠实于后端 MilestoneQueryRequest） */

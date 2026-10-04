@@ -174,3 +174,14 @@ export {
   useUpdateSprint,
 } from './hooks/useSprints';
 export type { SprintListParams } from './hooks/useSprints';
+export {
+  isGanttFatalError,
+  useBatchUpdateGanttTasks,
+  useCreateMilestone,
+  useCriticalPath,
+  useDeleteMilestone,
+  useGanttData,
+  useMilestoneList,
+  useTaskGanttDependencies,
+  useUpdateMilestone,
+} from './hooks/useGantt';
