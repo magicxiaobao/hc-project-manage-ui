@@ -84,14 +84,18 @@ function RouteBlocker({ shouldBlockFn }: { shouldBlockFn: () => boolean }) {
   // P2：卸载时若仍有待决的离开导航，必须显式结束它。useBlocker 的卸载清理只会
   // 注销 history.block，不会解决已创建的 resolver Promise——否则那次导航会永远
   // 挂起（复现：提交在途时按浏览器后退→确认框暂不作答→请求成功关闭弹窗）。
-  // 能走到卸载说明宿主已因提交成功/确认放弃而关闭，数据无丢失风险，直接放行，
-  // 即尊重用户最初的离开意图。
+  // 但不能无脑 proceed：详情页后台重取失败切错误页也会卸载 blocker，此时草稿
+  // 可能仍是脏的，直接放行会丢草稿。因此按"此刻是否仍应拦截"区分——
+  // 仍应拦截（脏且未授权离开）=> 异常卸载，reset() 取消这次离开，保住草稿；
+  // 不再拦截（已提交/已确认放弃）=> proceed() 放行，尊重用户最初的离开意图。
   useEffect(() => {
     return () => {
       const pending = blockerRef.current;
-      if (pending.status === "blocked") pending.proceed?.();
+      if (pending.status !== "blocked") return;
+      if (shouldBlockFn()) pending.reset?.();
+      else pending.proceed?.();
     };
-  }, []);
+  }, [shouldBlockFn]);
   if (blocker.status !== "blocked") return null;
   return (
     <DiscardConfirmDialog
