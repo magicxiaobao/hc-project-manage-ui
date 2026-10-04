@@ -6,9 +6,11 @@
  * - 筛选：套件名称（文本）/ 套件类型（六种）/ 状态（八态）
  * - 新建/编辑：TestSuiteFormDialog（POST createTestSuite/updateTestSuite），
  *   成功后列表缓存已失效
- * - 行操作：编辑（弹窗）、启用（POST valid/{id}）、归档（POST invalid/{id}，
- *   确认框确认，成功后 toast）。注意 valid/invalid 是实体有效开关，
- *   与八态 status 枚举字段相互独立（老前端"删除"走的是遗留 /test-suite/* 路径，
+ * - 行操作：编辑（弹窗）、启用（POST valid/{id} → 状态置 IN_PROGRESS）、
+ *   归档（POST invalid/{id} → 状态置 DEPRECATED，确认框确认，成功后 toast）。
+ *   注意：valid/invalid 直接改写 status 枚举字段（不是独立的有效开关）；
+ *   后端 findByPage 默认不排除 DEPRECATED，归档记录仍会出现在默认列表中，
+ *   可用状态筛选定位（老前端"删除"走的是遗留 /test-suite/* 路径，
  *   testSuite/v1 无此端点，不做）
  * - 状态：加载 / 错误（重试）/ 空 / 列表 + 分页
  * - 行标题深链到 /p/$projectKey/testsuites/$testSuiteId
@@ -287,7 +289,8 @@ export function TestSuiteListLive({ projectId, projectKey }: { projectId: number
         />
       ) : null}
 
-      {/* 归档确认框（沿用用例归档确认文案口径："归档后将不再出现在默认列表中，是否继续？"） */}
+      {/* 归档确认框：归档仅把状态置为「已废弃」，记录仍会出现在默认列表中
+          （后端 findByPage 默认不排除 DEPRECATED），文案如实描述（codex r6 P2-7） */}
       <AppModal
         open={archiveId !== null}
         title="确认归档"
@@ -295,7 +298,7 @@ export function TestSuiteListLive({ projectId, projectKey }: { projectId: number
         size="sm"
       >
         <p className="type-body">
-          {`归档后套件 #${archiveId} 将不再出现在默认列表中，是否继续？`}
+          {`归档后套件 #${archiveId} 的状态将变为「已废弃」，仍会出现在列表中（可按状态筛选查看），是否继续？`}
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onPress={() => setArchiveId(null)} isDisabled={invalidMutation.isPending}>

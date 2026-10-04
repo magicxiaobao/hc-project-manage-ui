@@ -43,6 +43,12 @@ export interface TestSuiteFormInput {
 export const MAX_TESTSUITE_NAME_LENGTH = 100;
 export const MIN_TESTSUITE_NAME_LENGTH = 2;
 export const MAX_TESTSUITE_DESCRIPTION_LENGTH = 2000;
+/**
+ * 耗时（分钟）上限：后端 TestSuiteCreateRequest/UpdateRequest 的
+ * estimatedTime/actualTime 都是 Integer（codex r6 P2-8），超过
+ * 2147483647 的值后端 Jackson 反序列化失败，前端必须拦截。
+ */
+export const MAX_TESTSUITE_MINUTES = 2147483647;
 
 /** 空表单默认值：状态 DRAFT（草稿） */
 export function emptyTestSuiteFormInput(): TestSuiteFormInput {
@@ -136,8 +142,12 @@ export function validateTestSuiteFormInput(
     original: string | null | undefined,
   ) => {
     if (input[field].trim() !== '') {
-      if (parseOptionalPositiveInt(input[field]) === null) {
+      const minutes = parseOptionalPositiveInt(input[field]);
+      if (minutes === null) {
         errors.push({ field, message: `${label}须为正整数（分钟）` });
+      } else if (minutes > MAX_TESTSUITE_MINUTES) {
+        // 后端为 Integer：超过 2147483647 反序列化失败（codex r6 P2-8）
+        errors.push({ field, message: `${label}不能超过${MAX_TESTSUITE_MINUTES}分钟` });
       }
     } else if (original != null && original.trim() !== '') {
       // 后端更新只写非空值：编辑时清空已有耗时会静默保留原值，

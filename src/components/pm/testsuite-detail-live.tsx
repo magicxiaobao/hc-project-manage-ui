@@ -9,8 +9,11 @@
  * - 归档：POST /testSuite/v1/invalid/{id}（确认框确认；成功后 toast 并返回列表）
  * - 套件-用例管理（TestSuiteTestCaseManager 等价）：
  *   - 已关联用例：POST /testCase/v1/findByPage（bean.testSuiteId = 本套件）
- *   - 添加用例：候选 = 本项目未归属本套件的用例，逐条
- *     POST /testCase/v1/updateTestCase {id, testSuiteId} 关联
+ *   - 添加用例：候选 = 本项目全部用例（分页 + 标题搜索），前端过滤掉
+ *     已归属本套件的，逐条 POST /testCase/v1/updateTestCase {id, testSuiteId}
+ *     关联。注意一个用例只能归属一个套件（后端 updateEditableFields
+ *     直接覆盖 test_suite_id），把已归属其他套件的用例加入本套件会将它
+ *     从原套件移出，弹窗内有明确说明（codex r6 P2-2）
  *   - ⚠️ 解除关联后端不支持：TestCaseUpdateRequest.testSuiteId 经
  *     BaseTestCaseUpdater 的 `Optional.ofNullable(...).ifPresent` 应用，
  *     null 被跳过无法置空；且后端无 add/remove 专用端点（老前端
@@ -22,16 +25,17 @@
  *
  * 未登录走演示测试视图（TestsView）时不使用本组件。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Spinner } from "@heroui/react";
+import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { toast } from "sonner";
 import {
   AppModal,
   EmptyHint,
   PageHeading,
 } from "@/components/biz";
+import { shouldClampPage } from "@/lib/pagination";
 import { editFormFromTestSuite } from "@/lib/testsuite-form";
 import type { TestSuiteResponse } from "@/lib/api/testSuite-types";
 import {
@@ -97,6 +101,11 @@ export function TestSuiteDetailLive({
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [addCaseOpen, setAddCaseOpen] = useState(false);
   const [linkedPage, setLinkedPage] = useState(1);
+  // 添加候选用例的分页/搜索（codex r6 P2-1：此前固定只取前 20 条，
+  // 后续用例无法进入套件）
+  const [candidatePage, setCandidatePage] = useState(1);
+  const [candidateTitleInput, setCandidateTitleInput] = useState("");
+  const [appliedCandidateTitle, setAppliedCandidateTitle] = useState("");
   // 编辑快照：打开瞬间捕获记录，弹窗生命周期不依赖实时详情。
   // 否则弹窗打开后记录被他人改动导致重取变化，脏表单会被
   // 直接卸载而无"是否放弃修改"提示（codex P2 #3）。
@@ -123,16 +132,43 @@ export function TestSuiteDetailLive({
     bean: { testSuiteId },
     projectId: projectContextVerified ? routeProjectId : null,
   });
-  // 添加候选：本项目全部用例，前端过滤掉已归属本套件的
+  // 添加候选：本项目全部用例（分页 + 标题搜索），前端过滤掉已归属本套件的
+  const appliedTitle = appliedCandidateTitle.trim();
   const candidateQuery = useTestCaseList({
-    page: 1,
+    page: candidatePage,
     pageSize: CANDIDATE_PAGE_SIZE,
-    bean: {},
+    bean: appliedTitle ? { title: appliedTitle } : {},
     projectId: addCaseOpen && projectContextVerified ? routeProjectId : null,
   });
   const candidates = (candidateQuery.data?.list ?? []).filter(
     (item) => item.testSuiteId !== testSuiteId,
   );
+
+  // 数据返回后若当前页已越界（他人归档导致 total 缩水），自动回退到最后一页
+  // 重新查询，避免"暂未关联"空态 + 分页消失的误导（codex r6 P2-6）。
+  // 关联列表与候选列表同理（沿用 TestSuiteListLive 的 shouldClampPage 模式）。
+  const linkedTotal = linkedQuery.data?.total ?? 0;
+  useEffect(() => {
+    const clamped = shouldClampPage(
+      linkedQuery.isSuccess,
+      linkedQuery.isFetching,
+      linkedPage,
+      linkedTotal,
+      LINKED_PAGE_SIZE,
+    );
+    if (clamped !== null) setLinkedPage(clamped);
+  }, [linkedQuery.isSuccess, linkedQuery.isFetching, linkedPage, linkedTotal]);
+  const candidateTotal = candidateQuery.data?.total ?? 0;
+  useEffect(() => {
+    const clamped = shouldClampPage(
+      candidateQuery.isSuccess,
+      candidateQuery.isFetching,
+      candidatePage,
+      candidateTotal,
+      CANDIDATE_PAGE_SIZE,
+    );
+    if (clamped !== null) setCandidatePage(clamped);
+  }, [candidateQuery.isSuccess, candidateQuery.isFetching, candidatePage, candidateTotal]);
 
   const openEdit = () => {
     if (!detail || !projectContextVerified) return;
@@ -143,6 +179,12 @@ export function TestSuiteDetailLive({
   const handleArchive = () => {
     if (invalidMutation.isPending) return;
     setArchiveOpen(false);
+    // 归属复核：弹窗打开后项目归属翻转（路由项目变化/详情刷新），
+    // 已打开的确认框仍能提交——此处二次拦截（codex r6 P2-5）
+    if (!projectContextVerified) {
+      toast.error("该套件已不属于当前项目，不能归档");
+      return;
+    }
     invalidMutation.mutate(testSuiteId, {
       onSuccess: () => {
         toast.success(`测试套件 #${testSuiteId} 已归档`);
@@ -171,11 +213,37 @@ export function TestSuiteDetailLive({
     );
   };
 
+  // 编辑弹窗：快照驱动，生命周期不依赖实时详情/归属查询（codex P2 #3）。
+  // 四个分支共用同一个 keyed 实例且位于同一 <div> 根下，分支切换时 React
+  // 只做 keyed 移动而不 remount；后台重取失败时脏表单不被卸载
+  //（testcase-detail-live 同一 lastGood 模式；codex r6 P2-4）。
+  // 提交前复核归属：弹窗打开后归属翻转也无法保存（codex r6 P2-5），
+  // 拒绝后草稿保留、弹窗不卸载，关闭仍走 dirty check。
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditSnapshot(null);
+  };
+  const editDialog = editSnapshot ? (
+    <TestSuiteFormDialog
+      key={`edit-${editSnapshot.detail.id}`}
+      open={editOpen}
+      projectId={liveProjectId ?? editSnapshot.projectId}
+      mode="edit"
+      testSuiteId={editSnapshot.detail.id}
+      initial={editFormFromTestSuite(editSnapshot.detail)}
+      submitVeto={() =>
+        projectContextVerified ? null : "项目归属已变化，无法提交。请刷新页面后重试。"
+      }
+      onClose={closeEdit}
+    />
+  ) : null;
+
   if (detailQuery.isPending) {
     return (
       <div className="flex items-center gap-2 p-4 text-sm text-default-500 md:p-6">
         <Spinner size="sm" />
         正在加载测试套件…
+        {editDialog}
       </div>
     );
   }
@@ -187,6 +255,7 @@ export function TestSuiteDetailLive({
         <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
           重试
         </Button>
+        {editDialog}
       </div>
     );
   }
@@ -195,12 +264,13 @@ export function TestSuiteDetailLive({
     return (
       <div className="p-4 md:p-6">
         <EmptyHint>没有找到这个测试套件。</EmptyHint>
+        {editDialog}
       </div>
     );
   }
 
   const passRate =
-    detail.passRate != null ? `${(detail.passRate * 100).toFixed(1)}%` : "-";
+    detail.passRate != null ? `${detail.passRate.toFixed(1)}%` : "-";
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
@@ -371,21 +441,8 @@ export function TestSuiteDetailLive({
         ) : null}
       </section>
 
-      {/* 编辑弹窗：快照驱动，生命周期不依赖实时详情/归属查询（codex P2 #3） */}
-      {editSnapshot ? (
-        <TestSuiteFormDialog
-          key={`edit-${editSnapshot.detail.id}`}
-          open={editOpen}
-          projectId={liveProjectId ?? editSnapshot.projectId}
-          mode="edit"
-          testSuiteId={editSnapshot.detail.id}
-          initial={editFormFromTestSuite(editSnapshot.detail)}
-          onClose={() => {
-            setEditOpen(false);
-            setEditSnapshot(null);
-          }}
-        />
-      ) : null}
+      {/* 编辑弹窗：快照驱动，四个分支共用同一 keyed 实例（见上方 editDialog） */}
+      {editDialog}
 
       {/* 归档确认框 */}
       <AppModal
@@ -395,7 +452,7 @@ export function TestSuiteDetailLive({
         size="sm"
       >
         <p className="type-body">
-          {`归档后套件 #${testSuiteId} 将不再出现在默认列表中，是否继续？`}
+          {`归档后套件 #${testSuiteId} 的状态将变为「已废弃」，仍会出现在列表中（可按状态筛选查看），是否继续？`}
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onPress={() => setArchiveOpen(false)} isDisabled={invalidMutation.isPending}>
@@ -415,6 +472,44 @@ export function TestSuiteDetailLive({
         onClose={() => setAddCaseOpen(false)}
         size="lg"
       >
+        {/* codex r6 P2-2：一个用例只能归属一个套件，后端 updateEditableFields
+            直接覆盖 test_suite_id；把已归属其他套件的用例加入本套件会将它从
+            原套件移出，此处明确告知 */}
+        <p className="type-caption mb-2 text-default-500">
+          注意：一个用例只能归属一个套件；将已归属其他套件的用例加入本套件，会把它从原套件移出。
+        </p>
+        <form
+          className="mb-2 flex items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setAppliedCandidateTitle(candidateTitleInput);
+            setCandidatePage(1);
+          }}
+        >
+          <div className="flex-1">
+            <TextField
+              value={candidateTitleInput}
+              onChange={setCandidateTitleInput}
+              aria-label="按用例标题搜索"
+            >
+              <Input placeholder="按用例标题搜索，回车确认" />
+            </TextField>
+          </div>
+          <Button type="submit" size="sm" variant="primary">
+            搜索
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onPress={() => {
+              setCandidateTitleInput("");
+              setAppliedCandidateTitle("");
+              setCandidatePage(1);
+            }}
+          >
+            重置
+          </Button>
+        </form>
         {candidateQuery.isPending ? (
           <div className="flex items-center gap-2 py-8 text-sm text-default-500">
             <Spinner size="sm" />
@@ -432,7 +527,11 @@ export function TestSuiteDetailLive({
           </div>
         ) : null}
         {candidateQuery.isSuccess && candidates.length === 0 ? (
-          <EmptyHint>本项目没有可添加的用例（全部已归属本套件）。</EmptyHint>
+          <EmptyHint>
+            {appliedTitle
+              ? `没有标题包含「${appliedTitle}」的可添加用例。`
+              : "本项目没有可添加的用例（全部已归属本套件）。"}
+          </EmptyHint>
         ) : null}
         {candidateQuery.isSuccess && candidates.length > 0 ? (
           <div className="overflow-hidden rounded-sm border border-border bg-surface">
@@ -443,6 +542,11 @@ export function TestSuiteDetailLive({
               >
                 <span className="type-caption shrink-0 text-default-400">#{item.id}</span>
                 <span className="type-body min-w-0 flex-1 truncate">{item.title}</span>
+                {item.testSuiteId != null ? (
+                  <span className="type-caption shrink-0 text-warning">
+                    已归属套件 #{item.testSuiteId}
+                  </span>
+                ) : null}
                 <TestCaseStatusChip status={item.status} />
                 <Button
                   size="sm"
@@ -455,6 +559,32 @@ export function TestSuiteDetailLive({
                 </Button>
               </div>
             ))}
+          </div>
+        ) : null}
+        {candidateQuery.isSuccess && candidateTotal > CANDIDATE_PAGE_SIZE ? (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="type-meta">
+              共 {candidateTotal} 条 · 第 {candidatePage} /{" "}
+              {Math.max(1, Math.ceil(candidateTotal / CANDIDATE_PAGE_SIZE))} 页
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                isDisabled={candidatePage <= 1}
+                onPress={() => setCandidatePage((current) => Math.max(1, current - 1))}
+              >
+                上一页
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                isDisabled={candidatePage >= Math.ceil(candidateTotal / CANDIDATE_PAGE_SIZE)}
+                onPress={() => setCandidatePage((current) => current + 1)}
+              >
+                下一页
+              </Button>
+            </div>
           </div>
         ) : null}
         <div className="mt-4 flex justify-end">

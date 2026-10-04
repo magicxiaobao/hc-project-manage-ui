@@ -59,6 +59,7 @@ export function TestSuiteFormDialog({
   projectId,
   mode,
   testSuiteId,
+  submitVeto,
   initial,
   onClose,
 }: {
@@ -67,6 +68,12 @@ export function TestSuiteFormDialog({
   mode: "create" | "edit";
   /** 编辑模式时的套件 id */
   testSuiteId?: number;
+  /**
+   * 提交前复核（codex r6 P2-5）：调用方在提交瞬间按实时状态检查
+   * （如弹窗打开后项目归属翻转）。返回非 null 字符串即拒绝提交，
+   * 错误走弹窗内持久错误，草稿保留、弹窗不卸载，关闭仍走 dirty check。
+   */
+  submitVeto?: () => string | null;
   /** 初始表单值（create 时传 emptyTestSuiteFormInput()，edit 时传回填值） */
   initial: TestSuiteFormInput;
   onClose: () => void;
@@ -131,6 +138,13 @@ export function TestSuiteFormDialog({
     for (const error of errors) nextFieldErrors[error.field] = error.message;
     setFieldErrors(nextFieldErrors);
     if (errors.length > 0) return;
+    // 提交前复核：归属翻转时拒绝提交（codex r6 P2-5）。拒绝后草稿保留、
+    // 弹窗不卸载，走弹窗内持久错误而非 toast（一闪而过）。
+    const veto = submitVeto?.();
+    if (veto) {
+      setSubmitError(veto);
+      return;
+    }
     setSubmitError("");
     if (mode === "create") {
       createTestSuite.mutate(buildTestSuiteCreatePayload(form, projectId), {
