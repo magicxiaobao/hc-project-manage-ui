@@ -26,18 +26,21 @@
  * 后端日期说明：foundDate/estimatedFixDate/actualFixDate/closedDate 为 LocalDateTime
  * （'YYYY-MM-DDTHH:mm:ss' 字符串，不做时区换算）；createdAt/updatedAt 为秒级时间戳。
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, Input, Label, Spinner, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
 import {
   AppModal,
   EmptyHint,
+  FieldError,
   OptionSelect,
   PageHeading,
   PriorityMark,
+  RequiredMark,
   SeverityChip,
   StatusChip,
+  useUnsavedChangesGuard,
 } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
 import { priorityLabel, statusLabel } from "@/lib/pm/domain";
@@ -136,6 +139,22 @@ export function DefectDetailLive({
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<DefectEditFormInput | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  // 编辑弹窗的字段级校验错误（标题/报告人 ID），展示在对应输入下方
+  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
+  // 打开弹窗瞬间的表单快照（ref 持有，不受后台 refetch 影响）；dirty = 当前值偏离快照
+  const editInitialRef = useRef<DefectEditFormInput | null>(null);
+  const isEditDirty =
+    editForm != null &&
+    editInitialRef.current != null &&
+    JSON.stringify(editForm) !== JSON.stringify(editInitialRef.current);
+  const { guard: guardEditClose, dialog: editGuardDialog } = useUnsavedChangesGuard(isEditDirty);
+  const clearEditFieldError = (field: string) =>
+    setEditFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
 
   const [severityOpen, setSeverityOpen] = useState(false);
   const [targetSeverity, setTargetSeverity] = useState<string>("");
@@ -194,9 +213,18 @@ export function DefectDetailLive({
 
   const openEdit = () => {
     updateMutation.reset();
-    setEditForm(editFormFromDefect(detail));
+    const snapshot = editFormFromDefect(detail);
+    editInitialRef.current = snapshot;
+    setEditForm(snapshot);
     setEditError(null);
+    setEditFieldErrors({});
     setEditOpen(true);
+  };
+
+  /** 用户主动关闭编辑弹窗（X/遮罩/Esc/取消按钮）：脏时先确认是否放弃修改 */
+  const requestEditClose = () => {
+    if (updateMutation.isPending) return;
+    guardEditClose(() => setEditOpen(false));
   };
 
   const submitEdit = () => {
@@ -206,20 +234,19 @@ export function DefectDetailLive({
       setEditError("项目归属已变化，无法提交。请刷新页面后重试。");
       return;
     }
+    const nextFieldErrors: Record<string, string> = {};
     const title = editForm.title.trim();
     if (!title) {
-      setEditError("标题不能为空。");
-      return;
-    }
-    if (title.length > 200) {
-      setEditError("标题不能超过 200 字符（DB VARCHAR(200)）。");
-      return;
+      nextFieldErrors.title = "标题不能为空。";
+    } else if (title.length > 200) {
+      nextFieldErrors.title = "标题不能超过 200 字符（DB VARCHAR(200)）。";
     }
     const reporterId = parseOptionalPositiveInt(editForm.reporterId);
     if (editForm.reporterId.trim() !== "" && reporterId == null) {
-      setEditError("报告人用户 ID 格式非法，请输入正整数或留空。");
-      return;
+      nextFieldErrors.reporterId = "报告人用户 ID 格式非法，请输入正整数或留空。";
     }
+    setEditFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) return;
     setEditError(null);
     updateMutation.mutate(
       buildDefectUpdatePayload(defectId, editForm),
@@ -398,16 +425,27 @@ export function DefectDetailLive({
         open={editOpen}
         title="编辑缺陷"
         size="lg"
-        onClose={() => {
-          if (!updateMutation.isPending) setEditOpen(false);
-        }}
+        onClose={requestEditClose}
       >
+        {editGuardDialog}
         {editForm != null ? (
           <div className="flex flex-col gap-4">
-            <TextField value={editForm.title} onChange={(next) => setEditForm({ ...editForm, title: next })} aria-label="标题">
-              <Label>标题（必填）</Label>
-              <Input placeholder="缺陷标题" />
-            </TextField>
+            <div>
+              <TextField
+                value={editForm.title}
+                onChange={(next) => {
+                  setEditForm({ ...editForm, title: next });
+                  clearEditFieldError("title");
+                }}
+                aria-label="标题"
+              >
+                <Label>
+                  标题<RequiredMark />
+                </Label>
+                <Input placeholder="缺陷标题" />
+              </TextField>
+              <FieldError message={editFieldErrors.title} />
+            </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <TextField value={editForm.defectType} onChange={(next) => setEditForm({ ...editForm, defectType: next })} aria-label="缺陷类型">
                 <Label>类型</Label>
@@ -419,10 +457,20 @@ export function DefectDetailLive({
                 options={[{ id: "", label: "请选择" }, ...PRIORITY_OPTIONS]}
                 onChange={(next) => setEditForm({ ...editForm, priority: next })}
               />
-              <TextField value={editForm.reporterId} onChange={(next) => setEditForm({ ...editForm, reporterId: next })} aria-label="报告人用户 ID">
-                <Label>报告人用户 ID</Label>
-                <Input placeholder="正整数，留空则不修改" inputMode="numeric" />
-              </TextField>
+              <div>
+                <TextField
+                  value={editForm.reporterId}
+                  onChange={(next) => {
+                    setEditForm({ ...editForm, reporterId: next });
+                    clearEditFieldError("reporterId");
+                  }}
+                  aria-label="报告人用户 ID"
+                >
+                  <Label>报告人用户 ID</Label>
+                  <Input placeholder="正整数，留空则不修改" inputMode="numeric" />
+                </TextField>
+                <FieldError message={editFieldErrors.reporterId} />
+              </div>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField value={editForm.foundDate} onChange={(next) => setEditForm({ ...editForm, foundDate: next })} aria-label="发现日期">
@@ -467,7 +515,7 @@ export function DefectDetailLive({
             </p>
             {editError ? <p className="type-body text-danger">{editError}</p> : null}
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onPress={() => setEditOpen(false)} isDisabled={updateMutation.isPending}>
+              <Button variant="ghost" onPress={requestEditClose} isDisabled={updateMutation.isPending}>
                 取消
               </Button>
               <Button variant="primary" onPress={submitEdit} isDisabled={updateMutation.isPending}>

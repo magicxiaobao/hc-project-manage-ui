@@ -180,12 +180,12 @@ describe('useDefectStatusOptions 状态选项接口', () => {
 });
 
 describe('defect-create 表单纯函数', () => {
-  it('空标题 → 校验失败', () => {
+  it('空标题 → 校验失败（字段级）', () => {
     const input = { ...emptyDefectCreateFormInput(), title: '   ' };
-    expect(validateDefectCreateInput(input)).toContain('标题不能为空');
+    expect(validateDefectCreateInput(input)).toEqual([{ field: 'title', message: '标题不能为空' }]);
   });
 
-  it('非法关联 ID → 校验失败并指出非法 token', () => {
+  it('非法关联 ID → 校验失败并指出非法 token（字段级）', () => {
     const input = {
       ...emptyDefectCreateFormInput(),
       title: '崩溃',
@@ -193,8 +193,22 @@ describe('defect-create 表单纯函数', () => {
       foundInTaskIdsText: '0',
     };
     const errors = validateDefectCreateInput(input);
-    expect(errors.some((message) => message.includes('关联需求 ID 格式非法') && message.includes('abc'))).toBe(true);
-    expect(errors.some((message) => message.includes('关联任务 ID 格式非法') && message.includes('0'))).toBe(true);
+    expect(
+      errors.some(
+        (error) =>
+          error.field === 'affectedRequirementIdsText' &&
+          error.message.includes('关联需求 ID 格式非法') &&
+          error.message.includes('abc'),
+      ),
+    ).toBe(true);
+    expect(
+      errors.some(
+        (error) =>
+          error.field === 'foundInTaskIdsText' &&
+          error.message.includes('关联任务 ID 格式非法') &&
+          error.message.includes('0'),
+      ),
+    ).toBe(true);
   });
 
   it('parseIdListText 支持逗号/中文逗号/空白分隔，去空 token', () => {
@@ -242,12 +256,14 @@ describe('defect-create 表单纯函数', () => {
     expect(payload.priority).toBe('MEDIUM');
   });
 
-  it('标题超过 200 字符 → 校验失败（后端 VARCHAR(200)）', () => {
+  it('标题超过 200 字符 → 校验失败（后端 VARCHAR(200)，字段级）', () => {
     const input = { ...emptyDefectCreateFormInput(), title: 'x'.repeat(201) };
-    expect(validateDefectCreateInput(input)).toContain('标题不能超过200个字符（后端 VARCHAR(200)）');
+    expect(validateDefectCreateInput(input)).toEqual([
+      { field: 'title', message: '标题不能超过200个字符（后端 VARCHAR(200)）' },
+    ]);
   });
 
-  it('关联 ID 每侧超过 200 → 校验失败（后端 AlmBatchLimitExceeded）', () => {
+  it('关联 ID 每侧超过 200 → 校验失败（后端 AlmBatchLimitExceeded，字段级）', () => {
     const many = Array.from({ length: 201 }, (_, i) => String(i + 1)).join(',');
     const input = {
       ...emptyDefectCreateFormInput(),
@@ -256,8 +272,14 @@ describe('defect-create 表单纯函数', () => {
       foundInTaskIdsText: many,
     };
     const errors = validateDefectCreateInput(input);
-    expect(errors).toContain('关联需求不能超过200个（后端约束）');
-    expect(errors).toContain('关联任务不能超过200个（后端约束）');
+    expect(errors).toContainEqual({
+      field: 'affectedRequirementIdsText',
+      message: '关联需求不能超过200个（后端约束）',
+    });
+    expect(errors).toContainEqual({
+      field: 'foundInTaskIdsText',
+      message: '关联任务不能超过200个（后端约束）',
+    });
   });
 
   it('载荷构建：关联 ID 去重（本次输入内部重复也要消掉）', () => {

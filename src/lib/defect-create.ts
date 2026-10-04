@@ -82,25 +82,44 @@ export const MAX_RELATION_IDS = 200;
 /** 缺陷标题上限：DB title VARCHAR(200)，老前端 DefectForm.vue 同一口径 */
 export const MAX_TITLE_LENGTH = 200;
 
-/** 校验表单输入，返回错误文案列表（空表示通过） */
-export function validateDefectCreateInput(input: DefectCreateFormInput): string[] {
-  const errors: string[] = [];
+/** 字段级校验错误：调用方按 field 挂到对应输入下展示 */
+export interface DefectCreateFieldError {
+  field: 'title' | 'severity' | 'priority' | 'affectedRequirementIdsText' | 'foundInTaskIdsText';
+  message: string;
+}
+
+/** 校验表单输入，返回字段级错误列表（空表示通过） */
+export function validateDefectCreateInput(input: DefectCreateFormInput): DefectCreateFieldError[] {
+  const errors: DefectCreateFieldError[] = [];
   const title = input.title.trim();
-  if (!title) errors.push('标题不能为空');
-  else if (title.length > MAX_TITLE_LENGTH) errors.push(`标题不能超过${MAX_TITLE_LENGTH}个字符（后端 VARCHAR(200)）`);
-  if (!input.severity.trim()) errors.push('严重度不能为空');
-  if (!input.priority.trim()) errors.push('优先级不能为空');
+  if (!title) errors.push({ field: 'title', message: '标题不能为空' });
+  else if (title.length > MAX_TITLE_LENGTH)
+    errors.push({ field: 'title', message: `标题不能超过${MAX_TITLE_LENGTH}个字符（后端 VARCHAR(200)）` });
+  if (!input.severity.trim()) errors.push({ field: 'severity', message: '严重度不能为空' });
+  if (!input.priority.trim()) errors.push({ field: 'priority', message: '优先级不能为空' });
   const requirementIds = parseIdListText(input.affectedRequirementIdsText);
   if (requirementIds.invalid.length > 0) {
-    errors.push(`关联需求 ID 格式非法：${requirementIds.invalid.join('、')}`);
+    errors.push({
+      field: 'affectedRequirementIdsText',
+      message: `关联需求 ID 格式非法：${requirementIds.invalid.join('、')}`,
+    });
   } else if (new Set(requirementIds.ids).size > MAX_RELATION_IDS) {
-    errors.push(`关联需求不能超过${MAX_RELATION_IDS}个（后端约束）`);
+    errors.push({
+      field: 'affectedRequirementIdsText',
+      message: `关联需求不能超过${MAX_RELATION_IDS}个（后端约束）`,
+    });
   }
   const taskIds = parseIdListText(input.foundInTaskIdsText);
   if (taskIds.invalid.length > 0) {
-    errors.push(`关联任务 ID 格式非法：${taskIds.invalid.join('、')}`);
+    errors.push({
+      field: 'foundInTaskIdsText',
+      message: `关联任务 ID 格式非法：${taskIds.invalid.join('、')}`,
+    });
   } else if (new Set(taskIds.ids).size > MAX_RELATION_IDS) {
-    errors.push(`关联任务不能超过${MAX_RELATION_IDS}个（后端约束）`);
+    errors.push({
+      field: 'foundInTaskIdsText',
+      message: `关联任务不能超过${MAX_RELATION_IDS}个（后端约束）`,
+    });
   }
   return errors;
 }

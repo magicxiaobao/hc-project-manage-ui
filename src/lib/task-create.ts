@@ -73,44 +73,65 @@ export function parseOptionalNonNegativeNumber(text: string): number | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+/** 字段级校验错误：field 对应 TaskCreateFormInput 的字段名（dates 为起止日期组合） */
+export interface TaskCreateFieldError {
+  field:
+    | 'title'
+    | 'taskType'
+    | 'priority'
+    | 'storyPointsText'
+    | 'parentIdText'
+    | 'assigneeIdText'
+    | 'reporterIdText'
+    | 'estimatedHoursText'
+    | 'dates'
+    | 'implementsRequirementIds';
+  message: string;
+}
+
 /**
- * 表单校验：返回首个错误文案，通过返回 null。
+ * 表单校验：返回字段级错误列表（空表示通过），调用方按 field 挂到对应输入下。
  * 校验项与老前端 TaskCreate 提交前置条件一致（标题/类型/优先级必填），
  * 另加：起止日期先后关系、id 类字段必须为纯数字（避免误送后端）。
  */
-export function validateTaskCreateInput(input: TaskCreateFormInput): string | null {
-  if (!input.title.trim()) return '请填写任务标题';
-  if (!input.taskType.trim()) return '请填写任务类型';
-  if (!(TASK_PRIORITIES as readonly string[]).includes(input.priority)) return '请选择优先级';
-  for (const [label, text] of [
-    ['故事点', input.storyPointsText],
-    ['父任务 ID', input.parentIdText],
-    ['执行人用户 ID', input.assigneeIdText],
-    ['报告人用户 ID', input.reporterIdText],
+export function validateTaskCreateInput(input: TaskCreateFormInput): TaskCreateFieldError[] {
+  const errors: TaskCreateFieldError[] = [];
+  if (!input.title.trim()) errors.push({ field: 'title', message: '请填写任务标题' });
+  if (!input.taskType.trim()) errors.push({ field: 'taskType', message: '请填写任务类型' });
+  if (!(TASK_PRIORITIES as readonly string[]).includes(input.priority))
+    errors.push({ field: 'priority', message: '请选择优先级' });
+  for (const [field, label, text] of [
+    ['storyPointsText', '故事点', input.storyPointsText],
+    ['parentIdText', '父任务 ID', input.parentIdText],
+    ['assigneeIdText', '执行人用户 ID', input.assigneeIdText],
+    ['reporterIdText', '报告人用户 ID', input.reporterIdText],
   ] as const) {
     if (!text.trim()) continue;
     // Codex review 4175265685：id 字段必须用与载荷组装相同的规则校验
     // （正整数 + 安全整数范围），不能只用 /^\d+$/——"0" 或超大数字会通过
     // 校验，却在 buildTaskCreatePayload 里被静默丢弃，用户以为关联成功了。
-    const isIdField = label !== '故事点';
+    const isIdField = field !== 'storyPointsText';
     const valid = isIdField
       ? parseOptionalPositiveInt(text) !== null
       : parseOptionalNonNegativeInt(text) !== null;
-    if (!valid) return `${label}必须为${isIdField ? '正整数' : '非负整数'}`;
+    if (!valid) errors.push({ field, message: `${label}必须为${isIdField ? '正整数' : '非负整数'}` });
   }
   if (input.estimatedHoursText.trim() && parseOptionalNonNegativeNumber(input.estimatedHoursText) === null) {
-    return '预估工时必须为非负数字';
+    errors.push({ field: 'estimatedHoursText', message: '预估工时必须为非负数字' });
   }
   if (input.startIso && input.endIso && input.startIso > input.endIso) {
-    return '开始日期不能晚于结束日期';
+    errors.push({ field: 'dates', message: '开始日期不能晚于结束日期' });
   }
   // Codex review 4175337091：后端 TaskCreateRequest 对 implementsRequirementIds 有
   // @Size(max=200)（"关联需求不能超过200个"）；超过时必须在提交前报错，而不是
   // 在 buildTaskCreatePayload 里静默截断——用户会误以为全部关联成功。
   if (new Set(input.implementsRequirementIds).size > MAX_REQUIREMENT_LINKS) {
-    return `关联需求不能超过${MAX_REQUIREMENT_LINKS}个（后端约束）`;
+    errors.push({
+      field: 'implementsRequirementIds',
+      message: `关联需求不能超过${MAX_REQUIREMENT_LINKS}个（后端约束）`,
+    });
   }
-  return null;
+  return errors;
 }
 
 const MAX_REQUIREMENT_LINKS = 200;

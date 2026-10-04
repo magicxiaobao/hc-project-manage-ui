@@ -12,10 +12,10 @@
  *
  * 未登录走演示创建流程时不使用本组件。
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
-import { AppModal, OptionSelect } from "@/components/biz";
+import { AppModal, FieldError, OptionSelect, RequiredMark, useUnsavedChangesGuard } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
 import { priorityLabel } from "@/lib/pm/domain";
 import { toUserMessage, useCreateDefect } from "@/lib/query";
@@ -142,14 +142,38 @@ export function DefectCreateDialog({
   const [requirementDraftError, setRequirementDraftError] = useState("");
   const [taskDraft, setTaskDraft] = useState("");
   const [taskDraftError, setTaskDraftError] = useState("");
-  const [formError, setFormError] = useState("");
+  // 字段级校验错误（标题/严重度/优先级），展示在对应输入下方；服务端失败走 submitError
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
 
-  const set = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
+  const set = (patch: Partial<typeof form>) => {
+    setForm((current) => ({ ...current, ...patch }));
+    setFieldErrors((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const key of Object.keys(patch)) {
+        if (next[key] !== undefined) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  };
 
-  const close = () => {
-    // 请求进行中不允许关闭：旧请求的成功/失败回调会重置并关闭重新打开的弹窗，
-    // 丢失用户正在填写的新草稿。AppModal 的关闭入口（X/遮罩/Escape）都走这里。
-    if (createDefect.isPending) return;
+  // dirty check：表单偏离空初始值、或关联 ID 已选/草稿未空，即为脏
+  const initialFormRef = useRef<string | null>(null);
+  if (initialFormRef.current === null)
+    initialFormRef.current = JSON.stringify(emptyDefectCreateFormInput());
+  const isDirty =
+    JSON.stringify(form) !== initialFormRef.current ||
+    relatedRequirementIds.length > 0 ||
+    relatedTaskIds.length > 0 ||
+    requirementDraft.trim() !== "" ||
+    taskDraft.trim() !== "";
+  const { guard, dialog } = useUnsavedChangesGuard(isDirty);
+
+  const doClose = () => {
     setForm(emptyDefectCreateFormInput());
     setRelatedRequirementIds([]);
     setRelatedTaskIds([]);
@@ -157,8 +181,17 @@ export function DefectCreateDialog({
     setRequirementDraftError("");
     setTaskDraft("");
     setTaskDraftError("");
-    setFormError("");
+    setFieldErrors({});
+    setSubmitError("");
     onClose();
+  };
+
+  const close = () => {
+    // 请求进行中不允许关闭：旧请求的成功/失败回调会重置并关闭重新打开的弹窗，
+    // 丢失用户正在填写的新草稿。AppModal 的关闭入口（X/遮罩/Escape）都走这里。
+    if (createDefect.isPending) return;
+    // 用户主动关闭且表单脏时，先确认是否放弃修改
+    guard(doClose);
   };
 
   /**
@@ -192,7 +225,7 @@ export function DefectCreateDialog({
     );
     const flushedTasks = flushDraft(taskDraft, relatedTaskIds, setRelatedTaskIds, setTaskDraftError);
     if (!flushedRequirements.ok || !flushedTasks.ok) {
-      setFormError("关联 ID 栏有未确认的输入，请先修正再提交。");
+      // flushDraft 已把具体原因写到对应栏的 error 状态（字段级提示），此处不再重复
       return;
     }
     setRequirementDraft("");
@@ -204,46 +237,73 @@ export function DefectCreateDialog({
     };
     const errors = validateDefectCreateInput(input);
     if (errors.length > 0) {
-      setFormError(errors.join("；"));
+      const nextFieldErrors: Record<string, string> = {};
+      for (const error of errors) {
+        // 关联 ID 栏的错误挂到对应栏的 error 状态下展示
+        if (error.field === "affectedRequirementIdsText") setRequirementDraftError(error.message);
+        else if (error.field === "foundInTaskIdsText") setTaskDraftError(error.message);
+        else nextFieldErrors[error.field] = error.message;
+      }
+      setFieldErrors(nextFieldErrors);
       return;
     }
-    setFormError("");
+    setFieldErrors({});
+    setSubmitError("");
     createDefect.mutate(buildDefectCreatePayload(input, projectId), {
       onSuccess: (id) => {
         toast.success(`缺陷已创建（#${id}）`);
-        close();
+        // 成功关闭是程序化动作，直接 doClose（表单已提交，不算"放弃修改"）
+        doClose();
       },
       onError: (error) => {
-        setFormError(`创建失败：${toUserMessage(error)}`);
+        setSubmitError(`创建失败：${toUserMessage(error)}`);
       },
     });
   };
 
   return (
     <AppModal open={open} title="新建缺陷" onClose={close} size="lg">
+      {dialog}
       <div className="flex flex-col gap-4">
-        <TextField value={form.title} onChange={(next) => set({ title: next })} aria-label="标题">
-          <Label>标题（必填）</Label>
-          <Input placeholder="缺陷标题" />
-        </TextField>
+        <div>
+          <TextField value={form.title} onChange={(next) => set({ title: next })} aria-label="标题">
+            <Label>
+              标题<RequiredMark />
+            </Label>
+            <Input placeholder="缺陷标题" />
+          </TextField>
+          <FieldError message={fieldErrors.title} />
+        </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <TextField value={form.defectType} onChange={(next) => set({ defectType: next })} aria-label="缺陷类型">
             <Label>类型</Label>
             <Input placeholder="如 功能/界面/性能" />
           </TextField>
-          <OptionSelect
-            label="严重度"
-            value={form.severity}
-            options={SEVERITY_OPTIONS}
-            onChange={(next) => set({ severity: next })}
-          />
-          <OptionSelect
-            label="优先级"
-            value={form.priority}
-            options={PRIORITY_OPTIONS}
-            onChange={(next) => set({ priority: next })}
-          />
+          <div>
+            <Label>
+              严重度<RequiredMark />
+            </Label>
+            <OptionSelect
+              label="严重度"
+              value={form.severity}
+              options={SEVERITY_OPTIONS}
+              onChange={(next) => set({ severity: next })}
+            />
+            <FieldError message={fieldErrors.severity} />
+          </div>
+          <div>
+            <Label>
+              优先级<RequiredMark />
+            </Label>
+            <OptionSelect
+              label="优先级"
+              value={form.priority}
+              options={PRIORITY_OPTIONS}
+              onChange={(next) => set({ priority: next })}
+            />
+            <FieldError message={fieldErrors.priority} />
+          </div>
         </div>
 
         <TextField value={form.environment} onChange={(next) => set({ environment: next })} aria-label="环境">
@@ -297,7 +357,7 @@ export function DefectCreateDialog({
           onErrorChange={setTaskDraftError}
         />
 
-        {formError ? <p className="type-body text-danger">{formError}</p> : null}
+        {submitError ? <p className="type-body text-danger">{submitError}</p> : null}
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onPress={close} isDisabled={createDefect.isPending}>

@@ -11,11 +11,11 @@
  *
  * 未登录走演示创建流程时不使用本组件。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button, Checkbox, Input, Label, Spinner, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
-import { EmptyHint, OptionSelect, PageHeading } from "@/components/biz";
+import { EmptyHint, FieldError, OptionSelect, PageHeading, RequiredMark, useUnsavedChangesGuard } from "@/components/biz";
 import { priorityLabel } from "@/lib/pm/domain";
 import { toUserMessage, useCreateTask, useRequirementList } from "@/lib/query";
 import {
@@ -23,6 +23,7 @@ import {
   emptyTaskCreateFormInput,
   parseRequiredPositiveInt,
   validateTaskCreateInput,
+  type TaskCreateFormInput,
 } from "@/lib/task-create";
 import { TASK_PRIORITIES } from "@/lib/api/task-types";
 
@@ -235,9 +236,31 @@ export function TaskCreateLive({
   const navigate = useNavigate();
   const createTask = useCreateTask();
   const [form, setForm] = useState(emptyTaskCreateFormInput());
-  const [formError, setFormError] = useState("");
+  // 字段级校验错误：提交时按字段收集，展示在对应输入下方
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const set = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
+  const set = (patch: Partial<typeof form>) => {
+    setForm((current) => ({ ...current, ...patch }));
+    // 编辑字段时清除该字段的报错；起止日期共用 dates 错误，任一变化即清除
+    setFieldErrors((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const key of Object.keys(patch)) {
+        const errorKey = key === "startIso" || key === "endIso" ? "dates" : key;
+        if (next[errorKey] !== undefined) {
+          delete next[errorKey];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  };
+
+  // dirty check：表单偏离初始空值即为脏（含关联需求选择）
+  const initialFormRef = useRef<TaskCreateFormInput | null>(null);
+  if (initialFormRef.current === null) initialFormRef.current = emptyTaskCreateFormInput();
+  const isDirty = JSON.stringify(form) !== JSON.stringify(initialFormRef.current);
+  const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(isDirty);
 
   // Codex review 4175693766：路由复用（/p/A/issues/new → /p/B/issues/new）时，
   // A 项目下勾选的关联需求 ID 会残留在表单里，但提交按 B 的 projectId 组装
@@ -258,24 +281,30 @@ export function TaskCreateLive({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const error = validateTaskCreateInput(form);
-    if (error) {
-      setFormError(error);
+    const errors = validateTaskCreateInput(form);
+    if (errors.length > 0) {
+      setFieldErrors(Object.fromEntries(errors.map((error) => [error.field, error.message])));
       return;
     }
-    setFormError("");
+    setFieldErrors({});
     try {
       const payload = buildTaskCreatePayload(form, projectId);
       const id = await createTask.mutateAsync(payload);
       toast.success(`已创建任务 #${id}`);
+      // 成功跳转是程序化离开：先 markClean 放行守卫（state 回落有延迟，ref 级别放行）
+      markClean();
       void navigate({ to: "/p/$projectKey/issues", params: { projectKey } });
     } catch (submitError) {
-      setFormError(toUserMessage(submitError, "创建任务失败"));
+      toast.error(toUserMessage(submitError, "创建任务失败"));
     }
   };
 
+  const fieldError = (field: string) => fieldErrors[field];
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 p-4 md:p-6">
+      {blocker}
+      {dialog}
       <PageHeading
         title="新建任务"
         hint="直接创建到后端。创建后状态为待开始（由服务端设置），提交后返回任务列表。"
@@ -285,58 +314,88 @@ export function TaskCreateLive({
         onSubmit={(event) => void handleSubmit(event)}
       >
         <TextField value={form.title} onChange={(value) => set({ title: value })}>
-          <Label>标题</Label>
+          <Label>
+            标题<RequiredMark />
+          </Label>
           <Input placeholder="一句话说清要做什么" />
         </TextField>
+        <FieldError message={fieldError("title")} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <TextField value={form.taskType} onChange={(value) => set({ taskType: value })}>
-            <Label>任务类型</Label>
-            <Input placeholder="如：开发 / 联调 / 文档" />
-          </TextField>
-          <OptionSelect
-            label="优先级"
-            value={form.priority}
-            options={PRIORITY_OPTIONS}
-            onChange={(value) => set({ priority: value })}
-          />
+          <div>
+            <TextField value={form.taskType} onChange={(value) => set({ taskType: value })}>
+              <Label>
+                任务类型<RequiredMark />
+              </Label>
+              <Input placeholder="如：开发 / 联调 / 文档" />
+            </TextField>
+            <FieldError message={fieldError("taskType")} />
+          </div>
+          <div>
+            <Label>
+              优先级<RequiredMark />
+            </Label>
+            <OptionSelect
+              label="优先级"
+              value={form.priority}
+              options={PRIORITY_OPTIONS}
+              onChange={(value) => set({ priority: value })}
+            />
+            <FieldError message={fieldError("priority")} />
+          </div>
         </div>
         <TextField value={form.description} onChange={(value) => set({ description: value })}>
           <Label>描述</Label>
           <TextArea placeholder="背景、目标、验收标准（可选）" />
         </TextField>
         <div className="grid gap-3 sm:grid-cols-3">
-          <IdInput
-            label="执行人用户 ID"
-            value={form.assigneeIdText}
-            onChange={(value) => set({ assigneeIdText: value })}
-            placeholder="后端用户 ID（可选）"
-          />
-          <IdInput
-            label="报告人用户 ID"
-            value={form.reporterIdText}
-            onChange={(value) => set({ reporterIdText: value })}
-            placeholder="后端用户 ID（可选）"
-          />
-          <IdInput
-            label="父任务 ID"
-            value={form.parentIdText}
-            onChange={(value) => set({ parentIdText: value })}
-            placeholder="子任务归属（可选）"
-          />
+          <div>
+            <IdInput
+              label="执行人用户 ID"
+              value={form.assigneeIdText}
+              onChange={(value) => set({ assigneeIdText: value })}
+              placeholder="后端用户 ID（可选）"
+            />
+            <FieldError message={fieldError("assigneeIdText")} />
+          </div>
+          <div>
+            <IdInput
+              label="报告人用户 ID"
+              value={form.reporterIdText}
+              onChange={(value) => set({ reporterIdText: value })}
+              placeholder="后端用户 ID（可选）"
+            />
+            <FieldError message={fieldError("reporterIdText")} />
+          </div>
+          <div>
+            <IdInput
+              label="父任务 ID"
+              value={form.parentIdText}
+              onChange={(value) => set({ parentIdText: value })}
+              placeholder="子任务归属（可选）"
+            />
+            <FieldError message={fieldError("parentIdText")} />
+          </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <IsoDateInput label="计划开始日期" value={form.startIso} onChange={(value) => set({ startIso: value })} />
           <IsoDateInput label="计划结束日期" value={form.endIso} onChange={(value) => set({ endIso: value })} />
         </div>
+        <FieldError message={fieldError("dates")} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <TextField value={form.storyPointsText} onChange={(value) => set({ storyPointsText: value })}>
-            <Label>故事点</Label>
-            <Input inputMode="numeric" placeholder="整数（可选）" />
-          </TextField>
-          <TextField value={form.estimatedHoursText} onChange={(value) => set({ estimatedHoursText: value })}>
-            <Label>预估工时（小时）</Label>
-            <Input inputMode="decimal" placeholder="如 2.5（可选）" />
-          </TextField>
+          <div>
+            <TextField value={form.storyPointsText} onChange={(value) => set({ storyPointsText: value })}>
+              <Label>故事点</Label>
+              <Input inputMode="numeric" placeholder="整数（可选）" />
+            </TextField>
+            <FieldError message={fieldError("storyPointsText")} />
+          </div>
+          <div>
+            <TextField value={form.estimatedHoursText} onChange={(value) => set({ estimatedHoursText: value })}>
+              <Label>预估工时（小时）</Label>
+              <Input inputMode="decimal" placeholder="如 2.5（可选）" />
+            </TextField>
+            <FieldError message={fieldError("estimatedHoursText")} />
+          </div>
         </div>
         <TextField value={form.tags} onChange={(value) => set({ tags: value })}>
           <Label>标签</Label>
@@ -347,7 +406,7 @@ export function TaskCreateLive({
           selected={form.implementsRequirementIds}
           onChange={(ids) => set({ implementsRequirementIds: ids })}
         />
-        {formError ? <p className="text-xs text-danger">{formError}</p> : null}
+        <FieldError message={fieldError("implementsRequirementIds")} />
         <div className="flex gap-2">
           <Button type="submit" variant="primary" isDisabled={createTask.isPending}>
             {createTask.isPending ? "创建中…" : "创建任务"}
@@ -355,7 +414,7 @@ export function TaskCreateLive({
           <Button
             type="button"
             variant="outline"
-            onPress={() => void navigate({ to: "/p/$projectKey/issues", params: { projectKey } })}
+            onPress={() => guard(() => void navigate({ to: "/p/$projectKey/issues", params: { projectKey } }))}
           >
             取消
           </Button>
