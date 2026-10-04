@@ -158,9 +158,12 @@ export {
   useCreateSprint,
   useInvalidSprint,
   usePlanningSprints,
+  useSprintBurndown,
   useSprintDetail,
   useSprintList,
+  useSprintRetrospective,
   useStartSprint,
+  useUpdateRetrospective,
   useUpdateSprint,
 } from './hooks/useSprints';
 export type { SprintListParams } from './hooks/useSprints';

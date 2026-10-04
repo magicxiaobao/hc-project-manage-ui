@@ -99,6 +99,52 @@ export function useSprintDetail(id: number | null | undefined) {
   });
 }
 
+/**
+ * 燃尽图数据：GET /sprint/v1/burndownChart/{id}（后端真实实现，
+ * 返回 {dates, values, dailyHours}；冲刺不存在时返回空 Map，
+ * 调用方用 normalizeBurndownData 防御归一）。id 无效时 disabled。
+ * ⚠️ 不接 TODO 空壳的 /burndown/{sprintId}
+ */
+export function useSprintBurndown(id: number | null | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.sprint.all, 'burndown', id ?? 0] as const,
+    queryFn: () => sprintApi.getBurndownChart(id as number),
+    enabled: typeof id === 'number' && Number.isFinite(id) && id > 0,
+  });
+}
+
+/**
+ * 冲刺回顾：GET /sprint/v1/retrospective/{sprintId}，返回回顾文本字符串
+ * （后端 Result<String>，可能为 null；冲刺不存在时报业务码 NotFind）。
+ * id 无效时 disabled。
+ */
+export function useSprintRetrospective(sprintId: number | null | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.sprint.all, 'retrospective', sprintId ?? 0] as const,
+    queryFn: () => sprintApi.getRetrospective(sprintId as number),
+    enabled: typeof sprintId === 'number' && Number.isFinite(sprintId) && sprintId > 0,
+  });
+}
+
+/**
+ * 保存冲刺回顾：POST /sprint/v1/retrospective/{sprintId}，
+ * 请求体 { retrospective }（后端读 body.get("retrospective")，存入
+ * retrospective_summary TEXT 列；冲刺不存在时报业务码 NotFind）。
+ * 成功后失效该冲刺的回顾缓存。
+ */
+export function useUpdateRetrospective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sprintId, retrospective }: { sprintId: number; retrospective: string }) =>
+      sprintApi.updateRetrospective(sprintId, retrospective),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.sprint.all, 'retrospective', variables.sprintId],
+      });
+    },
+  });
+}
+
 /** 冲刺域变更的缓存失效：失效冲刺域全部缓存（列表变脏，下次读取即刷新） */
 function invalidateSprintDomain(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.sprint.all });
