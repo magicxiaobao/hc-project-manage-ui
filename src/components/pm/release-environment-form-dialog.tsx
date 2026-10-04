@@ -176,7 +176,12 @@ export function ReleaseEnvironmentFormDialog({
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <TextField value={form.name} onChange={(next) => set({ name: next })} aria-label="环境名称">
+              <TextField
+                value={form.name}
+                onChange={(next) => set({ name: next })}
+                aria-label="环境名称"
+                isDisabled={mutation.isPending}
+              >
                 <Label>
                   环境名称<RequiredMark />
                 </Label>
@@ -193,7 +198,7 @@ export function ReleaseEnvironmentFormDialog({
                 value={form.category}
                 options={CATEGORY_OPTIONS}
                 onChange={setCategory}
-                isDisabled={categoryLocked}
+                isDisabled={categoryLocked || mutation.isPending}
               />
               <FieldError message={fieldErrors.category} />
               {categoryLocked ? (
@@ -204,7 +209,12 @@ export function ReleaseEnvironmentFormDialog({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <TextField value={form.order} onChange={(next) => set({ order: next })} aria-label="排序">
+              <TextField
+                value={form.order}
+                onChange={(next) => set({ order: next })}
+                aria-label="排序"
+                isDisabled={mutation.isPending}
+              >
                 <Label>
                   排序<RequiredMark />
                 </Label>
@@ -215,7 +225,7 @@ export function ReleaseEnvironmentFormDialog({
             <div>
               <Checkbox
                 isSelected={form.approvalRequired}
-                isDisabled={approvalDisabled}
+                isDisabled={approvalDisabled || mutation.isPending}
                 onChange={(selected) => set({ approvalRequired: selected })}
                 aria-label="需要审批"
               >

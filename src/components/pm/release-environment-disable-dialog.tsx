@@ -103,6 +103,7 @@ export function ReleaseEnvironmentDisableDialog({
                 setReasonError(null);
               }}
               aria-label="停用原因"
+              isDisabled={disableMutation.isPending}
             >
               <Label>
                 停用原因<RequiredMark />（最长 {RELEASE_ENVIRONMENT_DISABLE_REASON_MAX_LENGTH} 字符）

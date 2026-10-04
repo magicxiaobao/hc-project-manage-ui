@@ -52,6 +52,15 @@ export function ReleaseEnvironmentListLive({
   const listQuery = useReleaseEnvironmentList({ projectId });
   const environments = listQuery.data ?? [];
 
+  // 编辑弹窗的表单草稿取自打开瞬间的快照（不被后台 refetch 卸载），但 status
+  // 必须用列表最新数据：若后台刷新把环境改为 INACTIVE，弹窗提交时仍用旧
+  // status 会发送 approvalRequired，违反后端 ReleaseEnvironmentService.update
+  //（INACTIVE 更新必须省略 approvalRequired）。按 id 取最新，找不到回退旧对象。
+  const editingEnvironment =
+    editing == null ? null : (environments.find((candidate) => candidate.id === editing.id) ?? editing);
+  const disablingEnvironment =
+    disabling == null ? null : (environments.find((candidate) => candidate.id === disabling.id) ?? disabling);
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
       <PageHeading
@@ -144,12 +153,12 @@ export function ReleaseEnvironmentListLive({
       <ReleaseEnvironmentFormDialog
         open={editing != null}
         projectId={projectId}
-        environment={editing}
+        environment={editingEnvironment}
         onClose={() => setEditing(null)}
       />
       <ReleaseEnvironmentDisableDialog
         open={disabling != null}
-        environment={disabling}
+        environment={disablingEnvironment}
         onClose={() => setDisabling(null)}
       />
     </div>
