@@ -13,7 +13,7 @@
  * 后端日期说明：需求上的 estimatedXxx/actualXxx 日期字段为 LocalDate，直接展示 'yyyy-MM-dd'
  * 字符串，不做时区换算；评论 createdAt 为秒级时间戳。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, Input, Label, Spinner, TextArea, TextField } from "@heroui/react";
 import {
@@ -82,6 +82,15 @@ export function RequirementDetailLive({
   const commentsQuery = useRequirementComments(requirementId, commentPage, COMMENT_PAGE_SIZE);
   const commentTotal = commentsQuery.data?.total ?? 0;
   const commentTotalPages = Math.max(1, Math.ceil(commentTotal / COMMENT_PAGE_SIZE));
+  // Codex review 4175724986：在评论第 2+ 页时，并发删除/权限变化可能把总数
+  // 缩到一页以内——请求返回空列表且分页器消失，用户被困在无处可回的空页。
+  // 自动钳制回最后一页（与追溯矩阵 tab 4175549755 同类逻辑；页码在 query
+  // key 里，钳制即触发重新拉取）。
+  useEffect(() => {
+    if (!commentsQuery.isPending && commentPage > commentTotalPages) {
+      setCommentPage(commentTotalPages);
+    }
+  }, [commentsQuery.isPending, commentPage, commentTotalPages]);
 
   const transitionMutation = useTransitionRequirement();
   const commentMutation = useCreateRequirementComment(requirementId);

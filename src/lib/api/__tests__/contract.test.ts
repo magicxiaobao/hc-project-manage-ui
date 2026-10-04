@@ -10,6 +10,8 @@
  *   并用新 token 重放原请求
  * - 重放后依然 401：清本地凭证并通知登录失效（不再触发刷新）
  * - 刷新瞬时失败且凭证仍在：不清凭证、不通知，抛可重试错误（会话保留）
+ * - 刷新确认 refresh token 失效且代际由本次刷新驱动：仍通知登录失效；
+ *   刷新在途期间无关的登出/登录使代际变化：不通知（刷新失效归因）
  * - 刷新接口返回 HTTP 401 但响应体畸形/非信封：仍判定 refresh token 失效并清凭证
  * - 旧会话请求的迟到登录失效信号：代际已变化时不清除新会话凭证、不通知（会话代际守卫）
  * - 旧会话请求的迟到 401：代际已变化时不触发刷新、不重放旧请求
@@ -469,6 +471,65 @@ describe('会话代际', () => {
     const [, retryInit] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect((retryInit.headers as Headers).get('token')).toBe('fresh-b');
     expect(memStore.get('token')).toBe('fresh-b');
+  });
+});
+
+describe('刷新失效归因（Codex review 4175724992）', () => {
+  it('刷新确认 refresh token 失效（代际由本次刷新驱动+1）：仍通知登录失效', async () => {
+    memStore.set('token', 'expired');
+    memStore.set('refreshToken', 'refresh-1');
+    memStore.set('userInfo', '{}');
+    let unauthorized = 0;
+    let generation = 0;
+    let invalidatedGen: number | null = null;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => generation);
+    client.setRefreshInvalidationReader(() => invalidatedGen);
+    client.setTokenRefresher(async () => {
+      // 模拟 auth-store.refreshAccessToken 确认 refresh token 失效的分支：
+      // 递增代际、清存储，并记录这次刷新观察到的代际
+      invalidatedGen = generation;
+      generation += 1;
+      memStore.delete('token');
+      memStore.delete('refreshToken');
+      memStore.delete('userInfo');
+      return false;
+    });
+    mockFetchSequence([{ status: 401, body: { code: 10109, msg: 'expired', result: null } }]);
+
+    const err = await client.get('/auth/v1/me').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    // 失效属于当前会话（正是这次请求的刷新尝试确认的），必须通知跳转 /login，
+    // 不能按“旧会话迟到响应”静默跳过
+    expect(unauthorized).toBe(1);
+  });
+
+  it('刷新在途期间无关的登出/登录使代际变化：不通知（保留迟到响应保护）', async () => {
+    memStore.set('token', 'expired');
+    memStore.set('refreshToken', 'refresh-1');
+    memStore.set('userInfo', '{}');
+    let unauthorized = 0;
+    let generation = 0;
+    let invalidatedGen: number | null = null;
+    const client = createApiClient({ baseUrl: 'http://test', onUnauthorized: () => { unauthorized++; } });
+    client.setSessionGenerationReader(() => generation);
+    client.setRefreshInvalidationReader(() => invalidatedGen);
+    client.setTokenRefresher(async () => {
+      // 在途期间用户登出又重新登录（与本次刷新无关的代际变化），
+      // 刷新本身未确认失效（不记录归因代际）
+      generation += 1;
+      generation += 1;
+      memStore.delete('token');
+      memStore.delete('refreshToken');
+      memStore.delete('userInfo');
+      return false;
+    });
+    mockFetchSequence([{ status: 401, body: { code: 10109, msg: 'expired', result: null } }]);
+
+    const err = await client.get('/auth/v1/me').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiBusinessError);
+    // 迟到响应保护：不清除新会话凭证、不跳转
+    expect(unauthorized).toBe(0);
   });
 });
 

@@ -116,6 +116,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
    * 否则在途的刷新成功后会把已失效的会话复活。未注册时退化为仅清存储（单元测试）。
    */
   let sessionInvalidator: (() => void) | null = null;
+  /**
+   * 刷新失效归因读取器（由 auth-store 注册）：最近一次因 refresh token 被
+   * 拒绝而使会话失效的刷新所观察到的会话代际。见 Codex review 4175724992：
+   * 刷新失败导致代际变化时，客户端据此判断“变化正是由本次请求的刷新尝试
+   * 驱动的”，此时失效属于当前会话，仍需通知登录失效；无关的登出/登录使
+   * 代际变化时保持迟到响应保护、不通知。未注册时退化为原有行为。
+   */
+  let readInvalidatedRefreshGeneration: (() => number | null) | null = null;
 
   /**
    * 客户端确认登录失效时的统一清理：清本地存储 + 通知 auth-store 递增代际、
@@ -195,6 +203,9 @@ export function createApiClient(options: ApiClientOptions = {}) {
           if (currentToken && currentToken !== token) {
             return request<T>(path, { ...init, _retry: true });
           }
+          // 刷新开始时代际：响应到达时代际已变化 → 需归因（见下），不能直接
+          // 沿用 authStillCurrent() 的“迟到响应保护”。
+          const generationBeforeRefresh = readSessionGeneration ? readSessionGeneration() : 0;
           const refreshed = await refreshOnce();
           if (refreshed) {
             return request<T>(path, { ...init, _retry: true });
@@ -205,9 +216,20 @@ export function createApiClient(options: ApiClientOptions = {}) {
           if (readToken()) {
             throw new Error(`刷新访问令牌失败: ${path}`);
           }
-          // 刷新失败且凭证已无（auth-store 已确认 refresh token 失效并清凭证）：通知登录失效；
-          // 代际已变化 → 这是旧会话请求的迟到响应，不跳转。
-          if (authStillCurrent()) {
+          // 刷新失败且凭证已无（auth-store 已确认 refresh token 失效并清凭证）：
+          // 代际未变化 → 当前会话的请求 → 通知登录失效。
+          // 代际已变化 → 归因（Codex review 4175724992）：若变化正是由本次
+          // 请求的刷新尝试驱动的（刷新请求被 401 拒绝、确认 refresh token
+          // 失效——auth-store 在该分支递增代际），则失效属于当前会话，仍通知；
+          // 若是无关的登出/登录使代际变化，则这是旧会话请求的迟到响应，不
+          // 通知（保留迟到响应保护，不清除新会话凭证、不跳转）。
+          const invalidatedByOwnRefresh =
+            generationBeforeRefresh === generationAtStart &&
+            readInvalidatedRefreshGeneration !== null &&
+            readInvalidatedRefreshGeneration() === generationBeforeRefresh &&
+            readSessionGeneration !== null &&
+            readSessionGeneration() === generationBeforeRefresh + 1;
+          if (authStillCurrent() || invalidatedByOwnRefresh) {
             notifyUnauthorized();
           }
         } else if (authStillCurrent()) {
@@ -283,6 +305,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
     /** 注册登录失效清理器（auth-store）：客户端确认失效时递增代际并清内存态 */
     setSessionInvalidator(fn: (() => void) | null) {
       sessionInvalidator = fn;
+    },
+    /**
+     * 注册刷新失效归因读取器（auth-store）：最近一次因 refresh token 被拒绝
+     * 而使会话失效的刷新所观察到的会话代际（Codex review 4175724992）。
+     */
+    setRefreshInvalidationReader(fn: (() => number | null) | null) {
+      readInvalidatedRefreshGeneration = fn;
     },
   };
 }

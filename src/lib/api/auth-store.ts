@@ -108,6 +108,16 @@ interface AuthState {
  */
 let sessionGeneration = 0;
 
+/**
+ * 刷新失效归因（Codex review 4175724992）：最近一次因 refresh token 被拒绝
+ * 而使会话失效的刷新所观察到的会话代际。客户端用它判断“代际变化正是由本次
+ * 请求的刷新尝试驱动的”——此时失效属于当前会话，即使 authStillCurrent()
+ * 为 false 也应通知登录失效；无关的登出/登录导致的代际变化仍保持迟到响应
+ * 保护、不通知。仅在刷新确认失效的分支里赋值，旧值不会被误匹配（客户端
+ * 同时要求代际恰好 +1 且刷新前与请求发出时代际一致）。
+ */
+let invalidatedRefreshObservedGeneration: number | null = null;
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   token: null,
@@ -206,6 +216,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         // B 登录后 hydrate() 时 prevUser 为 null 会跳过缓存清理（4175472562
         // 的条件要求内存有用户），B 会直接命中 A 的旧缓存。
         sessionGeneration += 1;
+        // Codex review 4175724992：记录这次使会话失效的刷新所观察到的代际，
+        // 供客户端归因——代际变化正是由本次请求的刷新尝试驱动的，失效属于
+        // 当前会话，客户端仍需通知登录失效（跳转 /login），而不是按“旧会话
+        // 迟到响应”静默跳过。
+        invalidatedRefreshObservedGeneration = generation;
         clearQueryCache();
         clearStoredAuth();
         set({ user: null, token: null, isAuthenticated: false });
@@ -228,5 +243,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 api.setTokenRefresher(() => useAuthStore.getState().refreshAccessToken());
 // 会话代际读取器：让客户端丢弃“旧会话请求在代际变化后返回”的迟到登录失效信号
 api.setSessionGenerationReader(() => sessionGeneration);
+// 刷新失效归因读取器：让客户端判断代际变化是否由本次请求的刷新尝试驱动
+api.setRefreshInvalidationReader(() => invalidatedRefreshObservedGeneration);
 // 登录失效清理器：客户端确认登录失效时递增代际并清内存态
 api.setSessionInvalidator(() => useAuthStore.getState().invalidateSessionFromClient());

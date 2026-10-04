@@ -244,11 +244,15 @@ export function TaskCreateLive({
   // payload——跨项目关联要么被后端拒绝，要么建立错误关联。projectId 变化时
   // 清空 implementsRequirementIds（表单其余字段保留）。选择器子组件的搜索
   // 文本仅控制本项目内的查询，不进 payload，无需处理。
+  // Codex review 4175724989：parentIdText 同样是项目作用域的输入（会经
+  // buildTaskCreatePayload 序列化为 parentId）——复用组件里 A 项目的父任务
+  // 会随表单保留，提交时以 B 的 projectId 配 A 的 parentId，造成跨项目层级
+  // 失败或非法关联。一并清空。
   useEffect(() => {
     setForm((current) =>
-      current.implementsRequirementIds.length === 0
+      current.implementsRequirementIds.length === 0 && current.parentIdText.trim() === ""
         ? current
-        : { ...current, implementsRequirementIds: [] },
+        : { ...current, implementsRequirementIds: [], parentIdText: "" },
     );
   }, [projectId]);
 

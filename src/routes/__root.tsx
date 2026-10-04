@@ -4,6 +4,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@heroui/react";
 import { AuthProvider } from "@/lib/auth/provider";
 import { useAuthStore } from "@/lib/api/auth-store";
+import {
+  REFRESH_TOKEN_STORAGE_KEY,
+  TOKEN_STORAGE_KEY,
+  USER_INFO_STORAGE_KEY,
+} from "@/lib/api/client";
 import { createQueryClient } from "@/lib/query/client";
 import { setQueryCacheClearer } from "@/lib/query/session";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
@@ -50,7 +55,27 @@ function RootComponent() {
       void queryClient.cancelQueries();
       queryClient.clear();
     });
-    return () => setQueryCacheClearer(null);
+    // Codex review 4175724983：hydrate 只在挂载时跑一次——另一 tab 把持久
+    // 会话换成另一个账号（或登出）时，已挂载的 /p/* 路由感知不到：store 与
+    // 查询缓存仍停留在旧账号，而 API 客户端已开始读新账号的 token，页面会
+    // 展示旧账号的缓存数据并以新账号身份提交写操作。storage 事件只在其它
+    // tab 变更存储时触发，相关键变化时重新 hydrate（账号变化/跨 tab 登出
+    // 的清理逻辑复用 hydrate 内部已有的分支）。
+    const onStorage = (event: StorageEvent) => {
+      if (
+        event.key === null ||
+        event.key === TOKEN_STORAGE_KEY ||
+        event.key === REFRESH_TOKEN_STORAGE_KEY ||
+        event.key === USER_INFO_STORAGE_KEY
+      ) {
+        useAuthStore.getState().hydrate();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      setQueryCacheClearer(null);
+      window.removeEventListener("storage", onStorage);
+    };
   }, [queryClient]);
 
   return (
