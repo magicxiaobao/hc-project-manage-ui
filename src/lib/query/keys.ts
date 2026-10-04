@@ -8,6 +8,7 @@
  *   否则缓存会被拆成多份
  */
 function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'board') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -57,4 +58,5 @@ export const queryKeys = {
   version: domainKeys('version'),
   releaseEnvironment: domainKeys('releaseEnvironment'),
   release: domainKeys('release'),
+  board: domainKeys('board'),
 };

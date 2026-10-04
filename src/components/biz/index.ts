@@ -21,6 +21,12 @@ export {
   VersionSelect,
 } from "@/components/biz/field-selects";
 export { FilterCheckbox } from "@/components/biz/filter-checkbox";
+export {
+  DiscardConfirmDialog,
+  FieldError,
+  RequiredMark,
+  useUnsavedChangesGuard,
+} from "@/components/biz/form-guard";
 export { IssueCard } from "@/components/biz/issue-card";
 export { IssueDialog } from "@/components/biz/issue-dialog";
 export { BoardFilterBar, ListFilterBar } from "@/components/biz/issue-filters";

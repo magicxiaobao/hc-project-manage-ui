@@ -19,6 +19,7 @@ import { Route as ProjectsNewRouteImport } from './routes/projects_.new'
 import { Route as PProjectKeyIndexRouteImport } from './routes/p/$projectKey/index'
 import { Route as PProjectKeyAssignmentRouteImport } from './routes/p/$projectKey/assignment'
 import { Route as PProjectKeyBacklogRouteImport } from './routes/p/$projectKey/backlog'
+import { Route as PProjectKeyBoardsRouteImport } from './routes/p/$projectKey/boards'
 import { Route as PProjectKeyDashboardRouteImport } from './routes/p/$projectKey/dashboard'
 import { Route as PProjectKeyDefectsRouteImport } from './routes/p/$projectKey/defects'
 import { Route as PProjectKeyDependenciesRouteImport } from './routes/p/$projectKey/dependencies'
@@ -105,6 +106,11 @@ const PProjectKeyAssignmentRoute = PProjectKeyAssignmentRouteImport.update({
 const PProjectKeyBacklogRoute = PProjectKeyBacklogRouteImport.update({
   id: '/backlog',
   path: '/backlog',
+  getParentRoute: () => PProjectKeyRoute,
+} as any)
+const PProjectKeyBoardsRoute = PProjectKeyBoardsRouteImport.update({
+  id: '/boards',
+  path: '/boards',
   getParentRoute: () => PProjectKeyRoute,
 } as any)
 const PProjectKeyDashboardRoute = PProjectKeyDashboardRouteImport.update({
@@ -317,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/projects/new': typeof ProjectsNewRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
+  '/p/$projectKey/boards': typeof PProjectKeyBoardsRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
   '/p/$projectKey/defects': typeof PProjectKeyDefectsRouteWithChildren
   '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
@@ -365,6 +372,7 @@ export interface FileRoutesByTo {
   '/projects/new': typeof ProjectsNewRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
+  '/p/$projectKey/boards': typeof PProjectKeyBoardsRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
   '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
   '/p/$projectKey/gantt': typeof PProjectKeyGanttRoute
@@ -406,6 +414,7 @@ export interface FileRoutesById {
   '/projects_/new': typeof ProjectsNewRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
+  '/p/$projectKey/boards': typeof PProjectKeyBoardsRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
   '/p/$projectKey/defects': typeof PProjectKeyDefectsRouteWithChildren
   '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
@@ -457,6 +466,7 @@ export interface FileRouteTypes {
     | '/projects/new'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
+    | '/p/$projectKey/boards'
     | '/p/$projectKey/dashboard'
     | '/p/$projectKey/defects'
     | '/p/$projectKey/dependencies'
@@ -505,6 +515,7 @@ export interface FileRouteTypes {
     | '/projects/new'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
+    | '/p/$projectKey/boards'
     | '/p/$projectKey/dashboard'
     | '/p/$projectKey/dependencies'
     | '/p/$projectKey/gantt'
@@ -545,6 +556,7 @@ export interface FileRouteTypes {
     | '/projects_/new'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
+    | '/p/$projectKey/boards'
     | '/p/$projectKey/dashboard'
     | '/p/$projectKey/defects'
     | '/p/$projectKey/dependencies'
@@ -665,6 +677,13 @@ declare module '@tanstack/react-router' {
       path: '/backlog'
       fullPath: '/p/$projectKey/backlog'
       preLoaderRoute: typeof PProjectKeyBacklogRouteImport
+      parentRoute: typeof PProjectKeyRoute
+    }
+    '/p/$projectKey/boards': {
+      id: '/p/$projectKey/boards'
+      path: '/boards'
+      fullPath: '/p/$projectKey/boards'
+      preLoaderRoute: typeof PProjectKeyBoardsRouteImport
       parentRoute: typeof PProjectKeyRoute
     }
     '/p/$projectKey/dashboard': {
@@ -1061,6 +1080,7 @@ const PProjectKeyVersionsRouteWithChildren =
 interface PProjectKeyRouteChildren {
   PProjectKeyAssignmentRoute: typeof PProjectKeyAssignmentRoute
   PProjectKeyBacklogRoute: typeof PProjectKeyBacklogRoute
+  PProjectKeyBoardsRoute: typeof PProjectKeyBoardsRoute
   PProjectKeyDashboardRoute: typeof PProjectKeyDashboardRoute
   PProjectKeyDefectsRoute: typeof PProjectKeyDefectsRouteWithChildren
   PProjectKeyDependenciesRoute: typeof PProjectKeyDependenciesRoute
@@ -1085,6 +1105,7 @@ interface PProjectKeyRouteChildren {
 const PProjectKeyRouteChildren: PProjectKeyRouteChildren = {
   PProjectKeyAssignmentRoute: PProjectKeyAssignmentRoute,
   PProjectKeyBacklogRoute: PProjectKeyBacklogRoute,
+  PProjectKeyBoardsRoute: PProjectKeyBoardsRoute,
   PProjectKeyDashboardRoute: PProjectKeyDashboardRoute,
   PProjectKeyDefectsRoute: PProjectKeyDefectsRouteWithChildren,
   PProjectKeyDependenciesRoute: PProjectKeyDependenciesRoute,
