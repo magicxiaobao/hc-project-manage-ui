@@ -83,5 +83,6 @@ export {
   useStartTestRun,
   useTestRunDetail,
   useTestRunList,
+  useTestRunReport,
 } from './hooks/useTestRuns';
 export type { TestRunListParams } from './hooks/useTestRuns';

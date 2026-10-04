@@ -54,7 +54,7 @@ import {
 } from "@/components/pm/testrun-status-chip";
 import { TestExecutionCompleteDialog } from "@/components/pm/testrun-execution-complete-dialog";
 import { TestRunReasonDialog } from "@/components/pm/testrun-reason-dialog";
-import { TestRunDefectDialog } from "@/components/pm/testrun-defect-dialog";
+import { TestRunReportSection } from "@/components/pm/testrun-report-section";import { TestRunDefectDialog } from "@/components/pm/testrun-defect-dialog";
 import {
   TestRunCreateDialog,
   type TestRunTargetedContext,
@@ -559,6 +559,9 @@ export function TestRunDetailLive({
           </div>
         )}
       </section>
+
+      {/* 测试报告：只读聚合视图（P2：p2-testrun-report），默认折叠、展开后才请求 */}
+      <TestRunReportSection testRunId={testRunId} projectKey={projectKey} />
 
       {dialogs}
     </div>

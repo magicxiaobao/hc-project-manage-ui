@@ -90,6 +90,22 @@ export function useTestRunDetail(id: number | null | undefined) {
   });
 }
 
+/**
+ * 测试报告（只读聚合视图）：走 GET /testRun/v1/{id}/report，返回 run +
+ * summary + resultCounts + cases + defects。
+ * 报告只在轮详情页内按需展开加载，不随详情自动请求。
+ */
+export function useTestRunReport(
+  id: number | null | undefined,
+  enabled: boolean = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.testRun.report(id ?? 0),
+    queryFn: () => testRunApi.getReport(id as number),
+    enabled: isPositiveId(id) && enabled,
+  });
+}
+
 /** 测试轮域变更的缓存失效：失效测试轮域全部缓存 */
 function invalidateTestRunDomain(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.testRun.all });

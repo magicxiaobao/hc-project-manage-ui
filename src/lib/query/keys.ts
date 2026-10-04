@@ -23,6 +23,8 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
     trace: (id: number | string) => [...all, 'trace', id] as const,
     /** 需求影响范围：GET /requirement/v1/trace/{id}/impact */
     impact: (id: number | string) => [...all, 'impact', id] as const,
+    /** 测试报告：GET /testRun/v1/{id}/report */
+    report: (id: number | string) => [...all, 'report', id] as const,
     /** 追溯矩阵分页：params 为矩阵查询参数对象 */
     matrix: (params: Record<string, unknown> = {}) => [...all, 'matrix', params] as const,
     /** 子需求列表：GET /requirement/v1/{id}/children */
