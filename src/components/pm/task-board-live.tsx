@@ -22,7 +22,7 @@
  *   assigneeId 不下发，后端 start 接受 null；
  * - 无离线缓存/撤销拖拽（老前端的拖拽快照+撤销仅本地体验增强）。
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -78,12 +78,29 @@ import { BoardColumnFormDialog } from "@/components/pm/board-column-form-dialog"
 import { TaskTransitionReasonDialog } from "@/components/pm/task-transition-reason-dialog";
 
 const columnDragId = (id: number) => `column:${id}`;
-const cardDragId = (id: number) => `card:${id}`;
+/**
+ * 卡片拖拽实例 id 含所属列 id（r7 F5 真问题修复）。
+ * 后端按列 taskStatus 聚合卡片（getBoardColumnsWithTasks），同一任务状态可被
+ * 多列映射，同一张卡片会同时出现在多列中；旧的 `card:${taskId}` 在多列下重复，
+ * cardColumnOf 取首个命中列，导致拖第二列卡片时被识别成第一列。
+ */
+const cardDragId = (columnId: number, cardId: number) => `card:${columnId}:${cardId}`;
 
-function parseDragId(raw: string, prefix: "column" | "card"): number | null {
+function parseDragId(raw: string, prefix: "column"): number | null {
   if (!raw.startsWith(`${prefix}:`)) return null;
   const id = Number(raw.slice(prefix.length + 1));
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/** 解析卡片拖拽 id → { columnId, cardId }；形状不对返回 null */
+function parseCardDragId(raw: string): { columnId: number; cardId: number } | null {
+  const parts = raw.split(":");
+  if (parts.length !== 3 || parts[0] !== "card") return null;
+  const columnId = Number(parts[1]);
+  const cardId = Number(parts[2]);
+  if (!Number.isInteger(columnId) || columnId <= 0) return null;
+  if (!Number.isInteger(cardId) || cardId <= 0) return null;
+  return { columnId, cardId };
 }
 
 type FormDialogState =
@@ -111,7 +128,17 @@ export function TaskBoardLive({
   const deleteColumn = useDeleteBoardColumn();
   const updateStatus = useUpdateTaskStatus();
 
-  const columns = useMemo(() => columnsQuery.data ?? [], [columnsQuery.data]);
+  // r7 F4：lastGood 模式——任一查询曾成功即保留已挂载的子树（列表/弹窗/脏表单）；
+  // 后台刷新失败时只在顶部展示错误横幅；仅从未成功过才切换错误页。
+  const lastGoodBoardName = useRef<string | null>(null);
+  if (boardDetail.data?.boardName) lastGoodBoardName.current = boardDetail.data.boardName;
+  const lastGoodColumns = useRef<KanbanBoardColumn[]>([]);
+  const everColumnsLoaded = useRef(false);
+  if (columnsQuery.data !== undefined) {
+    lastGoodColumns.current = columnsQuery.data;
+    everColumnsLoaded.current = true;
+  }
+  const columns = columnsQuery.data ?? lastGoodColumns.current;
 
   const [activeColumn, setActiveColumn] = useState<KanbanBoardColumn | null>(null);
   const [activeCard, setActiveCard] = useState<KanbanBoardCard | null>(null);
@@ -120,6 +147,13 @@ export function TaskBoardLive({
   const [pendingMove, setPendingMove] = useState<PendingCardMove | null>(null);
   // 在途流转的卡片 id：禁用重复拖拽
   const [movingCardIds, setMovingCardIds] = useState<ReadonlySet<number>>(new Set());
+  // 卡片流转提交在途（含权威刷新等待）：原因弹窗禁用关闭/提交
+  const [transitionBusy, setTransitionBusy] = useState(false);
+  // r7 F7：列排序请求串行化——连续拖拽的意图追加到链尾，保证最终生效的是
+  // 最后一次排序；排序在途时禁用列拖拽。
+  const reorderChain = useRef(Promise.resolve());
+  const reorderQueued = useRef(0);
+  const [reorderBusy, setReorderBusy] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
@@ -140,10 +174,15 @@ export function TaskBoardLive({
       const id = parseDragId(String(event.active.id), "column");
       setActiveColumn(id != null ? (columnById.get(id) ?? null) : null);
     } else if (kind === "card") {
-      const id = parseDragId(String(event.active.id), "card");
-      const column = id != null ? cardColumnOf(id) : null;
+      // r7 F5：源列优先从拖拽实例自带的 columnId 取（同状态多列下 card id 重复，
+      // cardColumnOf 只取首个命中列）；实例数据缺失时回退到 cardColumnOf。
+      const parsed = parseCardDragId(String(event.active.id));
+      const column =
+        parsed != null
+          ? (columnById.get(parsed.columnId) ?? cardColumnOf(parsed.cardId))
+          : null;
       setActiveCard(
-        id != null ? (column?.tasks.find((task) => task.id === id) ?? null) : null,
+        parsed != null ? (column?.tasks.find((task) => task.id === parsed.cardId) ?? null) : null,
       );
     }
   }
@@ -156,7 +195,7 @@ export function TaskBoardLive({
     else if (kind === "card") handleCardDrop(event);
   }
 
-  /** 列拖拽排序：位置变化才发 POST reorder（乐观更新，失败 refetch 回滚） */
+  /** 列拖拽排序：位置变化才发 POST reorder（乐观更新 + 串行提交，失败回滚） */
   function handleColumnDrop(event: DragEndEvent) {
     const fromId = parseDragId(String(event.active.id), "column");
     if (fromId == null || !event.over) return;
@@ -170,12 +209,36 @@ export function TaskBoardLive({
     const nextIds = next.map((column) => column.id);
     void queryClient.cancelQueries({ queryKey: columnsKey });
     queryClient.setQueryData(columnsKey, next);
-    reorderColumns.mutate(nextIds, {
-      onError: (error) => {
-        toast.error(`列排序失败：${toUserMessage(error)}，已恢复原顺序`);
-        invalidateBoardDomain(queryClient);
-      },
-    });
+    enqueueColumnReorder(nextIds);
+  }
+
+  /**
+   * r7 F7：列排序请求串行化。连续拖拽 A、B 时两次请求按发起顺序依次执行，
+   * 最终生效的是最后一次意图；前一次失败不阻塞后续，且失败只回滚自己
+   * （失效缓存从服务器重载），不吞掉后一次的意图。
+   */
+  function enqueueColumnReorder(nextIds: number[]) {
+    reorderQueued.current += 1;
+    setReorderBusy(true);
+    reorderChain.current = reorderChain.current
+      .catch(() => undefined)
+      .then(() => reorderColumns.mutateAsync(nextIds))
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          // 后端 reorder 存在 Integer→Long 反序列化缺陷（见 P3 后端备忘），
+          // 失败是可达的：如实报告并从服务器重载，不承诺"已保存/已恢复原顺序"。
+          toast.error(`列排序失败：${toUserMessage(error)}，已从服务器重新加载顺序`);
+          invalidateBoardDomain(queryClient);
+        },
+      )
+      .finally(() => {
+        reorderQueued.current -= 1;
+        if (reorderQueued.current <= 0) {
+          reorderQueued.current = 0;
+          setReorderBusy(false);
+        }
+      });
   }
 
   /**
@@ -187,16 +250,18 @@ export function TaskBoardLive({
    * - 否则直接乐观更新 + updateStatus。
    */
   function handleCardDrop(event: DragEndEvent) {
-    const cardId = parseDragId(String(event.active.id), "card");
-    if (cardId == null || !event.over) return;
+    // r7 F5：拖拽实例 id 含源列 id，同状态多列下不再靠 card id 猜源列
+    const parsed = parseCardDragId(String(event.active.id));
+    if (parsed == null || !event.over) return;
+    const cardId = parsed.cardId;
     if (movingCardIds.has(cardId)) return;
-    const fromColumn = cardColumnOf(cardId);
+    const fromColumn = columnById.get(parsed.columnId) ?? cardColumnOf(cardId);
     if (!fromColumn) return;
     const overId = String(event.over.id);
     let toColumn: KanbanBoardColumn | null = null;
-    const overCardId = parseDragId(overId, "card");
-    if (overCardId != null) {
-      toColumn = cardColumnOf(overCardId);
+    const overCard = parseCardDragId(overId);
+    if (overCard != null) {
+      toColumn = columnById.get(overCard.columnId) ?? cardColumnOf(overCard.cardId);
     } else {
       const overColumnId = parseDragId(overId, "column");
       toColumn = overColumnId != null ? (columnById.get(overColumnId) ?? null) : null;
@@ -227,47 +292,89 @@ export function TaskBoardLive({
       });
       return;
     }
-    executeCardMove(card, toColumn.id, toStatus, {});
+    void executeCardMove(card, toColumn.id, toStatus, {});
   }
 
   /**
    * 执行卡片流转：乐观把卡片搬到目标列末尾 → POST task/v1/updateStatus；
    * 失败时 toast + 失效看板域缓存（refetch 回滚乐观更新）。
+   *
+   * r7 F3：此前用 updateStatus.mutate 的局部回调做失效/提示/解锁，连续调用
+   * 同一 mutation 时先前 observer 被移除会导致回调丢失（卡片卡在
+   * movingCardIds 且无 refetch）。现改用 mutateAsync + 每卡片独立的
+   * try/catch/finally，每张卡的失效与解锁互不干扰。
+   *
+   * r7 F10：此前 onSettled 随即解锁但 invalidate 不等 refetch，乐观更新保留的
+   * 旧 card.status 会误拦截下一次流转。现等待权威刷新完成后再解锁；刷新失败
+   * 时卡片保持锁定并提供重试，不以旧状态继续流转。
+   *
+   * @returns 流转是否成功（含权威刷新）；原因弹窗据此决定关闭或保留文本。
    */
-  function executeCardMove(
+  async function executeCardMove(
     card: KanbanBoardCard,
     toColumnId: number,
     toStatus: TaskStatus,
     context: { reason?: string; deliverables?: string },
-  ) {
+  ): Promise<boolean> {
+    setTransitionBusy(true);
     setMovingCardIds((current) => new Set(current).add(card.id));
-    void queryClient.cancelQueries({ queryKey: columnsKey });
-    queryClient.setQueryData(columnsKey, (old: KanbanBoardColumn[] | undefined) =>
-      old ? moveCardInColumns(old, card.id, toColumnId) : old,
-    );
-    updateStatus.mutate(
-      { taskId: card.id, status: toStatus, ...context },
-      {
-        onSuccess: () => {
-          toast.success(
-            `任务「${card.title || `#${card.id}`}」已流转为${statusLabel("task", toStatus)}`,
-          );
-          invalidateBoardDomain(queryClient);
-        },
-        onError: (error) => {
-          toast.error(`流转失败：${toUserMessage(error)}，已回滚`);
-          // 回滚：乐观更新失效，重新拉取后端权威数据
-          invalidateBoardDomain(queryClient);
-        },
-        onSettled: () => {
-          setMovingCardIds((current) => {
-            const next = new Set(current);
-            next.delete(card.id);
-            return next;
-          });
-        },
-      },
-    );
+    const unlockCard = () => {
+      setMovingCardIds((current) => {
+        const next = new Set(current);
+        next.delete(card.id);
+        return next;
+      });
+    };
+    // 刷新失败时保持锁定（由重试解锁），其余路径解锁
+    let keepLocked = false;
+    try {
+      await queryClient.cancelQueries({ queryKey: columnsKey });
+      queryClient.setQueryData<KanbanBoardColumn[] | undefined>(
+        columnsKey,
+        (old) => (old ? moveCardInColumns(old, card.id, toColumnId) : old),
+      );
+      await updateStatus.mutateAsync({ taskId: card.id, status: toStatus, ...context });
+      toast.success(
+        `任务「${card.title || `#${card.id}`}」已流转为${statusLabel("task", toStatus)}`,
+      );
+      try {
+        await queryClient.refetchQueries({ queryKey: columnsKey });
+      } catch {
+        keepLocked = true;
+        toast.error("流转已成功，但看板刷新失败", {
+          action: {
+            label: "重试",
+            onClick: () => void retryBoardRefresh(card.id),
+          },
+        });
+        return false;
+      }
+      return true;
+    } catch (error) {
+      toast.error(`流转失败：${toUserMessage(error)}，已回滚`);
+      // 回滚：乐观更新失效，重新拉取后端权威数据
+      invalidateBoardDomain(queryClient);
+      return false;
+    } finally {
+      setTransitionBusy(false);
+      if (!keepLocked) unlockCard();
+    }
+  }
+
+  /** 看板权威刷新重试：成功后解锁卡片，仍失败则继续保持锁定并可再试 */
+  async function retryBoardRefresh(cardId: number): Promise<void> {
+    try {
+      await queryClient.refetchQueries({ queryKey: columnsKey });
+      setMovingCardIds((current) => {
+        const next = new Set(current);
+        next.delete(cardId);
+        return next;
+      });
+    } catch (error) {
+      toast.error(`刷新仍失败：${toUserMessage(error)}`, {
+        action: { label: "重试", onClick: () => void retryBoardRefresh(cardId) },
+      });
+    }
   }
 
   const confirmDeleteColumn = () => {
@@ -293,7 +400,12 @@ export function TaskBoardLive({
     );
   }
 
-  if (boardDetail.isError || columnsQuery.isError) {
+  // r7 F4：仅从未成功过才切换错误页；任一查询曾成功即保留已挂载的子树
+  // （列表/弹窗/脏表单），后台刷新失败只在顶部展示错误横幅 + 重试。
+  const everLoaded = everColumnsLoaded.current || lastGoodBoardName.current != null;
+  const loadFailed = boardDetail.isError || columnsQuery.isError;
+  const refetchFailed = boardDetail.isRefetchError || columnsQuery.isRefetchError;
+  if ((loadFailed || refetchFailed) && !everLoaded) {
     const error = boardDetail.error ?? columnsQuery.error;
     return (
       <div className="flex flex-col items-start gap-3 px-4 py-8">
@@ -310,8 +422,10 @@ export function TaskBoardLive({
       </div>
     );
   }
+  const showRefreshBanner = (loadFailed || refetchFailed) && everLoaded;
 
-  const boardName = boardDetail.data?.boardName ?? `看板 #${boardId}`;
+  const boardName =
+    boardDetail.data?.boardName ?? lastGoodBoardName.current ?? `看板 #${boardId}`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -332,10 +446,29 @@ export function TaskBoardLive({
           新建列
         </Button>
       </div>
+      {showRefreshBanner ? (
+        <div className="mx-4 mt-2 flex items-center gap-3 rounded-md border border-danger/40 bg-danger/5 px-4 py-2">
+          <p className="type-body flex-1 text-danger">
+            看板刷新失败：{toUserMessage(boardDetail.error ?? columnsQuery.error)}
+            。显示的是上次成功的数据。
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            onPress={() => {
+              void boardDetail.refetch();
+              void columnsQuery.refetch();
+            }}
+          >
+            重试
+          </Button>
+        </div>
+      ) : null}
       {columns.length === 0 ? (
         <div className="px-4">
           <EmptyHint>
             这个看板还没有列。先新建一列并映射任务状态，任务卡片才会出现。
+            （后端当前版本不保存列的状态映射与颜色，卡片聚合能力受后端阻塞。）
           </EmptyHint>
         </div>
       ) : (
@@ -360,6 +493,7 @@ export function TaskBoardLive({
                     key={column.id}
                     column={column}
                     disabled={movingCardIds}
+                    sortDisabled={reorderBusy}
                     onEdit={() =>
                       setFormDialog({ mode: "edit", columnId: column.id, column })
                     }
@@ -436,14 +570,16 @@ export function TaskBoardLive({
           taskTitle={pendingMove.card.title}
           from={pendingMove.card.status}
           to={pendingMove.toStatus}
-          isPending={updateStatus.isPending}
+          isPending={transitionBusy}
           onCancel={() => {
-            if (!updateStatus.isPending) setPendingMove(null);
+            // r7 F9：请求在途时不允许关闭，弹窗与文本保留到成功/失败落定
+            if (!transitionBusy) setPendingMove(null);
           }}
-          onConfirm={(text) => {
+          onConfirm={async (text) => {
             const move = pendingMove;
-            setPendingMove(null);
-            executeCardMove(
+            // r7 F9：请求期间保留弹窗与文本；成功才由弹窗 markClean 后关闭，
+            // 失败时文本保留在弹窗内，可修改后重试。
+            return executeCardMove(
               move.card,
               move.toColumnId,
               move.toStatus,
@@ -459,12 +595,15 @@ export function TaskBoardLive({
 function SortableBoardColumn({
   column,
   disabled,
+  sortDisabled,
   onEdit,
   onDelete,
 }: {
   column: KanbanBoardColumn;
   /** 在途流转中的卡片 id 集合（其卡片禁用拖拽） */
   disabled: ReadonlySet<number>;
+  /** 列排序请求在途：禁用列拖拽（r7 F7，避免并发排序互相覆盖） */
+  sortDisabled?: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -478,6 +617,7 @@ function SortableBoardColumn({
   } = useSortable({
     id: columnDragId(column.id),
     data: { kind: "column", columnId: column.id },
+    disabled: sortDisabled,
   });
   return (
     <div
@@ -492,6 +632,7 @@ function SortableBoardColumn({
       <ColumnShell
         column={column}
         dragListeners={listeners}
+        dragDisabled={sortDisabled}
         disabled={disabled}
         onEdit={onEdit}
         onDelete={onDelete}
@@ -504,6 +645,7 @@ function ColumnShell({
   column,
   preview = false,
   dragListeners,
+  dragDisabled,
   disabled,
   onEdit,
   onDelete,
@@ -511,6 +653,7 @@ function ColumnShell({
   column: KanbanBoardColumn;
   preview?: boolean;
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
+  dragDisabled?: boolean;
   disabled?: ReadonlySet<number>;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -529,7 +672,9 @@ function ColumnShell({
           <button
             type="button"
             aria-label={`拖拽排序列「${column.columnName}」`}
-            className="cursor-grab touch-none text-default-400 hover:text-default-600"
+            className="cursor-grab touch-none text-default-400 hover:text-default-600 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={dragDisabled}
+            title={dragDisabled ? "排序请求进行中，稍候再拖" : undefined}
             {...dragListeners}
           >
             ⋮⋮
@@ -575,13 +720,14 @@ function ColumnShell({
           </div>
         ) : (
           <SortableContext
-            items={column.tasks.map((task) => cardDragId(task.id))}
+            items={column.tasks.map((task) => cardDragId(column.id, task.id))}
             strategy={verticalListSortingStrategy}
           >
             {column.tasks.map((task) => (
               <SortableCard
                 key={task.id}
                 card={task}
+                columnId={column.id}
                 disabled={disabled?.has(task.id) ?? false}
               />
             ))}
@@ -594,9 +740,12 @@ function ColumnShell({
 
 function SortableCard({
   card,
+  columnId,
   disabled,
 }: {
   card: KanbanBoardCard;
+  /** 所属列 id：拖拽实例 id 含列 id（r7 F5，同状态多列下卡片 id 重复） */
+  columnId: number;
   disabled: boolean;
 }) {
   const {
@@ -607,8 +756,8 @@ function SortableCard({
     transition,
     isDragging,
   } = useSortable({
-    id: cardDragId(card.id),
-    data: { kind: "card", cardId: card.id },
+    id: cardDragId(columnId, card.id),
+    data: { kind: "card", cardId: card.id, columnId },
     disabled,
   });
   return (

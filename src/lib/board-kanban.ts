@@ -14,7 +14,6 @@
  *   COMPLETED→IN_PROGRESS 重新打开必须 reason；拓扑复用 useTasks 的
  *   TASK_TRANSITIONS_BY_STATUS/taskNeedsReason/taskNeedsReopenReason）。
  */
-import type { BoardColumnWithTasks } from "./api/board-types";
 import type { TaskStatus } from "./api/task-types";
 import { taskNeedsReason, taskNeedsReopenReason } from "./query/hooks/useTasks";
 
@@ -88,19 +87,24 @@ function parseCard(raw: unknown): KanbanBoardCard | null {
 
 /**
  * 解析列+卡片数据：防御性解释后端返回的 List<Map>。
+ * - raw 非数组时兜底返回空数组（后端异常形状不抛错，调用方展示空态）；
  * - 非对象元素/缺 id 的列整体丢弃；
  * - tasks 非数组时视为空列（后端无 taskStatus 时即返回空数组）；
  * - 卡片缺 id/status 的丢弃单卡，不污染整列。
+ *
+ * 本函数在 react-query 的 queryFn 返回前执行（见 useBoardColumns），
+ * 因此缓存里存的即是规范形状 KanbanBoardColumn[]，组件层乐观更新可直接
+ * 按此形状操作，无需再做类型断言。
  */
-export function parseBoardColumnsWithTasks(
-  raw: BoardColumnWithTasks[],
-): KanbanBoardColumn[] {
+export function parseBoardColumnsWithTasks(raw: unknown): KanbanBoardColumn[] {
+  if (!Array.isArray(raw)) return [];
   const columns: KanbanBoardColumn[] = [];
   for (const entry of raw) {
     if (typeof entry !== "object" || entry === null) continue;
-    const id = asNumber(entry.id);
+    const record = entry as Record<string, unknown>;
+    const id = asNumber(record.id);
     if (id == null) continue;
-    const tasksRaw = Array.isArray(entry.tasks) ? entry.tasks : [];
+    const tasksRaw = Array.isArray(record.tasks) ? record.tasks : [];
     const tasks: KanbanBoardCard[] = [];
     for (const taskRaw of tasksRaw) {
       const card = parseCard(taskRaw);
@@ -108,12 +112,12 @@ export function parseBoardColumnsWithTasks(
     }
     columns.push({
       id,
-      columnName: asString(entry.columnName) ?? "",
-      type: asString(entry.type),
-      color: asString(entry.color),
-      wipLimit: asNumber(entry.wipLimit),
-      taskStatus: asTaskStatus(entry.taskStatus),
-      sortOrder: asNumber(entry.sortOrder),
+      columnName: asString(record.columnName) ?? "",
+      type: asString(record.type),
+      color: asString(record.color),
+      wipLimit: asNumber(record.wipLimit),
+      taskStatus: asTaskStatus(record.taskStatus),
+      sortOrder: asNumber(record.sortOrder),
       tasks,
     });
   }
@@ -178,7 +182,15 @@ export function buildCardTransitionContext(
   return { reason: trimmed };
 }
 
-/** 校验流转文本非空（与后端 requireText 对应，前端先拦截省一次往返） */
-export function validateTransitionText(text: string): string | null {
-  return text.trim() ? null : "请填写流转说明";
+/** 校验流转文本非空且不超后端上限（与后端 requireText/@Size 对应，前端先拦截省一次往返） */
+export function validateTransitionText(text: string, maxLength: number): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return "请填写流转说明";
+  if (trimmed.length > maxLength) return `流转说明不能超过 ${maxLength} 个字符`;
+  return null;
+}
+
+/** 流转文本后端上限：目标 COMPLETED 走 deliverables（1000），其余走 reason（500） */
+export function transitionTextMaxLength(to: TaskStatus): number {
+  return to === "COMPLETED" ? 1000 : 500;
 }

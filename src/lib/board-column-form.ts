@@ -143,8 +143,14 @@ export function buildBoardColumnUpdatePayload(
   payload.columnName = input.columnName.trim();
   const taskStatus = input.taskStatus.trim();
   if (taskStatus) payload.taskStatus = taskStatus as TaskStatus;
-  const wipLimit = normalizeWipLimit(input.wipLimit);
-  if (wipLimit != null) payload.wipLimit = wipLimit;
+  const wipLimitRaw = input.wipLimit.trim();
+  // 编辑时空值 = 取消上限：必须明确下发 wipLimit: 0。
+  // 后端 updateById 按 NOT_NULL 策略跳过 null 字段，省略会静默保留旧上限；
+  // 0 落库后 BoardColumn.isWipLimited()（wipLimit>0）为 false，
+  // 与列头"不限制"口径一致。
+  // taskStatus/color/description：后端 create/update 均不落库（见 P3 后端备忘 F2），
+  // 此处不臆造"清空"语义——有值照常下发（留待后端补齐），空值省略。
+  payload.wipLimit = wipLimitRaw === "" ? 0 : Number(wipLimitRaw);
   const color = input.color.trim();
   if (color) payload.color = color;
   return payload;

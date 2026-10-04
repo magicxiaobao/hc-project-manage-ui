@@ -117,6 +117,27 @@ describe("buildBoardColumnUpdatePayload", () => {
     expect("boardId" in payload).toBe(false);
     expect(payload.columnName).toBe("已完成");
   });
+
+  it("清空 WIP 上限时明确下发 wipLimit: 0（r7 F6：省略会被后端 NOT_NULL 策略保留旧值）", () => {
+    const payload = buildBoardColumnUpdatePayload(
+      { ...emptyBoardColumnFormInput(), columnName: "列", wipLimit: "" },
+      52,
+    );
+    expect(payload.wipLimit).toBe(0);
+  });
+
+  it("填写的 WIP 上限原样下发（含显式 0）", () => {
+    const payload = buildBoardColumnUpdatePayload(
+      { ...emptyBoardColumnFormInput(), columnName: "列", wipLimit: "8" },
+      53,
+    );
+    expect(payload.wipLimit).toBe(8);
+    const zero = buildBoardColumnUpdatePayload(
+      { ...emptyBoardColumnFormInput(), columnName: "列", wipLimit: "0" },
+      54,
+    );
+    expect(zero.wipLimit).toBe(0);
+  });
 });
 
 describe("editFormFromColumn", () => {

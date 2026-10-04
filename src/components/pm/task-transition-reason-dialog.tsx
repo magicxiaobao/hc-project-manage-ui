@@ -23,7 +23,7 @@ import {
 } from "@/components/biz";
 import { statusLabel } from "@/lib/pm/domain";
 import type { TaskStatus } from "@/lib/api/task-types";
-import { validateTransitionText } from "@/lib/board-kanban";
+import { transitionTextMaxLength, validateTransitionText } from "@/lib/board-kanban";
 
 export function TaskTransitionReasonDialog({
   open,
@@ -41,15 +41,28 @@ export function TaskTransitionReasonDialog({
   /** 流转请求在途：禁用输入与关闭 */
   isPending: boolean;
   onCancel: () => void;
-  onConfirm: (text: string) => void;
+  /**
+   * r7 F9：返回 Promise<boolean>——请求期间弹窗与文本保留；
+   * 成功（true）时弹窗 markClean 后关闭，失败（false）时文本保留在弹窗内
+   * 并展示提交错误，可修改后重试。
+   */
+  onConfirm: (text: string) => Promise<boolean>;
 }) {
   const [text, setText] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  // 本地提交中：confirm 异步化后，父组件 transitionBusy 的首次渲染有空隙，
+  // 快速双击会重复提交；本地 guard 补上这道缝。
+  const [submitting, setSubmitting] = useState(false);
+  const busy = isPending || submitting;
 
   const isDeliverables = to === "COMPLETED";
   const fieldLabel = isDeliverables ? "交付物或完成说明" : "流转原因";
   const fromLabel = statusLabel("task", from);
   const toLabel = statusLabel("task", to);
+  // pi r7 F4：后端 TaskTransitionRequest reason @Size(max=500)，
+  // deliverables @Size(max=1000)；maxLength 与校验同步，超限挂 FieldError。
+  const maxLength = transitionTextMaxLength(to);
 
   const initialRef = useRef<string | null>(null);
   if (initialRef.current === null) initialRef.current = "";
@@ -59,22 +72,35 @@ export function TaskTransitionReasonDialog({
   const doClose = () => {
     setText("");
     setFieldError(null);
+    setSubmitError(null);
     onCancel();
   };
 
   const close = () => {
-    if (isPending) return;
+    if (busy) return;
     guard(doClose);
   };
 
-  const confirm = () => {
-    if (isPending) return;
-    const error = validateTransitionText(text);
+  const confirm = async () => {
+    if (busy) return;
+    const error = validateTransitionText(text, maxLength);
     setFieldError(error);
     if (error) return;
-    // 成功提交 = 已授权离开：避免守卫拦截父组件关闭本弹窗
-    markClean();
-    onConfirm(text.trim());
+    setSubmitError(null);
+    // r7 F9：校验通过不再提前 markClean/卸载；请求落定前弹窗与文本保留，
+    // 失败时展示提交错误并允许重试，成功后才授权离开并关闭。
+    setSubmitting(true);
+    try {
+      const ok = await onConfirm(text.trim());
+      if (ok) {
+        markClean();
+        doClose();
+      } else {
+        setSubmitError("提交失败，文本已保留，可修改后重试（详情见右下角提示）");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -97,8 +123,9 @@ export function TaskTransitionReasonDialog({
               onChange={(value) => {
                 setText(value);
                 setFieldError(null);
+                setSubmitError(null);
               }}
-              isDisabled={isPending}
+              isDisabled={busy}
             >
               <Label>
                 {fieldLabel}
@@ -111,17 +138,22 @@ export function TaskTransitionReasonDialog({
                     : "例如：需求变更，暂缓开发"
                 }
                 rows={3}
-                maxLength={1000}
+                maxLength={maxLength}
               />
             </TextField>
             <FieldError message={fieldError} />
+            {submitError ? (
+              <p role="alert" className="mt-1 text-sm text-danger">
+                {submitError}
+              </p>
+            ) : null}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onPress={close} isDisabled={isPending}>
+            <Button variant="ghost" onPress={close} isDisabled={busy}>
               取消
             </Button>
-            <Button variant="primary" onPress={confirm} isDisabled={isPending}>
-              {isPending ? <Spinner size="sm" /> : null}
+            <Button variant="primary" onPress={() => void confirm()} isDisabled={busy}>
+              {busy ? <Spinner size="sm" /> : null}
               确认流转
             </Button>
           </div>

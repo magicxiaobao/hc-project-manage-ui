@@ -189,6 +189,9 @@ export function BoardColumnFormDialog({
             <p className="type-caption mt-1 text-default-500">
               列按此状态聚合任务（后端 columnsWithTasks 按 taskStatus 查任务）。
               不映射的列不显示任何卡片。
+              <span className="text-warning">
+                后端当前版本暂不支持保存该映射，列暂不聚合卡片。
+              </span>
             </p>
           </div>
           <div>
@@ -201,6 +204,11 @@ export function BoardColumnFormDialog({
               <TextArea placeholder="列的说明（可选）" rows={2} maxLength={501} />
             </TextField>
             <FieldError message={fieldErrors.description} />
+            <p className="type-caption mt-1 text-default-500">
+              <span className="text-warning">
+                后端当前版本暂不支持保存列描述。
+              </span>
+            </p>
           </div>
           <div>
             <TextField
@@ -226,6 +234,11 @@ export function BoardColumnFormDialog({
               <Input placeholder="#3B82F6（可选）" maxLength={7} />
             </TextField>
             <FieldError message={fieldErrors.color} />
+            <p className="type-caption mt-1 text-default-500">
+              <span className="text-warning">
+                后端当前版本暂不支持保存列颜色，列头暂显示默认色。
+              </span>
+            </p>
             <div className="mt-2 flex items-center gap-2" role="group" aria-label="常用颜色">
               {COLOR_PRESETS.map((preset) => (
                 <button

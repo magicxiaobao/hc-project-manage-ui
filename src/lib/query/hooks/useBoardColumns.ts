@@ -27,16 +27,20 @@ export function normalizeBoardColumnsParams(boardId: number) {
 /**
  * 看板列 + 卡片：走 GET /boardColumn/v1/board/{boardId}/columnsWithTasks。
  * 后端返回 List<Map<String,Object>>（BoardColumnServiceImpl 拼装）；
- * select 里用 parseBoardColumnsWithTasks 防御性解释为 KanbanBoardColumn[]
- *（缓存即存解析后数据，组件层的乐观更新直接操作同一形状，类型一致）。
+ * 解析在 queryFn 返回前完成（parseBoardColumnsWithTasks），缓存里存的即是
+ * 规范形状 KanbanBoardColumn[]——组件层乐观更新直接操作同一形状，类型一致，
+ * 不再依赖 select 只转换 observer 输出（此前缓存仍是原始响应，
+ * setQueryData 的类型断言并不成立，异常形状下 .tasks.find 会抛 TypeError）。
  */
 export function useBoardColumnsWithTasks(boardId: number | null | undefined) {
   return useQuery({
     queryKey: queryKeys.board.list(
       normalizeBoardColumnsParams(boardId ?? 0),
     ),
-    queryFn: () => boardColumnApi.getColumnsWithTasks(boardId as number),
-    select: parseBoardColumnsWithTasks,
+    queryFn: async () =>
+      parseBoardColumnsWithTasks(
+        await boardColumnApi.getColumnsWithTasks(boardId as number),
+      ),
     enabled: typeof boardId === 'number' && Number.isFinite(boardId) && boardId > 0,
   });
 }

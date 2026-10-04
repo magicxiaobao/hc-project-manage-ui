@@ -12,6 +12,7 @@ import {
   cardTransitionNeedsText,
   moveCardInColumns,
   parseBoardColumnsWithTasks,
+  transitionTextMaxLength,
   validateTransitionText,
   type KanbanBoardColumn,
 } from "../board-kanban";
@@ -170,10 +171,31 @@ describe("buildCardTransitionContext", () => {
 
 describe("validateTransitionText", () => {
   it("空白文本被拒绝", () => {
-    expect(validateTransitionText("   ")).not.toBeNull();
+    expect(validateTransitionText("   ", 500)).not.toBeNull();
   });
 
   it("非空文本通过", () => {
-    expect(validateTransitionText("原因")).toBeNull();
+    expect(validateTransitionText("原因", 500)).toBeNull();
+  });
+
+  it("pi r7 F4：按目标状态区分上限——reason 500 / deliverables 1000", () => {
+    expect(transitionTextMaxLength("PAUSED")).toBe(500);
+    expect(transitionTextMaxLength("CANCELLED")).toBe(500);
+    expect(transitionTextMaxLength("COMPLETED")).toBe(1000);
+    // 501 字 reason 被拦截（旧逻辑 maxLength=1000 会放行直达后端 400）
+    expect(validateTransitionText("原".repeat(501), 500)).not.toBeNull();
+    expect(validateTransitionText("原".repeat(500), 500)).toBeNull();
+    // deliverables 1000 字通过
+    expect(validateTransitionText("交".repeat(1000), 1000)).toBeNull();
+    expect(validateTransitionText("交".repeat(1001), 1000)).not.toBeNull();
+  });
+});
+
+describe("parseBoardColumnsWithTasks 防御", () => {
+  it("r7 F8：非数组输入兜底返回空数组（不抛错）", () => {
+    expect(parseBoardColumnsWithTasks(null)).toEqual([]);
+    expect(parseBoardColumnsWithTasks(undefined)).toEqual([]);
+    expect(parseBoardColumnsWithTasks({})).toEqual([]);
+    expect(parseBoardColumnsWithTasks("oops")).toEqual([]);
   });
 });
