@@ -200,6 +200,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       if (generation !== sessionGeneration) return false;
       // 仅在确认 refresh token 失效时清除登录态；瞬时故障保留会话
       if (isRefreshTokenInvalid(err)) {
+        // Codex review 4175693767：确认 refresh token 失效就是完整的会话失效，
+        // 不能只清内存态+存储——必须同时递增会话代际（丢弃在途的旧会话刷新
+        // 结果）并清空查询缓存。否则：本 tab 先清了内存用户、另一 tab 再以
+        // B 登录后 hydrate() 时 prevUser 为 null 会跳过缓存清理（4175472562
+        // 的条件要求内存有用户），B 会直接命中 A 的旧缓存。
+        sessionGeneration += 1;
+        clearQueryCache();
         clearStoredAuth();
         set({ user: null, token: null, isAuthenticated: false });
       }

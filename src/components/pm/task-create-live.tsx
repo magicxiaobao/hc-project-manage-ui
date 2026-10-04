@@ -11,7 +11,7 @@
  *
  * 未登录走演示创建流程时不使用本组件。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button, Checkbox, Input, Label, Spinner, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
@@ -238,6 +238,19 @@ export function TaskCreateLive({
   const [formError, setFormError] = useState("");
 
   const set = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
+
+  // Codex review 4175693766：路由复用（/p/A/issues/new → /p/B/issues/new）时，
+  // A 项目下勾选的关联需求 ID 会残留在表单里，但提交按 B 的 projectId 组装
+  // payload——跨项目关联要么被后端拒绝，要么建立错误关联。projectId 变化时
+  // 清空 implementsRequirementIds（表单其余字段保留）。选择器子组件的搜索
+  // 文本仅控制本项目内的查询，不进 payload，无需处理。
+  useEffect(() => {
+    setForm((current) =>
+      current.implementsRequirementIds.length === 0
+        ? current
+        : { ...current, implementsRequirementIds: [] },
+    );
+  }, [projectId]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

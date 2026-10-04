@@ -79,6 +79,14 @@ export function TraceViewLive({ projectId, projectKey }: { projectId: number; pr
   const requirements = requirementsQuery.data?.list ?? [];
   const selectorTotal = requirementsQuery.data?.total ?? 0;
   const selectorTotalPages = Math.max(1, Math.ceil(selectorTotal / SELECTOR_PAGE_SIZE));
+  // Codex review 4175693768：删除/权限变化可能让选择器当前页变空（total>0
+  // 但 list 为空）——钳制回最后一页。钳制前空页的 early return 会同时移除
+  // 分页器并误报“没有匹配的需求”，用户只能重新搜索才能翻回。
+  useEffect(() => {
+    if (!requirementsQuery.isPending && selectorTotal > 0 && selectorPage > selectorTotalPages) {
+      setSelectorPage(selectorTotalPages);
+    }
+  }, [requirementsQuery.isPending, selectorTotal, selectorTotalPages, selectorPage]);
   const effectiveId = selectedId ?? requirements[0]?.id ?? null;
   const applySelectorSearch = () => {
     setSelectorTitle(selectorTitleInput);

@@ -24,5 +24,8 @@ function Page() {
     return <EmptyHint>{`需求 ID 不合法（${requirementId}）。`}</EmptyHint>;
   }
 
-  return <RequirementDetailLive requirementId={id} projectKey={projectKey} />;
+  // Codex review 4175693765：参数导航（任务 A → 任务 B）时路由复用组件，
+  // 草稿/replyTo/流转/改派/评论页码等 item-scoped 状态会残留而 mutation 已
+  // 指向 B——key 强制按 requirementId 重新挂载，一次性全量重置，不逐个遗漏。
+  return <RequirementDetailLive key={id} requirementId={id} projectKey={projectKey} />;
 }

@@ -76,7 +76,12 @@ export function RequirementDetailLive({
 
   const allowedQuery = useAllowedTransitions(requirementId, requirement?.status);
   const historyQuery = useTransitionHistory(requirementId);
-  const commentsQuery = useRequirementComments(requirementId, 1, COMMENT_PAGE_SIZE);
+  // Codex review 4175693764：评论原来恒请求第 1 页、没有翻页控件——评论超过
+  // 50 条时后续评论永远不可达。页码进 query key，每页单独缓存。
+  const [commentPage, setCommentPage] = useState(1);
+  const commentsQuery = useRequirementComments(requirementId, commentPage, COMMENT_PAGE_SIZE);
+  const commentTotal = commentsQuery.data?.total ?? 0;
+  const commentTotalPages = Math.max(1, Math.ceil(commentTotal / COMMENT_PAGE_SIZE));
 
   const transitionMutation = useTransitionRequirement();
   const commentMutation = useCreateRequirementComment(requirementId);
@@ -146,6 +151,8 @@ export function RequirementDetailLive({
         onSuccess: () => {
           setDraft("");
           setReplyTo(null);
+          // 新评论写入后回到第 1 页，保证用户能看到刚发出的评论
+          setCommentPage(1);
         },
       },
     );
@@ -368,6 +375,32 @@ export function RequirementDetailLive({
               </li>
             ))}
           </ul>
+        ) : null}
+        {/* Codex review 4175693764：评论总数超过一页时渲染分页器，否则后续评论不可达 */}
+        {commentTotal > COMMENT_PAGE_SIZE ? (
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="type-meta">
+              共 {commentTotal} 条 · 第 {commentPage} / {commentTotalPages} 页
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                isDisabled={commentPage <= 1 || commentsQuery.isPending}
+                onPress={() => setCommentPage(Math.max(1, commentPage - 1))}
+              >
+                上一页
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                isDisabled={commentPage >= commentTotalPages || commentsQuery.isPending}
+                onPress={() => setCommentPage(commentPage + 1)}
+              >
+                下一页
+              </Button>
+            </div>
+          </div>
         ) : null}
 
         {projectContextVerified ? (

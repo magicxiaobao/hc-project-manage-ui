@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setQueryCacheClearer } from '../../query/session';
 import {
+  HttpResponseError,
   REFRESH_TOKEN_STORAGE_KEY,
   TOKEN_STORAGE_KEY,
   USER_INFO_STORAGE_KEY,
@@ -145,5 +146,72 @@ describe('hydrate 跨 tab 登出时清会话（Codex review 4175510484）', () =
     expect(clearer).not.toHaveBeenCalled();
     expect(useAuthStore.getState().user).toBeNull();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+  });
+});
+
+/**
+ * Codex review 4175693767 回归测试：
+ * refresh 失败且确认 refresh token 失效（非信封体的 HTTP 401）时，必须按完整
+ * 会话失效处理：递增会话代际 + 清查询缓存 + 清存储 + 清内存态。只清内存态的话，
+ * 另一 tab 随后以 B 登录、本 tab hydrate() 时 prevUser 为 null 会跳过缓存清理
+ * （4175472562 的条件要求内存有用户），B 会直接命中 A 的旧缓存。
+ */
+const { refreshTokenStub } = vi.hoisted(() => ({ refreshTokenStub: vi.fn() }));
+vi.mock('../auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../auth')>();
+  return { ...actual, authApi: { ...actual.authApi, refreshToken: refreshTokenStub } };
+});
+
+describe('refresh 失败确认 token 失效时清会话（Codex review 4175693767）', () => {
+  let backing: Record<string, string>;
+
+  beforeEach(() => {
+    backing = {};
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => (key in backing ? backing[key] : null),
+      setItem: (key: string, value: string) => {
+        backing[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete backing[key];
+      },
+    });
+    useAuthStore.setState({ user: null, token: null, isAuthenticated: false });
+    setQueryCacheClearer(null);
+    refreshTokenStub.mockReset();
+  });
+
+  it('刷新返回 HTTP 401（非信封体）：返回 false、清缓存、清存储与内存态', async () => {
+    const userA = makeUser('1001', 'alice');
+    useAuthStore.setState({ user: userA, token: 'token-of-1001', isAuthenticated: true });
+    backing = storageWith(userA);
+    refreshTokenStub.mockRejectedValue(new HttpResponseError('Unauthorized', 401));
+    const clearer = vi.fn();
+    setQueryCacheClearer(clearer);
+
+    const ok = await useAuthStore.getState().refreshAccessToken();
+
+    expect(ok).toBe(false);
+    expect(clearer).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(backing).toEqual({});
+  });
+
+  it('刷新遇到瞬时故障（普通网络错误）：保留会话、不清缓存', async () => {
+    const userA = makeUser('1001', 'alice');
+    useAuthStore.setState({ user: userA, token: 'token-of-1001', isAuthenticated: true });
+    backing = storageWith(userA);
+    refreshTokenStub.mockRejectedValue(new Error('boom'));
+    const clearer = vi.fn();
+    setQueryCacheClearer(clearer);
+
+    const ok = await useAuthStore.getState().refreshAccessToken();
+
+    expect(ok).toBe(false);
+    expect(clearer).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().user?.userId).toBe('1001');
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
   });
 });

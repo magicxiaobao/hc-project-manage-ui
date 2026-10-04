@@ -31,5 +31,8 @@ function Page() {
     return <EmptyHint>{`任务 ID 不合法（${taskId}）。`}</EmptyHint>;
   }
 
-  return <TaskDetailLive taskId={id} projectKey={projectKey} />;
+  // Codex review 4175693765：参数导航（任务 A → 任务 B）时路由复用组件，
+  // 草稿/replyTo/流转/改派/评论页码等 item-scoped 状态会残留而 mutation 已
+  // 指向 B——key 强制按 taskId 重新挂载，一次性全量重置，不逐个遗漏。
+  return <TaskDetailLive key={id} taskId={id} projectKey={projectKey} />;
 }
