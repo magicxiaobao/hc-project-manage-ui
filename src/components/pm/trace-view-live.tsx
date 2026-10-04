@@ -87,17 +87,20 @@ export function TraceViewLive({ projectId, projectKey }: { projectId: number; pr
       setSelectorPage(selectorTotalPages);
     }
   }, [requirementsQuery.isPending, selectorTotal, selectorTotalPages, selectorPage]);
-  const effectiveId = selectedId ?? requirements[0]?.id ?? null;
-  // Codex review 4175878109：换页或搜索后，旧的手动选择可能不在当前结果集里，
-  // 此时 effectiveId 仍会优先老 id，导致选择器无匹配选项而追溯/影响面板展示过期
-  // 需求。用户显式改页/改搜索条件即视为重新选集，丢弃旧选择。
+  // Codex review 4175878109 / 4175724986：换页/搜索/钳制/外部 refetch 后，
+  // 手动选择的 selectedId 可能不在当前结果集里。effectiveId 按当前结果集成员
+  // 校验：selectedId 仍在当前页列表里才沿用，否则回退到第一条；这一次性覆盖
+  // page/search/clamp/refetch 全部路径，且同条件重复搜索时不再无条件丢选择
+  // （pi NOTE-1）。
+  const effectiveId =
+    selectedId != null && requirements.some((r) => r.id === selectedId)
+      ? selectedId
+      : (requirements[0]?.id ?? null);
   const applySelectorSearch = () => {
-    setSelectedId(null);
     setSelectorTitle(selectorTitleInput);
     setSelectorPage(1);
   };
   const applySelectorPage = (next: number) => {
-    setSelectedId(null);
     setSelectorPage(next);
   };
   const selectorProps = {
