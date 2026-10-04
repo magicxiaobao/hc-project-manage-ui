@@ -82,16 +82,19 @@ function LiveCreateProject() {
   // 但本组件的 useState 初始化器只在挂载时读了一次 A 的 userId，表单会残留 A 的
   // 经理 ID 并被 B 静默建出项目。跟踪初始化时的账号：账号变化且用户未手动改过
   // 该字段时，跟随新账号重置默认值；用户已手动编辑则保留其输入。
-  const initUserIdRef = useRef(
+  // dirty-check 要求基线更新必须触发重渲染（P2 finding）：若用 ref 持有基线，
+  // effect 里更新 ref 不会重渲染，dirty 会停留在旧基线上的过期值直到下一次
+  // 无关渲染——改用 state 持有基线。
+  const [initManagerId, setInitManagerId] = useState(
     user && isCanonicalUserId(user.userId) ? user.userId : "",
   );
   const defaultManagerId = user && isCanonicalUserId(user.userId) ? user.userId : "";
   useEffect(() => {
-    if (defaultManagerId !== initUserIdRef.current) {
-      if (managerIdText === initUserIdRef.current) setManagerIdText(defaultManagerId);
-      initUserIdRef.current = defaultManagerId;
+    if (defaultManagerId !== initManagerId) {
+      if (managerIdText === initManagerId) setManagerIdText(defaultManagerId);
+      setInitManagerId(defaultManagerId);
     }
-  }, [defaultManagerId, managerIdText]);
+  }, [defaultManagerId, initManagerId, managerIdText]);
   const [description, setDescription] = useState("");
   const [keyExists, setKeyExists] = useState<boolean | null>(null);
   const [checkingKey, setCheckingKey] = useState(false);
@@ -116,9 +119,9 @@ function LiveCreateProject() {
   // 的状态。每次检查递增代际，只有最新一次请求的响应才允许写回。
   const keyCheckGeneration = useRef(0);
 
-  // dirty check：任一字段偏离初始值即视为脏。managerIdText 的初始值是挂载时
-  // 的默认经理 ID（initUserIdRef 跟踪"用户未手动改过时的默认值"，跨账号跟随
-  // 逻辑复用它），未改过即不脏。
+  // dirty check：任一字段偏离初始值即视为脏。managerIdText 的初始值是
+  // initManagerId（"用户未手动改过时的默认值"，跨账号跟随逻辑更新它），
+  // 未改过即不脏。
   const isDirty =
     projectName !== "" ||
     projectKey !== "" ||
@@ -126,7 +129,7 @@ function LiveCreateProject() {
     startIso !== "" ||
     endIso !== "" ||
     projectType !== PROJECT_CREATE_TYPES[0] ||
-    managerIdText !== initUserIdRef.current;
+    managerIdText !== initManagerId;
   const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(isDirty);
 
   const typeOptions =

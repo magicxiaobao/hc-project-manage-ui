@@ -147,7 +147,12 @@ export function DefectDetailLive({
     editForm != null &&
     editInitialRef.current != null &&
     JSON.stringify(editForm) !== JSON.stringify(editInitialRef.current);
-  const { guard: guardEditClose, dialog: editGuardDialog } = useUnsavedChangesGuard(isEditDirty);
+  // 编辑弹窗打开且脏时才布防：同时拦截浏览器后退/刷新/关标签页（P1 finding）
+  const {
+    guard: guardEditClose,
+    dialog: editGuardDialog,
+    blocker: editBlocker,
+  } = useUnsavedChangesGuard(editOpen && isEditDirty);
   const clearEditFieldError = (field: string) =>
     setEditFieldErrors((current) => {
       if (!current[field]) return current;
@@ -427,6 +432,7 @@ export function DefectDetailLive({
         size="lg"
         onClose={requestEditClose}
       >
+        {editBlocker}
         {editGuardDialog}
         {editForm != null ? (
           <div className="flex flex-col gap-4">

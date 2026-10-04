@@ -171,7 +171,8 @@ export function DefectCreateDialog({
     relatedTaskIds.length > 0 ||
     requirementDraft.trim() !== "" ||
     taskDraft.trim() !== "";
-  const { guard, dialog } = useUnsavedChangesGuard(isDirty);
+  // 弹窗打开且脏时才布防：同时拦截浏览器后退/刷新/关标签页（P1 finding）
+  const { guard, dialog, blocker } = useUnsavedChangesGuard(open && isDirty);
 
   const doClose = () => {
     setForm(emptyDefectCreateFormInput());
@@ -238,16 +239,27 @@ export function DefectCreateDialog({
     const errors = validateDefectCreateInput(input);
     if (errors.length > 0) {
       const nextFieldErrors: Record<string, string> = {};
+      let requirementOk = true;
+      let taskOk = true;
       for (const error of errors) {
         // 关联 ID 栏的错误挂到对应栏的 error 状态下展示
-        if (error.field === "affectedRequirementIdsText") setRequirementDraftError(error.message);
-        else if (error.field === "foundInTaskIdsText") setTaskDraftError(error.message);
-        else nextFieldErrors[error.field] = error.message;
+        if (error.field === "affectedRequirementIdsText") {
+          setRequirementDraftError(error.message);
+          requirementOk = false;
+        } else if (error.field === "foundInTaskIdsText") {
+          setTaskDraftError(error.message);
+          taskOk = false;
+        } else nextFieldErrors[error.field] = error.message;
       }
+      // P2 finding：本轮无错的关联栏要清除上一轮残留的错误，避免旧错残留
+      if (requirementOk) setRequirementDraftError("");
+      if (taskOk) setTaskDraftError("");
       setFieldErrors(nextFieldErrors);
       return;
     }
     setFieldErrors({});
+    setRequirementDraftError("");
+    setTaskDraftError("");
     setSubmitError("");
     createDefect.mutate(buildDefectCreatePayload(input, projectId), {
       onSuccess: (id) => {
@@ -263,6 +275,7 @@ export function DefectCreateDialog({
 
   return (
     <AppModal open={open} title="新建缺陷" onClose={close} size="lg">
+      {blocker}
       {dialog}
       <div className="flex flex-col gap-4">
         <div>
@@ -285,7 +298,7 @@ export function DefectCreateDialog({
               严重度<RequiredMark />
             </Label>
             <OptionSelect
-              label="严重度"
+              label="严重度（必填）"
               value={form.severity}
               options={SEVERITY_OPTIONS}
               onChange={(next) => set({ severity: next })}
@@ -297,7 +310,7 @@ export function DefectCreateDialog({
               优先级<RequiredMark />
             </Label>
             <OptionSelect
-              label="优先级"
+              label="优先级（必填）"
               value={form.priority}
               options={PRIORITY_OPTIONS}
               onChange={(next) => set({ priority: next })}
@@ -339,7 +352,11 @@ export function DefectCreateDialog({
         <RelatedIdField
           label="关联需求"
           value={relatedRequirementIds}
-          onChange={setRelatedRequirementIds}
+          onChange={(ids) => {
+            setRelatedRequirementIds(ids);
+            // P2 finding：删除 chip 即清除超限错误，避免数量回到合法后旧错残留
+            setRequirementDraftError("");
+          }}
           placeholder="按 ID 直接添加需求，逗号分隔，如 12,34"
           input={requirementDraft}
           onInputChange={setRequirementDraft}
@@ -349,7 +366,10 @@ export function DefectCreateDialog({
         <RelatedIdField
           label="关联任务"
           value={relatedTaskIds}
-          onChange={setRelatedTaskIds}
+          onChange={(ids) => {
+            setRelatedTaskIds(ids);
+            setTaskDraftError("");
+          }}
           placeholder="按 ID 直接添加任务，逗号分隔，如 56,78"
           input={taskDraft}
           onInputChange={setTaskDraft}

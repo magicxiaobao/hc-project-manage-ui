@@ -72,15 +72,11 @@ export function DiscardConfirmDialog({
  * 路由跳转拦截器（整页表单用）。
  * 用 ref 持有最新的 dirty，避免闭包过期；markClean 后放行一次（成功跳转场景）。
  */
-function RouteBlocker({
-  shouldBlockFn,
-  enabled,
-}: {
-  shouldBlockFn: () => boolean;
-  enabled: boolean;
-}) {
-  // withResolver: true 让 TS 推导出 BlockerResolver，blocked 时 proceed()/reset() 可用
-  const blocker = useBlocker({ shouldBlockFn, enableBeforeUnload: enabled, withResolver: true });
+function RouteBlocker({ shouldBlockFn }: { shouldBlockFn: () => boolean }) {
+  // withResolver: true 让 TS 推导出 BlockerResolver，blocked 时 proceed()/reset() 可用。
+  // enableBeforeUnload 复用 shouldBlockFn：markClean()/确认放弃后的 ref 级放行
+  // 同样作用于刷新/关标签页，避免"已确认离开却仍弹原生确认框"。
+  const blocker = useBlocker({ shouldBlockFn, enableBeforeUnload: shouldBlockFn, withResolver: true });
   if (blocker.status !== "blocked") return null;
   return (
     <DiscardConfirmDialog
@@ -93,12 +89,16 @@ function RouteBlocker({
 
 export function useUnsavedChangesGuard(dirty: boolean) {
   const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
+  // render 阶段不写 ref：effect 中同步，并发渲染下更稳（blocker 回调只在
+  // history 事件里读取，discrete 事件前 effect 已 flush，不影响拦截时机）
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
   const cleanRef = useRef(false);
   // 表单回到干净态时重新布防（成功跳转后组件一般会卸载，这里是兜底）
   useEffect(() => {
     if (!dirty) cleanRef.current = false;
-  }, [dirty ]);
+  }, [dirty]);
 
   const shouldBlock = useCallback(() => dirtyRef.current && !cleanRef.current, []);
 
@@ -141,7 +141,7 @@ export function useUnsavedChangesGuard(dirty: boolean) {
     />
   );
 
-  const blocker = <RouteBlocker shouldBlockFn={shouldBlock} enabled={dirty} />;
+  const blocker = <RouteBlocker shouldBlockFn={shouldBlock} />;
 
   return { guard, dialog, blocker, markClean };
 }

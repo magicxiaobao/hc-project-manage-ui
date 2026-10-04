@@ -331,11 +331,15 @@ export function TaskCreateLive({
             <FieldError message={fieldError("taskType")} />
           </div>
           <div>
+            {/*
+              OptionSelect 的 label 只接受 string 并用作 aria-label；可见必填星号
+              包在外层 Label 里。读屏器聚焦时靠 aria-label 播报"（必填）"（P2 a11y finding）。
+            */}
             <Label>
               优先级<RequiredMark />
             </Label>
             <OptionSelect
-              label="优先级"
+              label="优先级（必填）"
               value={form.priority}
               options={PRIORITY_OPTIONS}
               onChange={(value) => set({ priority: value })}
