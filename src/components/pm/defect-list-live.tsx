@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
+import { clampPageToTotal } from "@/lib/pagination";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, SeverityChip, StatusChip } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
 import { priorityLabel } from "@/lib/pm/domain";
@@ -80,10 +81,15 @@ export function DefectListLive({ projectId }: { projectId: number }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // 数据返回后若当前页已越界（他人增删导致 total 缩水），自动回退到最后一页重新查询，
-  // 避免出现"第 2 / 1 页"且空列表的误导状态
+  // 避免出现"第 2 / 1 页"且空列表的误导状态。
+  // 注意：只在当前页请求完成后钳制——isSuccess 为 true 但 isFetching 仍为 true 时，
+  // 返回的是失效缓存（旧 total），此时钳制会把用户错误拉回上一页（Codex round-2 复现）。
   useEffect(() => {
-    if (listQuery.isSuccess && page > totalPages) setPage(totalPages);
-  }, [listQuery.isSuccess, page, totalPages]);
+    if (listQuery.isSuccess && !listQuery.isFetching) {
+      const clamped = clampPageToTotal(page, total, PAGE_SIZE);
+      if (clamped !== null) setPage(clamped);
+    }
+  }, [listQuery.isSuccess, listQuery.isFetching, page, total, totalPages]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">

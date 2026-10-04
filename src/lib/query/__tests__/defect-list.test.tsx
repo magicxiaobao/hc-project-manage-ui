@@ -31,6 +31,7 @@ import {
   parseIdListText,
   validateDefectCreateInput,
 } from '../../defect-create';
+import { clampPageToTotal } from '../../pagination';
 
 function defect(overrides: Partial<DefectResponse>): DefectResponse {
   return {
@@ -267,6 +268,14 @@ describe('defect-create 表单纯函数', () => {
     };
     const payload = buildDefectCreatePayload(input, 7);
     expect(payload.affectedRequirementIds).toEqual([12, 34]);
+  });
+
+  it('clampPageToTotal：越界回退到最后一页，范围内/空数据不动作', () => {
+    expect(clampPageToTotal(2, 20, 20)).toBe(1);
+    expect(clampPageToTotal(3, 21, 20)).toBe(2);
+    expect(clampPageToTotal(1, 20, 20)).toBeNull();
+    expect(clampPageToTotal(2, 21, 20)).toBeNull();
+    expect(clampPageToTotal(2, 0, 20)).toBe(1);
   });
 });
 
