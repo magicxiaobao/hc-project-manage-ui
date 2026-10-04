@@ -180,13 +180,22 @@ export interface DefectBoardColumn {
   count: number;
 }
 
-/** 缺陷看板数据（忠实于后端 DefectBoardResponse） */
+/**
+ * 缺陷看板数据（忠实于后端 DefectBoardResponse）。
+ * defectsByStatus 仅含出现过缺陷的状态键（后端 Collectors.groupingBy，空状态缺失，
+ * 空项目返回 {}）；十态完整性只由 columns 保证。消费端必须按 Partial 处理（?? []）。
+ */
 export interface DefectBoardResponse {
-  defectsByStatus: Record<DefectStatus, DefectResponse[]>;
+  defectsByStatus: Partial<Record<DefectStatus, DefectResponse[]>>;
   columns: DefectBoardColumn[];
 }
 
-/** 缺陷统计（忠实于后端 DefectStatisticsResponse） */
+/**
+ * 缺陷统计（忠实于后端 DefectStatisticsResponse）。
+ * 注意三种分布的 key 口径不统一：severityStats 用中文标签（severity.getName()，
+ * 如"主要"，null 归"未知"）；priorityStats 用英文 identity（HIGH/MEDIUM/LOW，
+ * 三档恒存在）；typeStats 用原始 defectType 字符串（null 归"未知"）。
+ */
 export interface DefectStatisticsResponse {
   totalDefects: number;
   openDefects: number;

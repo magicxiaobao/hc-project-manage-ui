@@ -1429,16 +1429,17 @@ describe('缺陷契约（P2）', () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: { list: [], total: 0, pageNumber: 1, pageSize: 100 } } },
     ]);
-    await defectApi.getDefectList({ bean: { projectId: 7 } });
+    await defectApi.getDefectList();
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/defect/v1/findByPage');
-    expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 100, bean: { projectId: 7 } });
+    expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 100, bean: {} });
   });
 
   it('GET /defect/v1/statistics，projectId 拼查询参数；缺省时不带参数', async () => {
     const fetchMock = mockFetchSequence([
-      { body: { code: 1, msg: 'ok', result: { totalDefects: 5, openDefects: 3, severityStats: { MAJOR: 2 } } } },
+      // severityStats 的 key 是中文标签（severity.getName()），与英文 identity 不同
+      { body: { code: 1, msg: 'ok', result: { totalDefects: 5, openDefects: 3, severityStats: { 主要: 2 } } } },
       { body: { code: 1, msg: 'ok', result: { totalDefects: 5, openDefects: 3 } } },
     ]);
     const stats = await defectApi.getDefectStatistics(7);
@@ -1446,6 +1447,7 @@ describe('缺陷契约（P2）', () => {
 
     expect(stats.totalDefects).toBe(5);
     expect(stats.openDefects).toBe(3);
+    expect(stats.severityStats['主要']).toBe(2);
     const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url0).toBe('/api/defect/v1/statistics?projectId=7');
     expect(init0.method).toBe('GET');
@@ -1454,6 +1456,38 @@ describe('缺陷契约（P2）', () => {
   });
 
   it('GET /defect/v1/board，返回分组缺陷与看板列', async () => {
+    // 后端列配置：十列恒存在，id 为 `status-${status}`；defectsByStatus 仅含出现过的状态键
+    const statuses = [
+      'NEW',
+      'ASSIGNED',
+      'IN_PROGRESS',
+      'PENDING_VERIFICATION',
+      'RESOLVED',
+      'CLOSED',
+      'REOPEN',
+      'REJECTED',
+      'VERIFIED',
+      'TESTING',
+    ] as const;
+    const labels: Record<string, string> = {
+      NEW: '新建',
+      ASSIGNED: '已分配',
+      IN_PROGRESS: '处理中',
+      PENDING_VERIFICATION: '待验证',
+      RESOLVED: '已解决',
+      CLOSED: '已关闭',
+      REOPEN: '重新打开',
+      REJECTED: '已拒绝',
+      VERIFIED: '已验证',
+      TESTING: '测试中',
+    };
+    const columns = statuses.map((s) => ({
+      id: `status-${s}`,
+      name: labels[s],
+      status: s,
+      color: '#999',
+      count: s === 'NEW' ? 1 : 0,
+    }));
     const fetchMock = mockFetchSequence([
       {
         body: {
@@ -1461,18 +1495,32 @@ describe('缺陷契约（P2）', () => {
           msg: 'ok',
           result: {
             defectsByStatus: { NEW: [{ id: 301, title: '登录按钮无响应' }] },
-            columns: [{ id: 'NEW', name: '新建', status: 'NEW', color: '#999', count: 1 }],
+            columns,
           },
+        },
+      },
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { defectsByStatus: {}, columns },
         },
       },
     ]);
     const board = await defectApi.getDefectBoardData(7);
+    await defectApi.getDefectBoardData();
 
-    expect(board.defectsByStatus.NEW[0].id).toBe(301);
-    expect(board.columns[0].name).toBe('新建');
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/api/defect/v1/board?projectId=7');
-    expect(init.method).toBe('GET');
+    // 消费端按 Partial 处理：存在的键用 ?? []，缺席的键为 undefined
+    expect((board.defectsByStatus.NEW ?? [])[0].id).toBe(301);
+    expect(board.defectsByStatus.CLOSED).toBeUndefined();
+    expect(board.columns).toHaveLength(10);
+    expect(board.columns[0]).toEqual({ id: 'status-NEW', name: '新建', status: 'NEW', color: '#999', count: 1 });
+    expect(board.columns.find((c) => c.status === 'CLOSED')?.count).toBe(0);
+    const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url0).toBe('/api/defect/v1/board?projectId=7');
+    expect(init0.method).toBe('GET');
+    const [url1] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url1).toBe('/api/defect/v1/board');
   });
 
   it('GET /defect/v1/statusOptions，返回十态元数据（value=枚举名）', async () => {
