@@ -12,7 +12,7 @@
  * 未登录走演示版本管理（ReleasesView）时不使用本组件。
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Button, Input, Spinner, TextField } from "@heroui/react";
 import { shouldClampPage } from "@/lib/pagination";
 import { EmptyHint, OptionSelect, PageHeading, VersionStatusChip } from "@/components/biz";
@@ -38,6 +38,7 @@ const STATUS_FILTER_OPTIONS = VERSION_STATUSES.map((status) => ({
 }));
 
 export function VersionListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
+  const navigate = useNavigate();
   const [nameInput, setNameInput] = useState("");
   const [appliedName, setAppliedName] = useState("");
   const [numberInput, setNumberInput] = useState("");
@@ -131,6 +132,17 @@ export function VersionListLive({ projectId, projectKey }: { projectId: number; 
         </Button>
         <Button variant="ghost" onPress={resetFilters}>
           重置
+        </Button>
+        <Button
+          variant="ghost"
+          onPress={() =>
+            void navigate({
+              to: "/p/$projectKey/release-environments",
+              params: { projectKey },
+            })
+          }
+        >
+          发布环境
         </Button>
         <Button variant="secondary" onPress={() => setCreateOpen(true)}>
           新建版本

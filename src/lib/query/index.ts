@@ -98,3 +98,10 @@ export {
   buildTransitionVersionOptions,
 } from './hooks/useVersions';
 export type { VersionListParams } from './hooks/useVersions';
+export {
+  useCreateReleaseEnvironment,
+  useDisableReleaseEnvironment,
+  useReleaseEnvironmentList,
+  useUpdateReleaseEnvironment,
+} from './hooks/useReleaseEnvironments';
+export type { ReleaseEnvironmentListParams } from './hooks/useReleaseEnvironments';
