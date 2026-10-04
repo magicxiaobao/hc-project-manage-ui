@@ -11,6 +11,8 @@
  *   输入正下方、编辑时清除该字段错误
  * - 校验口径忠实老前端 VersionForm.vue：name 2～100 必填、versionNumber 1～50
  *   必填、description ≤2000、versionType 必填、plannedEndDate ≥ plannedStartDate
+ * - submitVeto：提交前复核（如弹窗打开后项目归属翻转），拒绝时走弹窗内持久
+ *   错误，草稿保留、弹窗不卸载（沿用 TestSuiteFormDialog 的 submitVeto 先例）
  */
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
@@ -38,12 +40,20 @@ export function VersionFormDialog({
   open,
   projectId,
   version,
+  submitVeto,
   onClose,
 }: {
   open: boolean;
   projectId: number;
   /** 编辑模式回填的版本；null = 新建模式 */
   version?: VersionResponse | null;
+  /**
+   * 提交前复核（codex r20 P2-1；沿用 TestSuiteFormDialog 的 submitVeto 先例）：
+   * 调用方在提交瞬间按实时状态检查（如弹窗打开后项目归属翻转）。返回非 null
+   * 字符串即拒绝提交，错误走弹窗内持久错误，草稿保留、弹窗不卸载，关闭仍走
+   * dirty check。
+   */
+  submitVeto?: () => string | null;
   onClose: () => void;
 }) {
   const mode = version != null ? "edit" : "create";
@@ -109,6 +119,13 @@ export function VersionFormDialog({
       const nextFieldErrors: Record<string, string> = {};
       for (const error of errors) nextFieldErrors[error.field] = error.message;
       setFieldErrors(nextFieldErrors);
+      return;
+    }
+    // 提交前复核：归属翻转时拒绝提交（codex r20 P2-1）。拒绝后草稿保留、
+    // 弹窗不卸载，走弹窗内持久错误而非 toast（一闪而过）。
+    const veto = submitVeto?.();
+    if (veto) {
+      setSubmitError(veto);
       return;
     }
     setFieldErrors({});

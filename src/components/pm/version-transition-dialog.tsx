@@ -92,35 +92,35 @@ export function VersionTransitionDialog({
   };
 
   const submitTransition = () => {
-    if (effectiveEvent == null) {
-      setEventError("请选择流转事件。");
-      return;
-    }
     if (transitionMutation.isPending) return;
     // 弹窗打开后项目归属若变为未确认（如路由项目解析翻转），禁止提交
     if (!projectContextVerified) {
       setSubmitError("项目归属已变化，无法提交。请刷新页面后重试。");
       return;
     }
+    // 一次收集全部校验错误、统一置位，不首错即停（表单 UX 约定；codex r20 P2-4）。
+    // reasonRequired 与长度校验都独立于事件是否已选：effectiveEvent==null 时
+    // 长度错误也要挂出，不能因事件缺失而跳过。
+    const trimmedReason = reason.trim();
+    const nextEventError = effectiveEvent == null ? "请选择流转事件。" : null;
+    const nextReasonError =
+      reasonRequired && !trimmedReason
+        ? "请填写流转原因（后端要求必填）。"
+        : // 后端 VersionServiceImpl.normalizeTransitionReason 用 codePointCount(≤500)：
+          // 前端统一按 Unicode 码点计数，避免 251 个 emoji（.length=502）被误拒
+          Array.from(trimmedReason).length > REASON_MAX_LENGTH
+          ? `流转原因不能超过 ${REASON_MAX_LENGTH} 字符。`
+          : null;
+    setEventError(nextEventError);
+    setReasonError(nextReasonError);
+    if (effectiveEvent == null || nextReasonError != null) return;
+
     const payload: VersionTransitionPayload = {
       event: effectiveEvent,
       expectedStatus: fromStatus,
     };
-
-    const trimmedReason = reason.trim();
-    if (reasonRequired && !trimmedReason) {
-      setReasonError("请填写流转原因（后端要求必填）。");
-      return;
-    }
-    // 后端 VersionServiceImpl.normalizeTransitionReason 用 codePointCount(≤500)：
-    // 前端统一按 Unicode 码点计数，避免 251 个 emoji（.length=502）被误拒
-    if (Array.from(trimmedReason).length > REASON_MAX_LENGTH) {
-      setReasonError(`流转原因不能超过 ${REASON_MAX_LENGTH} 字符。`);
-      return;
-    }
     if (trimmedReason) payload.reason = trimmedReason;
 
-    setReasonError(null);
     setSubmitError(null);
     transitionMutation.mutate(
       { versionId, data: payload },
@@ -177,8 +177,22 @@ export function VersionTransitionDialog({
                   })),
                 ]}
                 onChange={(next) => {
-                  setPickedEvent(next ? (next as VersionEvent) : null);
+                  const nextEvent = next ? (next as VersionEvent) : null;
+                  setPickedEvent(nextEvent);
                   setEventError(null);
+                  // 事件切换时清除残留的"原因必填"错误（codex r20 P2-5）：
+                  // reason 为空（strip 后）时的 reasonError 只可能是必填错误
+                  // （长度错误要求 reason 非空），新事件下原因若不再必填则
+                  // 清除（标签已变"（可选）"）；若仍必填则保留由用户纠正；
+                  // 长度错误与必填无关，始终保留。
+                  setReasonError((current) => {
+                    if (current == null) return current;
+                    if (reason.trim() !== "") return current;
+                    if (nextEvent != null && versionEventRequiresReason(nextEvent)) {
+                      return current;
+                    }
+                    return null;
+                  });
                 }}
               />
               <FieldError message={eventError} />

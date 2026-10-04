@@ -117,6 +117,12 @@ export function VersionDetailLive({
       open={editOpen}
       projectId={detail.projectId ?? 0}
       version={detail}
+      // 提交前复核归属：弹窗打开后路由项目翻转时拒绝提交（沿用
+      // TestSuiteFormDialog 的 submitVeto 先例；codex r20 P2-1），
+      // 拒绝后草稿保留、弹窗不卸载，关闭仍走 dirty check
+      submitVeto={() =>
+        projectContextVerified ? null : "项目归属已变化，无法提交。请刷新页面后重试。"
+      }
       // 编辑成功后 useUpdateVersion 的 onSuccess 已 toast 并失效版本域缓存，
       // 详情自动重取；取消关闭无需额外提示
       onClose={() => setEditOpen(false)}
@@ -131,6 +137,28 @@ export function VersionDetailLive({
         {transitionDialog}
         {editDialog}
       </div>
+    );
+  }
+
+  // 项目归属检查优先于"后台重取失败"分支（codex r20 P2-3）：错项目链接下
+  // 后台重取失败时也只展示"不属于当前项目"，不展示其它项目的缓存详情
+  // （文件头契约：跨项目链接不得在错误的项目上下文展示并允许操作）。
+  // 分支根统一用 Fragment（codex r20 P2-2）：成功/缓存错误分支的对话框实例
+  // 在同一 Fragment 父节点下，归属翻转时不再因根容器类型不同而 remount。
+  if (
+    typeof routeProjectId === "number" &&
+    detail != null &&
+    detail.projectId != null &&
+    detail.projectId !== routeProjectId
+  ) {
+    return (
+      <>
+        <div className="px-4 py-8">
+          <EmptyHint>{`版本 #${versionId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
+        </div>
+        {transitionDialog}
+        {editDialog}
+      </>
     );
   }
 
@@ -279,20 +307,6 @@ export function VersionDetailLive({
     return (
       <div className="px-4 py-8">
         <EmptyHint>{`没有找到这个版本（id=${versionId}）。`}</EmptyHint>
-        {transitionDialog}
-        {editDialog}
-      </div>
-    );
-  }
-
-  if (
-    typeof routeProjectId === "number" &&
-    detail.projectId != null &&
-    detail.projectId !== routeProjectId
-  ) {
-    return (
-      <div className="px-4 py-8">
-        <EmptyHint>{`版本 #${versionId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
         {transitionDialog}
         {editDialog}
       </div>
