@@ -67,6 +67,23 @@ describe("validateBoardColumnFormInput", () => {
     expect(bad.some((e) => e.field === "wipLimit")).toBe(true);
   });
 
+  it("r8 R7：WIP 上限超 Java Integer 上限（2147483647）被拒绝并挂字段错误", () => {
+    const over = validateBoardColumnFormInput({
+      ...emptyBoardColumnFormInput(),
+      columnName: "列",
+      wipLimit: "2147483648",
+    });
+    expect(over.some((e) => e.field === "wipLimit")).toBe(true);
+    // 边界值 2147483647 通过
+    expect(
+      validateBoardColumnFormInput({
+        ...emptyBoardColumnFormInput(),
+        columnName: "列",
+        wipLimit: "2147483647",
+      }),
+    ).toEqual([]);
+  });
+
   it("列名称超 100 字符被拒绝", () => {
     const errors = validateBoardColumnFormInput({
       ...emptyBoardColumnFormInput(),

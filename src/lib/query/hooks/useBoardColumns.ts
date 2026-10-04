@@ -53,6 +53,35 @@ export function invalidateBoardDomain(
 }
 
 /**
+ * r8 R5：失效除指定看板外的其它看板列+卡片缓存。
+ * 卡片流转改变任务状态，其它看板按任务状态聚合且有 30 秒新鲜期——A 看板
+ * 流转成功后直接打开此前缓存的 B 看板，不失效会显示旧状态。
+ * 调用方看板的 columnsKey 刚经过协调的权威刷新（authoritativeBoardRefresh），
+ * 保持新鲜不失效；其余看板域缓存全部失效。
+ */
+export function invalidateOtherBoardColumns(
+  queryClient: ReturnType<typeof useQueryClient>,
+  boardId: number,
+) {
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.board.all,
+    predicate: (query) => {
+      const key = query.queryKey;
+      // 当前看板的列+卡片查询：['hc','board','list',{columnsWithTasks: boardId}]
+      return !(
+        key.length === 4 &&
+        key[0] === "hc" &&
+        key[1] === "board" &&
+        key[2] === "list" &&
+        typeof key[3] === "object" &&
+        key[3] !== null &&
+        (key[3] as { columnsWithTasks?: unknown }).columnsWithTasks === boardId
+      );
+    },
+  });
+}
+
+/**
  * 新建看板列：走 POST /boardColumn/v1/createBoardColumn（后端返回新建列 id）。
  * 成功后失效看板域全部缓存。
  */

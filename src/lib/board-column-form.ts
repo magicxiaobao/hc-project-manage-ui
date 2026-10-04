@@ -8,7 +8,8 @@
  * - columnName 必填（无名列无法在看板上展示）；
  * - taskStatus 可选（空=不映射任务状态；后端 taskStatus 为 null 时该列 tasks 为空）；
  *   选中时必须在任务状态机枚举内（否则后端 ofValue 解析失败、该列永远无卡片）；
- * - wipLimit 可选，填则必须为非负整数（0 视为无限制，与后端列头展示 count/limit 对齐）；
+ * - wipLimit 可选，填则必须为 0..2147483647 的整数（0 视为无限制，
+ *   与后端列头展示 count/limit 对齐；上限 2147483647 对应后端 Integer）；
  * - color 可选，填则必须为 #RRGGBB 十六进制（列头色点渲染用）；
  * - 校验收集全部错误，不首错即停。
  */
@@ -21,6 +22,12 @@ import { TASK_STATUSES, type TaskStatus } from "./api/task-types";
 
 export const MAX_COLUMN_NAME_LENGTH = 100;
 export const MAX_COLUMN_DESCRIPTION_LENGTH = 500;
+/**
+ * WIP 上限输入上限：后端 BoardColumnCreateRequest.wipLimit /
+ * BoardColumnUpdateRequest.wipLimit 均为 java.lang.Integer，
+ * 超 2147483647 的值后端反序列化/落库失败且无字段级提示，前端先拦截。
+ */
+export const MAX_WIP_LIMIT = 2147483647;
 
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
@@ -93,8 +100,13 @@ export function validateBoardColumnFormInput(
   const wipLimit = input.wipLimit.trim();
   if (wipLimit) {
     const parsed = Number(wipLimit);
-    if (!Number.isInteger(parsed) || parsed < 0) {
-      errors.push({ field: "wipLimit", message: "WIP 上限必须是非负整数" });
+    // r8 R7：后端 wipLimit 是 Java Integer，超 2147483647 的值零字段错误下发、
+    // 后端失败无字段提示；前端限定 0..MAX_WIP_LIMIT，超限挂字段错误。
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_WIP_LIMIT) {
+      errors.push({
+        field: "wipLimit",
+        message: `WIP 上限必须是非负整数，且不能超过 ${MAX_WIP_LIMIT}`,
+      });
     }
   }
   const color = input.color.trim();

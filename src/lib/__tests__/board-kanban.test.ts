@@ -115,7 +115,7 @@ describe("parseBoardColumnsWithTasks", () => {
 describe("moveCardInColumns", () => {
   it("跨列移动：源列移除、目标列末尾追加，不改卡片 status", () => {
     const columns = [makeColumn(1, "TODO", [101, 102]), makeColumn(2, "IN_PROGRESS", [201])];
-    const next = moveCardInColumns(columns, 101, 2);
+    const next = moveCardInColumns(columns, 101, 1, 2);
     expect(next[0].tasks.map((task) => task.id)).toEqual([102]);
     expect(next[1].tasks.map((task) => task.id)).toEqual([201, 101]);
     // 乐观更新不写 status：status 由后端 updateStatus 成功后的 refetch 更新
@@ -126,13 +126,29 @@ describe("moveCardInColumns", () => {
 
   it("同列移动返回原数组（后端无列内排序语义，调用方不发请求）", () => {
     const columns = [makeColumn(1, "TODO", [101, 102])];
-    expect(moveCardInColumns(columns, 101, 1)).toBe(columns);
+    expect(moveCardInColumns(columns, 101, 1, 1)).toBe(columns);
   });
 
   it("卡片或目标列不存在时返回原数组（无动作）", () => {
     const columns = [makeColumn(1, "TODO", [101])];
-    expect(moveCardInColumns(columns, 999, 1)).toBe(columns);
-    expect(moveCardInColumns(columns, 101, 999)).toBe(columns);
+    expect(moveCardInColumns(columns, 999, 1, 1)).toBe(columns);
+    expect(moveCardInColumns(columns, 101, 1, 999)).toBe(columns);
+    // 源列 id 不存在：不按 cardId 猜源列，直接无动作
+    expect(moveCardInColumns(columns, 101, 999, 1)).toBe(columns);
+  });
+
+  it("r8 R6：同状态多列下同一卡片 id 重复——从实际源列移除，不动其它列", () => {
+    // 两列同映射 TODO，后端按状态聚合使任务 101 同时出现在两列
+    const columns = [
+      makeColumn(1, "TODO", [101]),
+      makeColumn(2, "TODO", [101]),
+      makeColumn(3, "IN_PROGRESS", []),
+    ];
+    const next = moveCardInColumns(columns, 101, 2, 3);
+    // 第二列的 101 被移除，第一列的 101 保留
+    expect(next[0].tasks.map((task) => task.id)).toEqual([101]);
+    expect(next[1].tasks.map((task) => task.id)).toEqual([]);
+    expect(next[2].tasks.map((task) => task.id)).toEqual([101]);
   });
 });
 

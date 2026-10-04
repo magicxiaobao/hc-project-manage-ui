@@ -130,24 +130,25 @@ export function parseBoardColumnsWithTasks(raw: unknown): KanbanBoardColumn[] {
  * - 卡片或目标列不存在：返回原数组（调用方无动作）；
  * - 不改变卡片 status（status 由后端 updateStatus 成功后的 refetch 更新，
  *   避免乐观值与后端状态机权威不一致）。
+ *
+ * r8 R6：fromColumnId 由调用方传入实际源列——后端按列 taskStatus 聚合卡片，
+ * 同一任务状态可被多列映射，同一张卡片会同时出现在多列中；按 cardId 遍历
+ * 取首个命中列会从错误的列移除（两列同映射 TODO 均含任务 101 时，从第二列
+ * 拖到第三列会把第一列的卡片删掉、第二列保留）。
  */
 export function moveCardInColumns(
   columns: KanbanBoardColumn[],
   cardId: number,
+  fromColumnId: number,
   toColumnId: number,
 ): KanbanBoardColumn[] {
-  let fromIndex = -1;
-  let moving: KanbanBoardCard | null = null;
-  for (let index = 0; index < columns.length; index++) {
-    const found = columns[index].tasks.find((task) => task.id === cardId);
-    if (found) {
-      fromIndex = index;
-      moving = found;
-      break;
-    }
-  }
+  const fromIndex = columns.findIndex((column) => column.id === fromColumnId);
   const toIndex = columns.findIndex((column) => column.id === toColumnId);
-  if (fromIndex < 0 || moving == null || toIndex < 0 || fromIndex === toIndex) {
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+    return columns;
+  }
+  const moving = columns[fromIndex].tasks.find((task) => task.id === cardId);
+  if (moving == null) {
     return columns;
   }
   const movingCard = moving;

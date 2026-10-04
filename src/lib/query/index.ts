@@ -130,6 +130,7 @@ export {
 export type { ReleaseListParams, ReleaseListAllParams } from './hooks/useReleases';
 export {
   invalidateBoardDomain,
+  invalidateOtherBoardColumns,
   normalizeBoardColumnsParams,
   useBoardColumnsWithTasks,
   useCreateBoardColumn,

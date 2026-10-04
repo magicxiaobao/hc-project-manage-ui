@@ -18,8 +18,9 @@
  * - WIP 上限只做展示（列头 count/limit，超限标红，不拦截）。
  *
  * 与老前端差异（有意简化，见 impl report）：
- * - TODO→IN_PROGRESS 不做执行人确认/代操作原因（老前端 collectTransitionContext），
- *   assigneeId 不下发，后端 start 接受 null；
+ * - TODO→IN_PROGRESS"开始"未分配任务时收集执行人（r8 P1-1；后端 START 守卫
+ *   要求 assigneeId 非空，null 会被 TaskGuardEvaluator 判 ASSIGNEE_INACTIVE），
+ *   代操作原因审计（actor≠assignee 必填原因）暂不做；
  * - 无离线缓存/撤销拖拽（老前端的拖拽快照+撤销仅本地体验增强）。
  */
 import { useMemo, useRef, useState } from "react";
@@ -62,9 +63,10 @@ import {
 } from "@/lib/board-kanban";
 import { editFormFromColumn } from "@/lib/board-column-form";
 import {
-  invalidateBoardDomain,
+  invalidateOtherBoardColumns,
   normalizeBoardColumnsParams,
   queryKeys,
+  taskNeedsAssigneeConfirm,
   toUserMessage,
   useBoardColumnsWithTasks,
   useBoardDetail,
@@ -112,6 +114,8 @@ interface PendingCardMove {
   fromColumnId: number;
   toColumnId: number;
   toStatus: TaskStatus;
+  /** r8 P1-1：目标为"开始"且任务未分配——弹窗需额外收集执行人 */
+  needsAssignee: boolean;
 }
 
 export function TaskBoardLive({
@@ -208,16 +212,24 @@ export function TaskBoardLive({
     const next = arrayMove(columns, fromIndex, toIndex);
     const nextIds = next.map((column) => column.id);
     void queryClient.cancelQueries({ queryKey: columnsKey });
+    // r8 R4：乐观更新前先取快照，失败时操作级恢复用
+    const previous = queryClient.getQueryData<KanbanBoardColumn[]>(columnsKey);
     queryClient.setQueryData(columnsKey, next);
-    enqueueColumnReorder(nextIds);
+    enqueueColumnReorder(nextIds, previous);
   }
 
   /**
    * r7 F7：列排序请求串行化。连续拖拽 A、B 时两次请求按发起顺序依次执行，
    * 最终生效的是最后一次意图；前一次失败不阻塞后续，且失败只回滚自己
    * （失效缓存从服务器重载），不吞掉后一次的意图。
+   *
+   * r8 R4：失败时先恢复操作前快照（操作级恢复），再等待权威重载并按实际
+   * 结果报告——不再重载完成前宣称"已从服务器重新加载"。
    */
-  function enqueueColumnReorder(nextIds: number[]) {
+  function enqueueColumnReorder(
+    nextIds: number[],
+    previous: KanbanBoardColumn[] | undefined,
+  ) {
     reorderQueued.current += 1;
     setReorderBusy(true);
     reorderChain.current = reorderChain.current
@@ -225,11 +237,18 @@ export function TaskBoardLive({
       .then(() => reorderColumns.mutateAsync(nextIds))
       .then(
         () => undefined,
-        (error: unknown) => {
+        async (error: unknown) => {
           // 后端 reorder 存在 Integer→Long 反序列化缺陷（见 P3 后端备忘），
-          // 失败是可达的：如实报告并从服务器重载，不承诺"已保存/已恢复原顺序"。
-          toast.error(`列排序失败：${toUserMessage(error)}，已从服务器重新加载顺序`);
-          invalidateBoardDomain(queryClient);
+          // 失败是可达的：先恢复本地快照，再等待权威重载确认，按结果如实报告。
+          if (previous !== undefined) {
+            queryClient.setQueryData(columnsKey, previous);
+          }
+          const reloaded = await authoritativeBoardRefresh();
+          toast.error(
+            reloaded
+              ? `列排序失败：${toUserMessage(error)}，已从服务器重新加载顺序`
+              : `列排序失败：${toUserMessage(error)}，顺序回滚刷新未完成，请手动刷新页面`,
+          );
         },
       )
       .finally(() => {
@@ -289,15 +308,59 @@ export function TaskBoardLive({
         fromColumnId: fromColumn.id,
         toColumnId: toColumn.id,
         toStatus,
+        needsAssignee: taskNeedsAssigneeConfirm(card.status, toStatus, card.assigneeId),
       });
       return;
     }
-    void executeCardMove(card, toColumn.id, toStatus, {});
+    // r8 P1-1："开始"未分配任务必须收集执行人（后端 START 守卫要求
+    // assigneeId 非空），即使不需要流转文本也要弹收集弹窗。
+    if (taskNeedsAssigneeConfirm(card.status, toStatus, card.assigneeId)) {
+      setPendingMove({
+        card,
+        fromColumnId: fromColumn.id,
+        toColumnId: toColumn.id,
+        toStatus,
+        needsAssignee: true,
+      });
+      return;
+    }
+    void executeCardMove(card, fromColumn.id, toColumn.id, toStatus, {});
+  }
+
+  /**
+   * r8 R2/R3：看板权威刷新协调器。
+   * - refetchQueries 必须传 throwOnError:true：默认吞错误会导致刷新失败
+   *   静默通过，catch 永不进入（r8 R2 死代码根因）；
+   * - 按"代次"确认有效响应：每次权威刷新取号，完成后核对 seq 未被后续
+   *   操作推进、且查询状态确为本次开始后成功落地的数据；被 cancelQueries
+   *   取消（并发卡片流转/列排序调了同查询键 cancelQueries）或被取代的刷新
+   *   一律不计作权威成功（r8 R3）。
+   *
+   * @returns 本次刷新是否确认为权威成功
+   */
+  const boardRefreshSeq = useRef(0);
+  async function authoritativeBoardRefresh(): Promise<boolean> {
+    const seq = ++boardRefreshSeq.current;
+    const startedAt = Date.now();
+    try {
+      // throwOnError 走第二个 options 参数（RefetchOptions），filters 里没有该字段
+      await queryClient.refetchQueries(
+        { queryKey: columnsKey, type: "active" },
+        { throwOnError: true },
+      );
+    } catch {
+      return false;
+    }
+    // 与 await 之间的代码同步执行，无交错：seq 推进只可能来自其它操作
+    // 的权威刷新调用，说明本次刷新已被取代，不单独计成功。
+    if (boardRefreshSeq.current !== seq) return false;
+    const state = queryClient.getQueryState(columnsKey);
+    return state?.status === "success" && (state.dataUpdatedAt ?? 0) >= startedAt;
   }
 
   /**
    * 执行卡片流转：乐观把卡片搬到目标列末尾 → POST task/v1/updateStatus；
-   * 失败时 toast + 失效看板域缓存（refetch 回滚乐观更新）。
+   * 成功后等待权威刷新落定再解锁；失败时操作级恢复并按实际重载结果报告。
    *
    * r7 F3：此前用 updateStatus.mutate 的局部回调做失效/提示/解锁，连续调用
    * 同一 mutation 时先前 observer 被移除会导致回调丢失（卡片卡在
@@ -308,13 +371,22 @@ export function TaskBoardLive({
    * 旧 card.status 会误拦截下一次流转。现等待权威刷新完成后再解锁；刷新失败
    * 时卡片保持锁定并提供重试，不以旧状态继续流转。
    *
+   * r8 R2：权威刷新走 authoritativeBoardRefresh（throwOnError:true），
+   * 刷新失败不再静默解锁。
+   * r8 R4：失败路径先恢复操作前快照（操作级恢复），再等待权威重载并按
+   * 实际结果报告——不再"只发失效意图却宣称已回滚"。
+   * r8 R5：成功后失效其它看板缓存（当前看板刚权威刷新，保持新鲜）。
+   * r8 R6：乐观移动传入实际 fromColumnId（同状态多列下卡片 id 重复）。
+   * r8 P1-1："开始"未分配任务时 context 携带收集到的 assigneeId。
+   *
    * @returns 流转是否成功（含权威刷新）；原因弹窗据此决定关闭或保留文本。
    */
   async function executeCardMove(
     card: KanbanBoardCard,
+    fromColumnId: number,
     toColumnId: number,
     toStatus: TaskStatus,
-    context: { reason?: string; deliverables?: string },
+    context: { reason?: string; deliverables?: string; assigneeId?: number },
   ): Promise<boolean> {
     setTransitionBusy(true);
     setMovingCardIds((current) => new Set(current).add(card.id));
@@ -327,19 +399,20 @@ export function TaskBoardLive({
     };
     // 刷新失败时保持锁定（由重试解锁），其余路径解锁
     let keepLocked = false;
+    // 乐观更新前的快照：失败时操作级恢复用（r8 R4）
+    let previous: KanbanBoardColumn[] | undefined;
     try {
       await queryClient.cancelQueries({ queryKey: columnsKey });
+      previous = queryClient.getQueryData<KanbanBoardColumn[]>(columnsKey);
       queryClient.setQueryData<KanbanBoardColumn[] | undefined>(
         columnsKey,
-        (old) => (old ? moveCardInColumns(old, card.id, toColumnId) : old),
+        (old) => (old ? moveCardInColumns(old, card.id, fromColumnId, toColumnId) : old),
       );
       await updateStatus.mutateAsync({ taskId: card.id, status: toStatus, ...context });
       toast.success(
         `任务「${card.title || `#${card.id}`}」已流转为${statusLabel("task", toStatus)}`,
       );
-      try {
-        await queryClient.refetchQueries({ queryKey: columnsKey });
-      } catch {
+      if (!(await authoritativeBoardRefresh())) {
         keepLocked = true;
         toast.error("流转已成功，但看板刷新失败", {
           action: {
@@ -349,11 +422,23 @@ export function TaskBoardLive({
         });
         return false;
       }
+      // r8 R5：其它看板按任务状态聚合且有 30 秒新鲜期，流转成功后使其缓存
+      // 失效；当前看板刚完成权威刷新，保持新鲜不失效。
+      invalidateOtherBoardColumns(queryClient, boardId);
       return true;
     } catch (error) {
-      toast.error(`流转失败：${toUserMessage(error)}，已回滚`);
-      // 回滚：乐观更新失效，重新拉取后端权威数据
-      invalidateBoardDomain(queryClient);
+      // r8 R4：先恢复操作前快照，再等待权威重载确认，按实际结果报告。
+      if (previous !== undefined) {
+        queryClient.setQueryData(columnsKey, previous);
+      }
+      const reloaded = await authoritativeBoardRefresh();
+      if (reloaded) {
+        toast.error(`流转失败：${toUserMessage(error)}，已回滚`);
+      } else {
+        toast.error(
+          `流转失败：${toUserMessage(error)}，回滚刷新未完成，请手动刷新页面`,
+        );
+      }
       return false;
     } finally {
       setTransitionBusy(false);
@@ -361,17 +446,16 @@ export function TaskBoardLive({
     }
   }
 
-  /** 看板权威刷新重试：成功后解锁卡片，仍失败则继续保持锁定并可再试 */
+  /** 看板权威刷新重试：权威确认成功后解锁卡片，否则继续保持锁定并可再试 */
   async function retryBoardRefresh(cardId: number): Promise<void> {
-    try {
-      await queryClient.refetchQueries({ queryKey: columnsKey });
+    if (await authoritativeBoardRefresh()) {
       setMovingCardIds((current) => {
         const next = new Set(current);
         next.delete(cardId);
         return next;
       });
-    } catch (error) {
-      toast.error(`刷新仍失败：${toUserMessage(error)}`, {
+    } else {
+      toast.error("看板刷新仍未成功", {
         action: { label: "重试", onClick: () => void retryBoardRefresh(cardId) },
       });
     }
@@ -391,7 +475,12 @@ export function TaskBoardLive({
     });
   };
 
-  if (boardDetail.isPending || columnsQuery.isPending) {
+  // r8 R1 + r7 F4：loading/错误分支一律受"尚未展示过页面"约束——任一查询
+  // 曾成功即保留已挂载的子树（列表/弹窗/脏表单）；后台重取重新 pending 不再
+  // 卸载它们（否则新建列弹窗的草稿会在网络重连自动重取时丢失）。
+  // 仅从未成功过才切换 loading/错误页；后台刷新失败只在顶部展示错误横幅 + 重试。
+  const everLoaded = everColumnsLoaded.current || lastGoodBoardName.current != null;
+  if ((boardDetail.isPending || columnsQuery.isPending) && !everLoaded) {
     return (
       <div className="flex items-center gap-2 px-4 py-8 text-sm text-default-500">
         <Spinner size="sm" />
@@ -400,9 +489,6 @@ export function TaskBoardLive({
     );
   }
 
-  // r7 F4：仅从未成功过才切换错误页；任一查询曾成功即保留已挂载的子树
-  // （列表/弹窗/脏表单），后台刷新失败只在顶部展示错误横幅 + 重试。
-  const everLoaded = everColumnsLoaded.current || lastGoodBoardName.current != null;
   const loadFailed = boardDetail.isError || columnsQuery.isError;
   const refetchFailed = boardDetail.isRefetchError || columnsQuery.isRefetchError;
   if ((loadFailed || refetchFailed) && !everLoaded) {
@@ -571,19 +657,31 @@ export function TaskBoardLive({
           from={pendingMove.card.status}
           to={pendingMove.toStatus}
           isPending={transitionBusy}
+          // r8 P1-1："开始"未分配任务时收集执行人；此时流转文本可选
+          showAssignee={pendingMove.needsAssignee}
+          textRequired={cardTransitionNeedsText(pendingMove.card.status, pendingMove.toStatus)}
           onCancel={() => {
             // r7 F9：请求在途时不允许关闭，弹窗与文本保留到成功/失败落定
             if (!transitionBusy) setPendingMove(null);
           }}
-          onConfirm={async (text) => {
+          onConfirm={async (text, assigneeId) => {
             const move = pendingMove;
             // r7 F9：请求期间保留弹窗与文本；成功才由弹窗 markClean 后关闭，
             // 失败时文本保留在弹窗内，可修改后重试。
+            // r8 P1-1：文本为空且非必填时不下发 reason/deliverables 空串；
+            // 收集到的执行人随 context 下发（后端 START 守卫要求非空）。
+            const context: {
+              reason?: string;
+              deliverables?: string;
+              assigneeId?: number;
+            } = text ? buildCardTransitionContext(move.toStatus, text) : {};
+            if (assigneeId != null) context.assigneeId = assigneeId;
             return executeCardMove(
               move.card,
+              move.fromColumnId,
               move.toColumnId,
               move.toStatus,
-              buildCardTransitionContext(move.toStatus, text),
+              context,
             );
           }}
         />
