@@ -1,3 +1,10 @@
+import { relationFixture, batchRelationFixture } from '../../__tests__/fixtures/trace-relations';
+import { relationPayload } from '../../trace-relations';
+import { ApiBusinessError } from '../client';
+import { toUserMessage } from '../../query/error';
+import type { LinkRelationPayload } from '../trace-types';
+import { defectApi } from '../defect';
+import { testCaseApi } from '../test-case';
 
 /**
  * 敏捷域契约（P3；来自后端 BoardController/BoardColumnController/SprintController/
@@ -467,37 +474,70 @@ describe('追溯契约（P3）', () => {
     expect(JSON.parse(calls[2][1].body as string)).toEqual(params);
   });
 
-  it('人工关系 link/unlink/batch-query；unlink 的 reason 必填', async () => {
+  it('人工关系 link/unlink/batch-query 完整信封与原始五元组', async () => {
+    const relation = relationFixture();
+    const inactive = { ...relation, status: 'INACTIVE', inactiveReason: '误关联' };
+    const batch = batchRelationFixture();
+    const emptyObject = { objectType: 'TASK' as const, objectId: 202 };
+    batch.items.push({ object: emptyObject, outgoing: [], incoming: [] });
     const fetchMock = mockFetchSequence([
-      { body: { code: 1, msg: 'ok', result: {} } },
-      { body: { code: 1, msg: 'ok', result: {} } },
-      { body: { code: 1, msg: 'ok', result: {} } },
+      { body: { code: 1, msg: 'ok', result: relation } },
+      { body: { code: 1, msg: 'ok', result: inactive } },
+      { body: { code: 1, msg: 'ok', result: batch } },
     ]);
-    const linkPayload = {
-      sourceType: 'TASK' as const,
-      sourceId: 201,
-      relationType: 'TASK_IMPLEMENTS_REQUIREMENT' as const,
-      targetType: 'REQUIREMENT' as const,
-      targetId: 101,
-    };
-    await traceabilityRelationApi.link(linkPayload);
-    await traceabilityRelationApi.unlink({ ...linkPayload, reason: '误关联' });
-    await traceabilityRelationApi.batchQuery({
-      objects: [{ objectType: 'TASK', objectId: 201 }],
-      direction: 'BOTH',
-      relationTypes: ['TASK_IMPLEMENTS_REQUIREMENT' as const],
-      activeOnly: true,
-    });
-
-    const calls = fetchMock.mock.calls as [string, RequestInit][];
-    expect(calls[0][0]).toBe('/api/traceability/v1/relations/link');
-    expect(calls[0][1].method).toBe('POST');
-    expect(JSON.parse(calls[0][1].body as string)).toEqual(linkPayload);
-    expect(calls[1][0]).toBe('/api/traceability/v1/relations/unlink');
-    const unlinkBody = JSON.parse(calls[1][1].body as string);
-    expect(unlinkBody.reason).toBe('误关联');
-    expect(calls[2][0]).toBe('/api/traceability/v1/relations/batch-query');
-    expect(JSON.parse(calls[2][1].body as string).activeOnly).toBe(true);
+    const linkPayload = relationPayload(relation);
+    memStore.set('token', 'fixture-only');
+    try {
+      expect(await traceabilityRelationApi.link(linkPayload)).toEqual(relation);
+      expect(await traceabilityRelationApi.unlink({ ...linkPayload, reason: '误关联' })).toEqual(inactive);
+      const params = { objects: [relation.sourceObject, relation.targetObject, emptyObject], direction: 'BOTH' as const, relationTypes: [], activeOnly: true };
+      expect(await traceabilityRelationApi.batchQuery(params)).toEqual(batch);
+      const calls = fetchMock.mock.calls as [string, RequestInit][];
+      ['link', 'unlink', 'batch-query'].forEach((path, index) => {
+        expect(calls[index][0]).toBe('/api/traceability/v1/relations/' + path);
+        expect(calls[index][1].method).toBe('POST');
+        expect(new Headers(calls[index][1].headers).get('token')).toBe(memStore.get('token'));
+      });
+      expect(JSON.parse(calls[0][1].body as string)).toEqual(linkPayload);
+      expect(JSON.parse(calls[1][1].body as string)).toEqual({ ...linkPayload, reason: '误关联' });
+      expect(JSON.parse(calls[2][1].body as string)).toEqual(params);
+    } finally { memStore.delete('token'); }
+  });
+  it.each([10015, 10018, 10019])('业务错误 %s 保留通用提交错误，无自动 relink', async (code) => {
+    const fetchMock = mockFetchSequence([{ body: { code, msg: '业务失败', result: null } }]);
+    const error = await traceabilityRelationApi.link(relationPayload(relationFixture())).catch(error => error);
+    expect(error).toBeInstanceOf(ApiBusinessError);
+    expect(error.code).toBe(code);
+    expect(toUserMessage(error)).toBe('业务失败');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+  // 缺字段的真实状态/信封待联调。这里只验证合成的非字段错误展示边界。
+  it.each(['sourceType', 'sourceId', 'relationType', 'targetType', 'targetId'])('缺 %s 的合成失败信封仍可显示', async (field) => {
+    const invalid = { ...relationPayload(relationFixture()) } as Record<string, unknown>;
+    delete invalid[field];
+    mockFetchSequence([{ body: { code: 0, msg: '合成的通用失败', result: null } }]);
+    const error = await traceabilityRelationApi.link(invalid as unknown as LinkRelationPayload).catch(error => error);
+    expect(error).toBeInstanceOf(ApiBusinessError);
+    expect(toUserMessage(error)).toBe('合成的通用失败');
+  });
+  it.each([
+    { api: defectApi, endpoint: 'defect' },
+    { api: testCaseApi, endpoint: 'testCase' },
+  ])('$endpoint 候选仅分页与按 ID 读取', async ({ api, endpoint }) => {
+    const row = { id: 3, title: '候选标题', projectId: 7 };
+    const page = { list: [row], total: 1, pageNumber: 2, pageSize: 20 };
+    const mock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: page } },
+      { body: { code: 1, msg: 'ok', result: row } },
+    ]);
+    const params = { page: 2, pageSize: 20, bean: { projectId: 7, title: '候选' } };
+    expect(await api.findByPage(params)).toEqual(page);
+    expect(await api.findById(3)).toEqual(row);
+    expect(mock.mock.calls[0][0]).toBe('/api/' + endpoint + '/v1/findByPage');
+    expect(mock.mock.calls[0][1].method).toBe('POST');
+    expect(JSON.parse(mock.mock.calls[0][1].body)).toEqual(params);
+    expect(mock.mock.calls[1][0]).toBe('/api/' + endpoint + '/v1/findById/3');
+    expect(mock.mock.calls[1][1].method).toBe('GET');
   });
 });
 

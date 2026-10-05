@@ -21,8 +21,8 @@
  * - LinkRelationRequest（record）：{ sourceType, sourceId, relationType,
  *   targetType, targetId }——项目、Actor、source/status 由服务端确定，前端不传
  * - UnlinkRelationRequest = link + reason（必填，页面需收集）
- * - BatchRelationQueryRequest（record）：{ objects: AlmObjectKey[], direction?,
- *   relationTypes?: Set<->数组, activeOnly }；objects 非空（后端校验）
+ * - BatchRelationQueryRequest（record）：{ objects: AlmObjectKey[], direction,
+ *   relationTypes: Set<->数组, activeOnly }；objects 非空（后端校验）
  * - ⚠️ POST requirement/v1/trace/{requirementId}/export 为 xlsx 导出，
  *   P3 明确排除，不建模
  */
@@ -142,11 +142,31 @@ export interface BatchRelationQueryPayload {
   activeOnly?: boolean;
 }
 
-/** 关系（后端 AlmRelationResponse；实现拼装字段，P3 只做只读渲染） */
-export type AlmRelation = Record<string, unknown>;
-
-/** 批量关系查询结果（后端 BatchRelationResponse；实现拼装） */
-export type BatchRelationResult = Record<string, unknown>;
+/** AlmRelationResponse。Actor 可空；Instant wire 格式待联调确认。
+ * TODO 联调后收紧两个时间字段；本区不消费时间，也不假设秒级时间戳。
+ */
+export interface AlmRelation {
+  id: number;
+  projectId: number;
+  sourceObject: AlmObjectKey;
+  relationType: AlmRelationType;
+  targetObject: AlmObjectKey;
+  status: 'ACTIVE' | 'INACTIVE';
+  relationSource: 'BUSINESS_ACTION' | 'MANUAL';
+  createdBy: number | null;
+  createdAt: unknown;
+  updatedBy: number | null;
+  updatedAt: unknown;
+  inactiveReason: string | null;
+}
+export interface BatchRelationItem {
+  object: AlmObjectKey;
+  outgoing: AlmRelation[];
+  incoming: AlmRelation[];
+}
+export interface BatchRelationResult {
+  items: BatchRelationItem[];
+}
 
 /** 需求追溯详情（GET requirement/v1/trace/{requirementId}，实现拼装） */
 export type RequirementTrace = Record<string, unknown>;

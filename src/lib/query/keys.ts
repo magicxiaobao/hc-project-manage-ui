@@ -1,3 +1,5 @@
+import { normalizeRelationQuery } from '../trace-relations';
+import type { AlmObjectKey, AlmRelationType } from '../api/trace-types';
 /**
  * query key 约定（P1 起所有数据获取统一使用）：
  * - 根命名空间 'hc'：避免与第三方库或其它 QueryClient 的缓存冲突
@@ -7,7 +9,7 @@
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
-function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone' | 'taskDependency') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone' | 'taskDependency' | 'traceRelation') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -47,6 +49,18 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
 }
 
 export const queryKeys = {
+  traceRelation: {
+    ...domainKeys('traceRelation'),
+    batch: (projectId: number | null, objects: readonly AlmObjectKey[], relationTypes: readonly AlmRelationType[] = []) =>
+      ['hc', 'traceRelation', 'batch', projectId, normalizeRelationQuery(objects, relationTypes)] as const,
+  },
+  traceRelation: {
+    ...domainKeys('traceRelation'),
+    batch: (projectId: number | null, objects: readonly AlmObjectKey[], relationTypes: readonly AlmRelationType[] = []) =>
+      ['hc', 'traceRelation', 'batch', projectId, normalizeRelationQuery(objects, relationTypes)] as const,
+  },
+  defect: domainKeys('defect'),
+  testCase: domainKeys('testCase'),
   taskDependency: {
     ...domainKeys("taskDependency"),
     statistics: (projectId: number | null) =>

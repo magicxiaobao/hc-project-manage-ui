@@ -198,3 +198,11 @@ export {
   useTaskDependencyWriting,
   useRefreshTaskDependencyDomains,
 } from "./hooks/useTaskDependencies";
+export {
+  useTraceRelations,
+  useLinkTraceRelation,
+  useUnlinkTraceRelation,
+  useRefreshTraceRelationDomains,
+  useTraceRelationCandidates,
+  useTraceObjectTitle,
+} from './hooks/useTraceRelations';

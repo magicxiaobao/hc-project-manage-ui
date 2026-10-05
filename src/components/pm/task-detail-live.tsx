@@ -26,6 +26,7 @@ import {
   PriorityMark,
   StatusChip,
 } from "@/components/biz";
+import { TraceRelationsSection } from "./trace-relations-section";
 import { TaskDependencySidebar } from "./task-dependency-sidebar";
 import { statusLabel } from "@/lib/pm/domain";
 import { useAuthStore } from "@/lib/api/auth-store";
@@ -331,7 +332,16 @@ export function TaskDetailLive({
         </section>
 
         {projectContextVerified ? (
-          <TaskDependencySidebar key={taskId} taskId={taskId} projectId={routeProjectId as number} projectKey={projectKey} />
+          <div className="flex min-w-0 flex-col gap-4">
+            <TaskDependencySidebar key={taskId} taskId={taskId} projectId={routeProjectId as number} projectKey={projectKey} />
+            <TraceRelationsSection
+              key={`trace:${taskId}:${routeProjectId}`}
+              object={{ objectType: "TASK", objectId: taskId }}
+              title={detail.title}
+              projectId={routeProjectId as number}
+              projectKey={projectKey}
+            />
+          </div>
         ) : null}
       </div>
 

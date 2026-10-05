@@ -9,6 +9,7 @@
  *   P3 明确排除，不建模
  */
 import { api } from './client';
+import { assertBatchRelations } from '../trace-relations';
 import { assertMatrixPage } from '../trace-matrix';
 import type { PageRequest, PageResult } from './types';
 import type {
@@ -56,9 +57,9 @@ export const traceabilityRelationApi = {
     api.post<AlmRelation>('/traceability/v1/relations/relink', data),
 
   /** 批量关系双向查询：POST，objects 非空 */
-  batchQuery: (data: BatchRelationQueryPayload) =>
-    api.post<BatchRelationResult>(
-      '/traceability/v1/relations/batch-query',
-      data,
-    ),
+  batchQuery: async (data: BatchRelationQueryPayload): Promise<BatchRelationResult> => {
+    const result = await api.post<BatchRelationResult>('/traceability/v1/relations/batch-query', data);
+    assertBatchRelations(result);
+    return result;
+  },
 };
