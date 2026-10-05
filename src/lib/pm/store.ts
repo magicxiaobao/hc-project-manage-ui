@@ -66,8 +66,10 @@ function backendReadOnly(): boolean {
  *
  * P2 迁移状态声明（p2-store-migration，2026-10-05）。
  *
- * 已迁移（登录态路由与 *-live.tsx 纯展示组件一律走 react-query hooks，
- * 登录态路径下对本 store 零引用——登录时 P2 页面不再经本 store 读写）：
+ * 已迁移（登录态路由与 *-live.tsx 纯展示组件一律走 react-query hooks；
+ * P2 专属路由/组件及专用弹窗对本 store 零引用——登录态下 P2 页面不再经本
+ * store 读写；但共享 AppShell（shell.tsx:28-38 订阅 usePm、:57 useGoToItem、
+ * :220 恒渲染 CreateIssueDialog）仍订阅本 store 的 navOpen 等 UI 状态）：
  * - 缺陷：defects/index、defects/board、defects/$defectId →
  *   DefectListLive / DefectBoardLive / DefectDetailLive（useDefectList 等）
  * - 测试：tests/index、tests/$testRunId、testcases/、testsuites/ →
@@ -75,20 +77,31 @@ function backendReadOnly(): boolean {
  * - 版本/发布：versions/、releases/、release-environments/ →
  *   VersionListLive / ReleaseListLive / ReleaseEnvironmentListLive 与详情 Live 组件
  *
- * 仍由本 store 承载（仅供未登录演示占位，未登录路径刻意保留）：
+ * 仍由本 store 承载（未登录演示路径刻意保留，仅限以下 index 路由的未登录分支）：
  * - defects/index 未登录 → BoardView（items/comments/people/boards/sprints/projects）
- * - tests/testcases/testsuites 相关路由未登录 → TestsView
+ * - tests/testcases/testsuites 的 index 路由未登录 → TestsView
  *   （projects/testCases/testRuns/testExecutions/suites/items/versions/people，
  *   含 startRun 写入动作）
- * - versions/releases 相关路由未登录 → ReleasesView
- *   （projects/versions/items/people，含 transitionVersion/updateVersion/
- *   createVersion 写入动作）
- * 注意：items/comments/versions 等切片同时被 P3 敏捷、P4 域使用，未登录演示
- * 与 P3/P4 仍需它们，P2 迁移不删减任何切片或动作。
+ * - versions/releases/release-environments 的 index 路由未登录 → ReleasesView
+ *   （projects/versions/items/people/environments/releases/testCases/testRuns/
+ *   testExecutions，含 transitionVersion/updateVersion/createVersion/createRelease/
+ *   setItemVersion/createEnvironment/submitRelease/decideRelease/publishRelease
+ *   写入动作）
+ * 注意：tests/$testRunId、testcases/$testCaseId、testsuites/$testSuiteId、
+ * versions/$versionId、releases/$releaseId、release-environments/index 等详情路由
+ * 未登录时渲染登录提示 EmptyHint 并非演示视图；items/$itemKey 是遗留详情路由
+ * （无登录门控，仍渲染 BoardView+IssuePage，board-view.tsx 订阅 store 的
+ * projects/sprints/items/comments/people/boards），不属于上述未登录演示占位
+ * 刻意保留范围。
+ * 注意：items/comments/versions/testRuns/testExecutions/histories 等切片同时被
+ * P3 敏捷、P4 域使用（含登录态：dashboard/stats/assignment 视图对应路由无 auth
+ * 门控，登录态仍读本地种子），未登录演示与 P3/P4 仍需它们，P2 迁移不删减任何
+ * 切片或动作。
  *
  * 未迁移（登录态仍展示本地种子数据，仍由本 store 承载）：
  * P3 看板/Sprint/Backlog/甘特/依赖、P4 仪表盘/工时/通知/工作台、P5 用户/设置：
- * workLogs/dependencies/boards/sprints/notices/feeds 等选择器与写入动作。
+ * workLogs/dependencies/boards/sprints/notices/feeds/testRuns/testExecutions/
+ * histories 等选择器与写入动作。
  *
  * backendReadOnly 门控评估（沿用 P1 结论，2026-10-05 复核）：门控保留。
  * P2 登录态路径已零引用本 store，门控对 P2 域实际上已无作用；但 items/comments/
