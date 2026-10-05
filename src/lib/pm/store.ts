@@ -69,29 +69,35 @@ function backendReadOnly(): boolean {
  * 已迁移（登录态路由与 *-live.tsx 纯展示组件一律走 react-query hooks；
  * P2 专属路由/组件及专用弹窗对本 store 零引用——登录态下 P2 页面不再经本
  * store 读写；但共享 AppShell（shell.tsx:28-38 订阅 usePm、:57 useGoToItem、
- * :220 恒渲染 CreateIssueDialog）仍订阅本 store 的 navOpen 等 UI 状态）：
+ * :220 恒渲染 CreateIssueDialog）仍订阅本 store 的 navOpen 等 UI 状态及
+ * people/projects/items 等共享切片）：
  * - 缺陷：defects/index、defects/board、defects/$defectId →
  *   DefectListLive / DefectBoardLive / DefectDetailLive（useDefectList 等）
  * - 测试：tests/index、tests/$testRunId、testcases/、testsuites/ →
  *   TestRunListLive / TestCaseListLive / TestSuiteListLive 与详情 Live 组件
- * - 版本/发布：versions/、releases/、release-environments/ →
- *   VersionListLive / ReleaseListLive / ReleaseEnvironmentListLive 与详情 Live 组件
+ * - 版本/发布：versions/、releases/ → VersionListLive / ReleaseListLive 与详情
+ *   Live 组件；release-environments/ → ReleaseEnvironmentListLive（仅 index 路由，
+ *   无详情路由）
  *
- * 仍由本 store 承载（未登录演示路径刻意保留，仅限以下 index 路由的未登录分支）：
+ * 仍由本 store 承载（未登录演示路径刻意保留，仅限 P2 域内以下 index 路由的
+ * 未登录分支；P1 的 p/$projectKey/index 未登录 BoardView 演示属 P1 演示范围，
+ * 不在此列）：
  * - defects/index 未登录 → BoardView（items/comments/people/boards/sprints/projects）
  * - tests/testcases/testsuites 的 index 路由未登录 → TestsView
  *   （projects/testCases/testRuns/testExecutions/suites/items/versions/people，
  *   含 startRun 写入动作）
- * - versions/releases/release-environments 的 index 路由未登录 → ReleasesView
+ * - versions/releases 的 index 路由未登录 → ReleasesView
  *   （projects/versions/items/people/environments/releases/testCases/testRuns/
  *   testExecutions，含 transitionVersion/updateVersion/createVersion/createRelease/
  *   setItemVersion/createEnvironment/submitRelease/decideRelease/publishRelease
- *   写入动作）
+ *   写入动作；注意 release-environments/index 未登录时渲染 EmptyHint 登录提示，
+ *   并非 ReleasesView 演示视图）
  * 注意：tests/$testRunId、testcases/$testCaseId、testsuites/$testSuiteId、
- * versions/$versionId、releases/$releaseId、release-environments/index 等详情路由
+ * versions/$versionId、releases/$releaseId 等详情路由，以及无演示视图的
+ * release-environments/index，
  * 未登录时渲染登录提示 EmptyHint 并非演示视图；items/$itemKey 是遗留详情路由
  * （无登录门控，仍渲染 BoardView+IssuePage，board-view.tsx 订阅 store 的
- * projects/sprints/items/comments/people/boards），不属于上述未登录演示占位
+ * projects/sprints/items/comments/people/boards/currentUserId），不属于上述未登录演示占位
  * 刻意保留范围。
  * 注意：items/comments/versions/testRuns/testExecutions/histories 等切片同时被
  * P3 敏捷、P4 域使用（含登录态：dashboard/stats/assignment 视图对应路由无 auth
