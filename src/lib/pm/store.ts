@@ -64,16 +64,41 @@ function backendReadOnly(): boolean {
  * - 需求列表/详情/追溯：useRequirementList / useRequirementDetail / useRequirementTrace 等
  * - 任务列表/详情/新建：useTaskList / useTaskDetail / useCreateTask 等
  *
- * 未迁移（仍由本 store 承载，供未登录演示与后续 phase 使用；P2 缺陷/测试/版本、
- * P3 看板/Sprint/Backlog/甘特/依赖、P4 仪表盘/工时/通知/工作台、P5 用户/设置）：
- * items/comments/histories/testCases/testRuns/testExecutions/workLogs/dependencies/
- * boards/sprints/versions/releases/suites/environments/notices/feeds 等选择器与写入动作。
+ * P2 迁移状态声明（p2-store-migration，2026-10-05）。
  *
- * backendReadOnly 门控保留：已登录时未迁移域仍展示本地种子数据，写入只会静默
- * 偏离后端，故继续拒绝；待 P5 完成后随演示数据一起退役。
+ * 已迁移（登录态路由与 *-live.tsx 纯展示组件一律走 react-query hooks，
+ * 登录态路径下对本 store 零引用——登录时 P2 页面不再经本 store 读写）：
+ * - 缺陷：defects/index、defects/board、defects/$defectId →
+ *   DefectListLive / DefectBoardLive / DefectDetailLive（useDefectList 等）
+ * - 测试：tests/index、tests/$testRunId、testcases/、testsuites/ →
+ *   TestRunListLive / TestCaseListLive / TestSuiteListLive 与详情 Live 组件
+ * - 版本/发布：versions/、releases/、release-environments/ →
+ *   VersionListLive / ReleaseListLive / ReleaseEnvironmentListLive 与详情 Live 组件
+ *
+ * 仍由本 store 承载（仅供未登录演示占位，未登录路径刻意保留）：
+ * - defects/index 未登录 → BoardView（items/comments/people/boards/sprints/projects）
+ * - tests/testcases/testsuites 相关路由未登录 → TestsView
+ *   （projects/testCases/testRuns/testExecutions/suites/items/versions/people，
+ *   含 startRun 写入动作）
+ * - versions/releases 相关路由未登录 → ReleasesView
+ *   （projects/versions/items/people，含 transitionVersion/updateVersion/
+ *   createVersion 写入动作）
+ * 注意：items/comments/versions 等切片同时被 P3 敏捷、P4 域使用，未登录演示
+ * 与 P3/P4 仍需它们，P2 迁移不删减任何切片或动作。
+ *
+ * 未迁移（登录态仍展示本地种子数据，仍由本 store 承载）：
+ * P3 看板/Sprint/Backlog/甘特/依赖、P4 仪表盘/工时/通知/工作台、P5 用户/设置：
+ * workLogs/dependencies/boards/sprints/notices/feeds 等选择器与写入动作。
+ *
+ * backendReadOnly 门控评估（沿用 P1 结论，2026-10-05 复核）：门控保留。
+ * P2 登录态路径已零引用本 store，门控对 P2 域实际上已无作用；但 items/comments/
+ * versions 等切片为 P2 演示占位与 P3/P4 未迁移域共用——登录态下 P3/P4 仍展示
+ * 本地种子数据，写入会静默偏离后端，故门控继续拒绝，待 P5 完成后随演示数据
+ * 一起退役。P2 演示占位在未登录时 backendReadOnly() 恒为 false，不受影响。
  *
  * @deprecated 标记仅打在 P1 已迁移的动作上（见 createProject），表示新代码
- * 不得再调用；未迁移域的动作保持可用。
+ * 不得再调用；P2 演示占位仍在用 testCases/testRuns/versions/releases 等切片
+ * 的动作（未登录演示合法调用），故不对 P2 动作加 @deprecated。
  */
 
 export interface PmData {
