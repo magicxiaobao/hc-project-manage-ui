@@ -297,11 +297,10 @@ describe('矩阵归一化与缓存隔离', () => {
     useAuthStore.setState({ isAuthenticated: true });
   });
   it.each([null, undefined, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])('无效项目ID %s disabled', (projectId) => {
-    let enabled: boolean | undefined;
     function Smoke() { useTraceMatrix({ projectId }); return null; }
     const client = createQueryClient();
     renderToString(<QueryClientProvider client={client}><Smoke /></QueryClientProvider>);
-    enabled = (client.getQueryCache().getAll()[0].options as { enabled?: boolean }).enabled as boolean;
+    const enabled = (client.getQueryCache().getAll()[0].options as { enabled?: boolean }).enabled as boolean;
     expect(enabled).toBe(false); client.clear();
   });
   it('未登录disabled；已登录的请求与key共用归一对象', async () => {
