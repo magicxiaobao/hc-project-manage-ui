@@ -63,6 +63,64 @@ it("详情先加载，编辑归属/工作流只读，后台刷新不覆盖草稿
   fireEvent.click(screen.getByText("取消"));
   expect(screen.getByRole("dialog", { name: "是否放弃修改？" })).toBeTruthy();
 });
+it("编辑二次打开等待本次详情刷新，并用刷新值初始化", async () => {
+  let resolve!: (record: ReturnType<typeof workLogRecord>) => void;
+  vi.mocked(workLogApi.getById)
+    .mockResolvedValueOnce(workLogRecord())
+    .mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+  await renderWorkLogForm("form", 11);
+  expect(((await screen.findByLabelText(/工作描述/)) as HTMLTextAreaElement).value).toBe("原描述");
+  fireEvent.click(screen.getByText("取消"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(screen.getByText("重新打开"));
+  await waitFor(() => expect(workLogApi.getById).toHaveBeenCalledTimes(2));
+  expect(screen.queryByLabelText(/工作描述/)).toBeNull();
+  expect(screen.getByText("正在加载详情…")).toBeTruthy();
+  await act(async () =>
+    resolve(
+      workLogRecord({
+        workDescription: "新描述",
+        workType: "设计",
+        workLocation: "远程",
+      }),
+    ),
+  );
+  expect(((await screen.findByLabelText(/工作描述/)) as HTMLTextAreaElement).value).toBe("新描述");
+  expect((screen.getByLabelText("工作类型（必填）") as HTMLSelectElement).value).toBe("设计");
+  expect((screen.getByLabelText("地点") as HTMLSelectElement).value).toBe("远程");
+  fireEvent.click(screen.getByText("取消"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+it.each(["计费", "加班"])("原值 null 的%s重选未设置不产生 dirty", async (label) => {
+  vi.mocked(workLogApi.getById).mockResolvedValue(
+    workLogRecord({ isBillable: null, isOvertime: null }),
+  );
+  await renderWorkLogForm("form", 11);
+  await screen.findByLabelText(/工作描述/);
+  const select = screen.getByLabelText(label) as HTMLSelectElement;
+  expect(select.value).toBe("");
+  fireEvent.change(select, { target: { value: "" } });
+  fireEvent.click(screen.getByText("取消"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+it("新建任务、工作类型和地点下拉通过 aria-labelledby 关联字段标签", async () => {
+  await renderWorkLogForm("form");
+  await screen.findByLabelText(/工作描述/);
+  for (const [name, label] of [
+    ["taskId", "关联任务（必填）"],
+    ["workType", "工作类型（必填）"],
+    ["workLocation", "地点"],
+  ]) {
+    const control = screen.getByRole("combobox", { name: label });
+    expect(control.getAttribute("aria-labelledby")).toBe(`worklog-${name}-label`);
+    expect(document.getElementById(`worklog-${name}-label`)?.hasAttribute("for")).toBe(false);
+  }
+});
 it("零返回不清草稿，不自动调用 start；合法登记只一次 create", async () => {
   vi.mocked(workLogApi.createWorkLog).mockResolvedValueOnce(0);
   await renderWorkLogForm("form");

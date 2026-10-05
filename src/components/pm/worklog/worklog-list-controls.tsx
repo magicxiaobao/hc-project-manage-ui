@@ -90,6 +90,7 @@ export function WorkLogProjectPicker({
   );
 }
 export function WorkLogTaskPicker({
+  "aria-labelledby": labelledBy,
   projectId,
   value,
   onChange,
@@ -98,6 +99,7 @@ export function WorkLogTaskPicker({
 }: {
   projectId: number | null;
   value: string;
+  "aria-labelledby"?: string;
   onChange: (id: string) => void;
   disabled?: boolean;
   required?: boolean;
@@ -126,6 +128,7 @@ export function WorkLogTaskPicker({
     <>
       <OptionSelect
         label={`关联任务${required ? "（必填）" : ""}`}
+        aria-labelledby={labelledBy}
         value={value}
         onChange={onChange}
         options={[{ id: "", label: required ? "请选择任务" : "不限制任务" }, ...options]}

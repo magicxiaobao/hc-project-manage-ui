@@ -200,19 +200,25 @@ export const GuardedWorkLogDialog = forwardRef<
 export function WorkLogField({
   name,
   label,
+  labelId,
   required,
   error,
   children,
 }: {
   name: string;
   label: string;
+  labelId?: string;
   required?: boolean;
   error?: string;
   children: ReactNode;
 }) {
   return (
     <div data-field={name}>
-      <label htmlFor={`worklog-${name}`} className="mb-1 block text-sm">
+      <label
+        id={labelId}
+        htmlFor={labelId ? undefined : `worklog-${name}`}
+        className="mb-1 block text-sm"
+      >
         {label}
         {required ? <RequiredMark /> : null}
       </label>
@@ -279,7 +285,13 @@ export function WorkLogBusinessFields({
 }) {
   return (
     <>
-      <WorkLogField name="taskId" label="关联任务" required error={errors.taskId}>
+      <WorkLogField
+        name="taskId"
+        label="关联任务"
+        labelId={editing ? undefined : "worklog-taskId-label"}
+        required
+        error={errors.taskId}
+      >
         {editing ? (
           <input
             id="worklog-taskId"
@@ -291,6 +303,7 @@ export function WorkLogBusinessFields({
           />
         ) : (
           <WorkLogTaskPicker
+            aria-labelledby="worklog-taskId-label"
             projectId={projectId}
             value={String(draft.taskId ?? "")}
             onChange={(id) => edit("taskId", id)}
@@ -307,8 +320,15 @@ export function WorkLogBusinessFields({
         edit={edit}
         errors={errors}
       />
-      <WorkLogField name="workType" label="工作类型" required error={errors.workType}>
+      <WorkLogField
+        name="workType"
+        label="工作类型"
+        labelId="worklog-workType-label"
+        required
+        error={errors.workType}
+      >
         <OptionSelect
+          aria-labelledby="worklog-workType-label"
           label="工作类型（必填）"
           value={String(draft.workType ?? "")}
           options={[...new Set([...workTypes, String(draft.workType ?? "")])]
@@ -359,8 +379,14 @@ export function WorkLogBusinessFields({
               errors={errors}
             />
           ))}
-          <WorkLogField name="workLocation" label="地点" error={errors.workLocation}>
+          <WorkLogField
+            name="workLocation"
+            label="地点"
+            labelId="worklog-workLocation-label"
+            error={errors.workLocation}
+          >
             <OptionSelect
+              aria-labelledby="worklog-workLocation-label"
               label="地点"
               value={String(draft.workLocation ?? "")}
               options={[...new Set(["", ...workLocations, String(draft.workLocation ?? "")])].map(
@@ -417,11 +443,11 @@ export const WorkLogFormDialog = forwardRef<
     if (!open) {
       setRecord(null);
       setTaskId(null);
-    } else if (id && detail.isFetchedAfterMount && detail.data && !record) {
+    } else if (id && !detail.isFetching && detail.isSuccess && detail.data?.id === id && !record) {
       setRecord(detail.data);
       setTaskId(detail.data.taskId);
     }
-  }, [open, id, detail.data, detail.isFetchedAfterMount, record]);
+  }, [open, id, detail.data, detail.isFetching, detail.isSuccess, record]);
   return (
     <GuardedWorkLogDialog
       ref={ref}

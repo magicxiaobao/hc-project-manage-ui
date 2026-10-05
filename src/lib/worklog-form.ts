@@ -13,6 +13,7 @@ export const workLocations = ["办公室", "远程", "客户现场"];
 export const validWorkLogId = (id: unknown): id is number =>
   typeof id === "number" && Number.isSafeInteger(id) && id > 0;
 export function parseWorkLogId(value: unknown): number | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
   if (typeof value === "string" && !/^[1-9]\d*$/.test(value.trim())) return null;
   const id = Number(value);
   return validWorkLogId(id) ? id : null;
@@ -83,7 +84,7 @@ export function workLogSnapshot(record: WorkLogResponse): WorkLogDraft {
   const draft: WorkLogDraft = { taskId: record.taskId == null ? "" : String(record.taskId) };
   for (const field of editableFields)
     draft[field] =
-      typeof record[field] === "boolean"
+      field === "isBillable" || field === "isOvertime"
         ? record[field]
         : record[field] == null
           ? ""

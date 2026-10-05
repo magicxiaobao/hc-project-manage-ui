@@ -3,6 +3,7 @@ import {
   createWorkLogPayload,
   localDateTime,
   newWorkLogDraft,
+  parseWorkLogId,
   updateWorkLogPayload,
   validateWorkLog,
   workLogDirty,
@@ -18,6 +19,22 @@ const good = (): WorkLogDraft => ({
   hoursSpent: "0.01",
 });
 describe("工时表单边界", () => {
+  it("ID 只接受字符串或数字，true 不得转换为项目 1", () => {
+    for (const value of [true, false, null, undefined, [1], { valueOf: () => 1 }])
+      expect(parseWorkLogId(value)).toBeNull();
+    expect(parseWorkLogId("1")).toBe(1);
+    expect(parseWorkLogId(1)).toBe(1);
+  });
+  it("null 布尔快照重选未设置保持 clean，更新省略空值", () => {
+    const record = { id: 12, isBillable: null, isOvertime: null } as WorkLogResponse;
+    const snapshot = workLogSnapshot(record);
+    const draft = { ...snapshot, isBillable: null, isOvertime: null };
+    expect(workLogDirty(draft, snapshot)).toBe(false);
+    expect(updateWorkLogPayload(draft, snapshot, record)).toEqual({ id: 12 });
+    expect(
+      updateWorkLogPayload({ ...draft, isBillable: true, isOvertime: false }, snapshot, record),
+    ).toEqual({ id: 12, isBillable: true, isOvertime: false });
+  });
   it("一次收集全部必填错误，改回快照 clean", () => {
     const d = good();
     expect(validateWorkLog({}, context).map((e) => e.field)).toEqual([

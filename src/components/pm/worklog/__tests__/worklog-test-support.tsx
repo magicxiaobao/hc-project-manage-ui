@@ -41,12 +41,14 @@ vi.mock("@heroui/react", () => ({
 vi.mock("@/components/biz/option-select", () => ({
   OptionSelect: ({
     label,
+    "aria-labelledby": labelledBy,
     value,
     options,
     onChange,
     isDisabled,
   }: {
     label: string;
+    "aria-labelledby"?: string;
     value: string;
     options: { id: string; label: string }[];
     onChange: (value: string) => void;
@@ -54,6 +56,7 @@ vi.mock("@/components/biz/option-select", () => ({
   }) => (
     <select
       aria-label={label}
+      aria-labelledby={labelledBy}
       value={value}
       disabled={isDisabled}
       onChange={(e) => onChange(e.target.value)}
