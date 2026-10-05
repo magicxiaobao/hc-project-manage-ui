@@ -1,30 +1,18 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { promisify } from "node:util";
-import {
-  APP_ENV_REL_PATH,
-  mergeAppEnv,
-  parseAppEnv,
-  projectRoot,
-  readAppEnv,
-} from "./with-app-env.mjs";
+import { mergeAppEnv, parseAppEnv, readAppEnv } from "./with-app-env.mjs";
+import { makeAppEnvWorkspace, runNode } from "./test-cli.mjs";
 
-const execFileAsync = promisify(execFile);
-const WRAPPER = join(projectRoot(), "scripts/with-app-env.mjs");
+const makeWorkspace = makeAppEnvWorkspace;
+const wrapperRoot = makeWorkspace('{"VITE_AUTH_ENABLED":"false"}');
+const WRAPPER = join(wrapperRoot, "scripts/with-app-env.mjs");
+// Do not let the test runner's auth flag override the fixture implicitly.
+const testEnv = { ...process.env };
+delete testEnv.VITE_AUTH_ENABLED;
 const PRINT_FLAG = "process.stdout.write(String(process.env.VITE_AUTH_ENABLED));";
-
-function makeWorkspace(appEnvJson) {
-  const root = mkdtempSync(join(tmpdir(), "app-env-"));
-  if (appEnvJson !== undefined) {
-    mkdirSync(join(root, ".grok"), { recursive: true });
-    writeFileSync(join(root, APP_ENV_REL_PATH), appEnvJson);
-  }
-  return root;
-}
 
 test("keeps VITE_-prefixed string entries", () => {
   assert.deepEqual(parseAppEnv('{"VITE_AUTH_ENABLED":"false"}'), {
@@ -59,8 +47,11 @@ test("an explicit process-env override wins over the file", () => {
   assert.equal(merged.PATH, "/usr/bin");
 });
 
-test("the template ships auth off", () => {
-  assert.deepEqual(readAppEnv(projectRoot()), { VITE_AUTH_ENABLED: "false" });
+test("a wrapper without app-env preserves the command's environment", () => {
+  const wrapper = join(makeWorkspace(), "scripts/with-app-env.mjs");
+  const run = runNode([wrapper, process.execPath, "-e", PRINT_FLAG], { env: testEnv });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, "undefined");
 });
 
 test("vite loadEnv resolves the wrapped value", () => {
@@ -73,56 +64,46 @@ test("vite loadEnv resolves the wrapped value", () => {
   assert.equal(merged.VITE_AUTH_ENABLED, "false");
 });
 
-test("the wrapped command runs with the app env applied", async () => {
-  const { stdout } = await execFileAsync(process.execPath, [
+test("the wrapped command runs with the app env applied", () => {
+  const run = runNode([WRAPPER, process.execPath, "-e", PRINT_FLAG], { env: testEnv });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, "false");
+});
+
+test("the wrapped command sees an explicit override, not the file value", () => {
+  const run = runNode([WRAPPER, process.execPath, "-e", PRINT_FLAG], {
+    env: { ...testEnv, VITE_AUTH_ENABLED: "true" },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, "true");
+});
+
+test("the wrapper propagates the command's exit code", () => {
+  const run = runNode([WRAPPER, process.execPath, "-e", "process.exit(3)"]);
+  assert.equal(run.status, 3);
+});
+
+test("a signal-killed command is never reported as success", () => {
+  // The wrapper's own SIGTERM handler must not swallow the re-raised signal:
+  // a cancelled build reporting exit 0 is a silently passing gate.
+  const run = runNode([
     WRAPPER,
     process.execPath,
     "-e",
-    PRINT_FLAG,
+    "process.kill(process.pid, 'SIGTERM');setTimeout(() => {}, 1000);",
   ]);
-  assert.equal(stdout, "false");
+  assert.ok(run.signal === "SIGTERM" || (run.status !== null && run.status !== 0));
 });
 
-test("the wrapped command sees an explicit override, not the file value", async () => {
-  const { stdout } = await execFileAsync(
-    process.execPath,
-    [WRAPPER, process.execPath, "-e", PRINT_FLAG],
-    { env: { ...process.env, VITE_AUTH_ENABLED: "true" } },
-  );
-  assert.equal(stdout, "true");
-});
-
-test("the wrapper propagates the command's exit code", async () => {
-  await assert.rejects(
-    execFileAsync(process.execPath, [WRAPPER, process.execPath, "-e", "process.exit(3)"]),
-    (err) => err.code === 3,
-  );
-});
-
-test("a signal-killed command is never reported as success", async () => {
-  // The wrapper's own SIGTERM handler must not swallow the re-raised signal:
-  // a cancelled build reporting exit 0 is a silently passing gate.
-  await assert.rejects(
-    execFileAsync(process.execPath, [
-      WRAPPER,
-      process.execPath,
-      "-e",
-      "process.kill(process.pid, 'SIGTERM');setTimeout(() => {}, 1000);",
-    ]),
-    (err) => err.signal === "SIGTERM" || err.code !== 0,
-  );
-});
-
-test("the CLI still runs when invoked through a symlinked path", async () => {
+test("the CLI still runs when invoked through a symlinked path", () => {
   // node realpaths import.meta.url but not process.argv[1], so a raw comparison
   // turns the wrapper into a no-op that exits 0 without starting anything.
   const link = join(mkdtempSync(join(tmpdir(), "app-env-link-")), "scripts");
-  symlinkSync(join(projectRoot(), "scripts"), link);
-  const { stdout } = await execFileAsync(process.execPath, [
-    join(link, "with-app-env.mjs"),
-    process.execPath,
-    "-e",
-    PRINT_FLAG,
-  ]);
-  assert.equal(stdout, "false");
+  symlinkSync(join(wrapperRoot, "scripts"), link);
+  const run = runNode(
+    [join(link, "with-app-env.mjs"), process.execPath, "-e", PRINT_FLAG],
+    { env: testEnv },
+  );
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, "false");
 });

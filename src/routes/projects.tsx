@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Button, Card, CardBody, Chip, Spinner } from "@heroui/react";
+import { Button, Card, CardContent, Chip, Spinner } from "@heroui/react";
 import { useEffect, useState } from "react";
 import { PageHeading } from "@/components/biz";
 import { AppShell } from "@/components/pm/shell";
@@ -81,9 +81,9 @@ function LiveProjectList() {
       <div className="grid gap-3 md:grid-cols-2">
       {projects.map((p) => (
         <Card key={p.id} className="w-full">
-          <CardBody className="flex flex-col items-start gap-2">
+          <CardContent className="flex flex-col items-start gap-2">
             <span className="flex min-w-0 flex-wrap items-center gap-2">
-              <Chip size="sm" color="primary" variant="flat">
+              <Chip size="sm" color="accent" variant="soft">
                 {p.projectKey}
               </Chip>
               <span className="type-section">{p.projectName}</span>
@@ -102,7 +102,7 @@ function LiveProjectList() {
             >
               进入项目
             </Button>
-          </CardBody>
+          </CardContent>
         </Card>
       ))}
       </div>
@@ -154,11 +154,11 @@ function ProjectsBody() {
         />
         <div className="flex items-center gap-2">
           {isAuthenticated ? (
-            <Button variant="flat" onPress={() => void logout()}>
+            <Button variant="secondary" onPress={() => void logout()}>
               登出
             </Button>
           ) : (
-            <Button color="primary" variant="flat" onPress={() => void navigate({ to: "/login" })}>
+            <Button variant="secondary" onPress={() => void navigate({ to: "/login" })}>
               登录后端
             </Button>
           )}

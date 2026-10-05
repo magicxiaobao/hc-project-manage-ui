@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { runNode } from "./test-cli.mjs";
 import {
   MAX_CARD_BYTES,
   OG_PENDING_MAX_AGE_MS,
@@ -230,7 +230,7 @@ test("parseBrandCheckArgs takes --game, --placeholder-ok and --root, and rejects
 });
 
 const runCheck = (root, extra = []) =>
-  spawnSync(process.execPath, [SCRIPT, "--root", root, ...extra], { encoding: "utf8" });
+  runNode([SCRIPT, "--root", root, ...extra]);
 
 test("cli: a game missing its card reports JSON and exits 1", () => {
   const root = makeWorkspace({ siteJson: UTILITY_SITE });
@@ -301,73 +301,30 @@ test("cli: a non-game with a compliant card passes", () => {
   assert.deepEqual(JSON.parse(run.stdout).messages, []);
 });
 
-// --- the prompts are the only enforcement here, so pin them to the code ---
-
-const readDoc = (rel) => readFileSync(join(TEMPLATE_ROOT, rel), "utf8");
-
-test("SKILL.md and AGENTS.md name the marker path and bound this script uses", () => {
-  // Prose wraps, so the minute count may straddle a line break.
-  const bound = new RegExp(`${OG_PENDING_MAX_AGE_MS / 60_000}\\s+minutes`);
-  for (const rel of [".grok/skills/og/SKILL.md", "AGENTS.md"]) {
-    const doc = readDoc(rel);
-    assert.ok(doc.includes(`/workspace/${OG_PENDING_REL_PATH}`), `${rel}: marker path`);
-    assert.ok(bound.test(doc), `${rel}: staleness bound`);
-  }
+// This repository does not ship the original template's agent prompts.
+// Pin the pending-marker and CLI contracts directly instead.
+test("the marker is active only inside the configured staleness bound", () => {
+  const root = makeWorkspace({ pendingAgeMs: 1000 });
+  const mtime = statSync(join(root, OG_PENDING_REL_PATH)).mtimeMs;
+  assert.equal(ogPendingActive(root, mtime + OG_PENDING_MAX_AGE_MS - 1), true);
+  assert.equal(ogPendingActive(root, mtime + OG_PENDING_MAX_AGE_MS + 1), false);
 });
 
-// The two places that own "never wait on the brand task". Scanning the whole
-// of AGENTS.md instead would make every unrelated `wait_tasks` mention a future
-// feature adds to it this test's business.
-const PROHIBITION_SECTIONS = [
-  {
-    rel: ".grok/skills/og/SKILL.md",
-    label: '§ "Brand-asset pass"',
-    from: "## Brand-asset pass:",
-    until: /\n## /,
-  },
-  {
-    rel: "AGENTS.md",
-    label: "execution loop step 6",
-    from: "6. **Brand-asset pass",
-    until: /\n7\. /,
-  },
-];
-
-function prohibitionSection({ rel, label, from, until }) {
-  const doc = readDoc(rel);
-  const start = doc.indexOf(from);
-  assert.notEqual(start, -1, `${rel}: ${label} moved — no "${from.trim()}"`);
-  const rest = doc.slice(start + from.length);
-  const end = rest.search(until);
-  // Markdown emphasis and prose wrapping both sit between the two words.
-  return (from + (end === -1 ? rest : rest.slice(0, end))).replace(/[`*]/g, "").replace(/\s+/g, " ");
-}
-
-test("the sections that own the brand-task prohibition never affirm a wait", () => {
-  // Pinned on the shape of the prohibition, not on a negation being somewhere
-  // nearby: "So: wait_tasks before the final verify, but never get_task_output"
-  // keeps a negation in the sentence while instructing exactly the wait.
-  const connectors = /(?:\s|[/,;]|\band\b|\bor\b|\bwait_tasks\b|\bget_task_output\b)+$/i;
-  const negation = /\b(?:no|never|not|don['’]t)$/i;
-  for (const section of PROHIBITION_SECTIONS) {
-    const where = `${section.rel} ${section.label}`;
-    const prose = prohibitionSection(section);
-    const mentions = [...prose.matchAll(/wait_tasks|get_task_output/g)];
-    assert.ok(mentions.length >= 2, `${where}: the prohibition itself went missing`);
-    for (const match of mentions) {
-      const before = prose.slice(0, match.index).replace(connectors, "");
-      const context = prose.slice(Math.max(0, match.index - 60), match.index + 20);
-      assert.ok(negation.test(before), `${where}: not a prohibition: …${context}…`);
-    }
-  }
+test("cli: --root checks the requested workspace even from another cwd", () => {
+  const root = makeWorkspace({ siteJson: GAME_SITE, cardFile: "og.jpg", narrowFile: "x-banner.jpg" });
+  const otherRoot = makeWorkspace({ siteJson: UTILITY_SITE });
+  const run = runNode([SCRIPT, "--game", "--root", root], { cwd: otherRoot });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  const result = JSON.parse(run.stdout);
+  assert.equal(result.workspaceRoot, root);
+  assert.deepEqual(result.messages, []);
 });
 
-test("SKILL.md tells the pass to self-check with the flag this CLI accepts", () => {
-  const skill = readDoc(".grok/skills/og/SKILL.md");
-  const invocations = skill.match(/node scripts\/brand-check\.mjs[^\n`]*/g) ?? [];
-  assert.ok(invocations.length > 0);
-  for (const line of invocations) {
-    const argv = line.replace("node scripts/brand-check.mjs", "").trim().split(/\s+/);
-    assert.equal(parseBrandCheckArgs(argv.filter(Boolean)).error, undefined, line);
-  }
+test("cli: a missing --root argument reports the accepted usage", () => {
+  const run = runNode([SCRIPT, "--root"]);
+  assert.equal(run.status, 1);
+  const result = JSON.parse(run.stderr);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /--root needs a directory/);
+  assert.match(result.error, /--game.*--placeholder-ok.*--root/);
 });

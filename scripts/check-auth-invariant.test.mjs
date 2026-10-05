@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { mkdtempSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { promisify } from "node:util";
 import {
   authEnabledFromEnvValue,
   authInvariantWarnings,
@@ -13,6 +11,7 @@ import {
   probeDevAuthEnabled,
 } from "./check-auth-invariant.mjs";
 import { projectRoot } from "./with-app-env.mjs";
+import { makeAppEnvWorkspace, runNode } from "./test-cli.mjs";
 
 /**
  * The JSON body `/__app-env` would serve. Do not start a real Vite server —
@@ -90,21 +89,23 @@ test("only a divergence warns the smoke verdict", () => {
   }
 });
 
-test("the build side resolves the template's shipped app-env", () => {
-  assert.equal(buildAuthEnabled(projectRoot(), {}), false);
-  assert.equal(buildAuthEnabled(projectRoot(), { VITE_AUTH_ENABLED: "true" }), true);
+test("the build side resolves fixture app-env and explicit overrides", () => {
+  const root = makeAppEnvWorkspace('{"VITE_AUTH_ENABLED":"false"}');
+  assert.equal(buildAuthEnabled(root, {}), false);
+  assert.equal(buildAuthEnabled(root, { VITE_AUTH_ENABLED: "true" }), true);
+  assert.equal(buildAuthEnabled(makeAppEnvWorkspace(), {}), true);
 });
 
-test("the CLI reports rather than silently passing when run via a symlink", async () => {
+test("the CLI reports rather than silently passing when run via a symlink", () => {
   // A check whose exit code is the whole signal must never no-op to 0 because
   // process.argv[1] came in through a symlinked path.
   const link = join(mkdtempSync(join(tmpdir(), "auth-invariant-link-")), "scripts");
   symlinkSync(join(projectRoot(), "scripts"), link);
-  const error = await promisify(execFile)(process.execPath, [
+  const run = runNode([
     join(link, "check-auth-invariant.mjs"),
     "--dev-url",
     "http://127.0.0.1:1",
-  ]).catch((err) => err);
-  assert.equal(error.code, 2);
-  assert.match(error.stderr, /could not read the dev server's resolved VITE_AUTH_ENABLED/);
+  ]);
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /could not read the dev server's resolved VITE_AUTH_ENABLED/);
 });

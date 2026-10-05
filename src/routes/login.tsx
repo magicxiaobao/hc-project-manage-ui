@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { Button, Card, CardBody, CardHeader, Input } from '@heroui/react';
+import { Button, Card, CardContent, CardHeader, Input, Label, Spinner, TextField } from '@heroui/react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiBusinessError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/api/auth-store';
@@ -59,29 +59,23 @@ function LoginPage() {
           <h1 className="text-xl font-semibold">登录</h1>
           <p className="text-sm text-default-500">连接 hc-project-manage 后端</p>
         </CardHeader>
-        <CardBody>
+        <CardContent>
           <form onSubmit={onSubmit} className="flex flex-col gap-4 px-2 pb-4">
-            <Input
-              label="用户名"
-              value={username}
-              onValueChange={setUsername}
-              isRequired
-              autoComplete="username"
-            />
-            <Input
-              label="密码"
-              type="password"
-              value={password}
-              onValueChange={setPassword}
-              isRequired
-              autoComplete="current-password"
-            />
+            <TextField value={username} onChange={setUsername} isRequired>
+              <Label>用户名</Label>
+              <Input autoComplete="username" />
+            </TextField>
+            <TextField value={password} onChange={setPassword} isRequired>
+              <Label>密码</Label>
+              <Input type="password" autoComplete="current-password" />
+            </TextField>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button color="primary" type="submit" isLoading={loading}>
+            <Button variant="primary" type="submit" isPending={loading}>
+              {loading ? <Spinner size="sm" /> : null}
               登录
             </Button>
           </form>
-        </CardBody>
+        </CardContent>
       </Card>
     </div>
   );
