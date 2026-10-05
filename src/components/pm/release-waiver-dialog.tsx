@@ -13,8 +13,10 @@
  *   必填字段 RequiredMark、校验全量收集、FieldError 挂在对应输入正下方、
  *   编辑时清除该字段错误；在途禁用全部可编辑控件
  * - 无可豁免门禁时（codex r25 P2-4）：弹窗内明示"暂无可豁免门禁"并禁用提交，
- *   gateType 不回退隐藏默认值；选项随门禁预览变化时清理已失效的 gateType
- *   及对应字段错误；提交前校验值在当前可选项内（失效挂 FieldError 拒绝提交）
+ *   gateType 不回退隐藏默认值；选项随门禁预览变化时清空已失效的 gateType
+ *   （绝不自动替换为剩余首项，codex r26 P2-2）并提示用户手动重选，程序化
+ *   清空同步 dirty 基线走非置脏路径（pi NOTE）；提交前校验值在当前可选项
+ *   内（失效挂 FieldError 拒绝提交）
  */
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button, Label, TextArea, TextField } from "@heroui/react";
@@ -63,10 +65,18 @@ export function ReleaseWaiverDialog({
   const [form, setForm] = useState<ReleaseWaiverInput>(emptyReleaseWaiverInput());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState("");
+  // 选项变化导致当前门禁失效时，要求用户手动重选（codex r26 P2-2）：
+  // 渲染此提示。setForm 清空 gateType 后该状态保持 true，直到用户重选。
+  const [gateReselectHint, setGateReselectHint] = useState(false);
 
   const initialFormRef = useRef<string | null>(null);
+  // 打开提交与选项同步同一次提交时跳过后者：open-effect 已按当前选项
+  // 选出有效默认值，此时闭包里的 form 还是上一次会话的旧值，不能触发
+  // 重选逻辑
+  const skipOptionsSyncRef = useRef(false);
   useLayoutEffect(() => {
     if (open) {
+      skipOptionsSyncRef.current = true;
       const options = buildGateOptions(excludedGateTypes, mode === "revoke" ? presetGateType : undefined);
       // 行级入口预选该行门禁（若仍可豁免）；否则默认首个可豁免项
       //（绝不默认 DIRECT_REQUIREMENT_SCOPE，见 emptyReleaseWaiverInput）。
@@ -83,6 +93,7 @@ export function ReleaseWaiverDialog({
       setForm(snapshot);
       setFieldErrors({});
       setSubmitError("");
+      setGateReselectHint(false);
     }
     // 只在 open 翻转时重置；调用方以 open=false→true 重新打开承载 mode/preset 变化
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,19 +107,29 @@ export function ReleaseWaiverDialog({
   const renderOptionIdsKey = renderOptions.map((option) => option.id).join(",");
 
   // 豁免选项随门禁实时预览更新可能被排除：form.gateType 若已不在当前
-  // 可选项内则清理并回退首项（同时清除对应字段错误），避免提交失效值
-  //（codex r25 P2-4：此前 gateType 只在 open 翻转时重置，选项变化不清理）。
+  // 可选项内则清空 gateType、要求用户手动重选（codex r26 P2-2：绝不自动
+  // 替换为剩余首项——自动切换会沿用旧原因提交到新门禁，且提交前资格校验
+  // 允许该组合通过；此前 gateType 只在 open 翻转时重置，选项变化不清理）。
+  // 程序化清空走非置脏路径：同步 dirty 基线到程序化状态（pi NOTE：基线
+  // 不同步时关闭会误弹"是否放弃修改"确认——非用户编辑不应置脏；用户已
+  // 输入的原因保留其 dirty 语义），并给出明确重选提示。
   useLayoutEffect(() => {
     if (!open) return;
-    setForm((current) => {
-      if (
-        current.gateType === "" ||
-        renderOptions.some((option) => option.id === current.gateType)
-      ) {
-        return current;
-      }
-      return { ...current, gateType: renderOptions[0]?.id ?? "" };
-    });
+    // 与 open 翻转同一次提交：open-effect 已按当前选项选出有效默认值，
+    // 跳过（此时闭包 form 为上一次会话旧值）
+    if (skipOptionsSyncRef.current) {
+      skipOptionsSyncRef.current = false;
+      return;
+    }
+    if (
+      form.gateType === "" ||
+      renderOptions.some((option) => option.id === form.gateType)
+    ) {
+      return;
+    }
+    setForm((current) => ({ ...current, gateType: "" }));
+    initialFormRef.current = JSON.stringify({ gateType: "", reason: "" });
+    setGateReselectHint(true);
     setFieldErrors((current) => {
       if (current.gateType === undefined) return current;
       const next = { ...current };
@@ -211,6 +232,13 @@ export function ReleaseWaiverDialog({
                 isDisabled={mutation.isPending}
               />
               <FieldError message={fieldErrors.gateType} />
+              {gateReselectHint && form.gateType === "" ? (
+                // 选项变化致原选门禁失效：已清空 gateType，要求手动重选
+                //（codex r26 P2-2），此处明确提示
+                <p className="type-caption mt-1 text-default-500">
+                  原选门禁已通过/不再可豁免，请重新选择门禁类型后再提交。
+                </p>
+              ) : null}
             </div>
           )}
 

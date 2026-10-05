@@ -332,11 +332,18 @@ export function ReleaseDraftCreateDialog({
 export function ReleaseDraftEditDialog({
   open,
   release,
+  submitVeto,
   onClose,
 }: {
   open: boolean;
   /** 正在编辑的发布（仅草稿态可编辑；调用方保证） */
   release: ReleaseResponse;
+  /**
+   * 提交前复核（仿 testsuite-form-dialog / version-detail-live r20-1 先例；
+   * pi r25 NOTE）：弹窗打开后路由项目归属翻转时拒绝提交。返回非空字符串
+   * 即否决，走弹窗内持久错误、草稿保留。
+   */
+  submitVeto?: () => string | null;
   onClose: () => void;
 }) {
   const updateMutation = useUpdateReleaseDraft();
@@ -373,6 +380,14 @@ export function ReleaseDraftEditDialog({
       return;
     }
     setFieldErrors({});
+    // 提交前复核：路由项目归属翻转时拒绝提交（仿 testsuite-form-dialog /
+    // version-detail-live r20-1 先例；pi r25 NOTE）。拒绝后草稿保留、弹窗
+    // 不卸载，走弹窗内持久错误而非 toast（一闪而过）。
+    const veto = submitVeto?.();
+    if (veto) {
+      setSubmitError(veto);
+      return;
+    }
     setSubmitError("");
     updateMutation.mutate(buildReleaseDraftUpdatePayload(release.id, form), {
       onSuccess: () => {

@@ -292,6 +292,12 @@ export function ReleaseDetailLive({
   const retryProjectContext = () => {
     void routeProjectQuery.refetch();
   };
+  // 详情失败页的重试同时重发详情与项目归属解析（codex r26 P2-1）：两者
+  // 同时失败、网络恢复后一次点击恢复全部，避免页面仍只读
+  const retryDetailAndProjectContext = () => {
+    void detailQuery.refetch();
+    void routeProjectQuery.refetch();
+  };
 
   // 已通过门禁（提交快照 + 实时预览）从豁免下拉排除（codex r24 P2-5；
   // DIRECT_REQUIREMENT_SCOPE 由弹窗恒排除）
@@ -324,6 +330,12 @@ export function ReleaseDetailLive({
       key={`edit-${releaseId}`}
       open={editOpen}
       release={detail.release}
+      // 提交前复核归属：弹窗打开后路由项目翻转时拒绝提交（沿用
+      // version-detail-live r20-1 的 submitVeto 先例；pi r25 NOTE），
+      // 拒绝后草稿保留、弹窗不卸载，关闭仍走 dirty check
+      submitVeto={() =>
+        projectContextVerified ? null : "项目归属已变化，无法提交。请刷新页面后重试。"
+      }
       onClose={() => setEditOpen(false)}
     />
   ) : null;
@@ -438,8 +450,10 @@ export function ReleaseDetailLive({
   // 不在错误项目上下文展示它项目详情（codex r25 P2-2 裁定；此前只读展示
   // 完整详情的口径与修复说明/版本先例不一致）。
   if (projectMismatch) {
+    // 单层容器：内层 px-4 py-8 为唯一内边距（仿 version-detail-live:152-158；
+    // pi r26 P2-1：此前外层 p-4 md:p-6 再套内层，多一层内边距）
     return (
-      <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+      <div>
         <div className="px-4 py-8">
           <EmptyHint>{`发布 #${releaseId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
         </div>
@@ -450,41 +464,57 @@ export function ReleaseDetailLive({
 
   // 各分支根统一为同一 <div> 容器且子节点顺序一致（横幅/消息 → 内容 → 弹窗），
   // 弹窗为 keyed Fragment 实例，分支切换时只做 keyed 移动不 remount
-  //（codex r25 P1-1）。
+  //（codex r25 P1-1）。成功分支不再自带外层 max-w-5xl p-4 md:p-6 容器：
+  // ReleaseDetailContent 根节点已是同款单容器（pi r26 P2-1），外层再加
+  // 会造成双层内边距；与 testcase-detail-live/defect-detail-live 单容器
+  // 口径一致。各消息分支各自用单容器包裹。
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+    <div>
       {detailQuery.isError && detailContent ? (
         // 后台重取失败但有缓存数据：顶部横幅提示，不卸载子树（弹窗草稿保留）
-        <div
-          role="alert"
-          className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
-        >
-          <p className="type-body text-danger">
-            发布详情刷新失败：{toUserMessage(detailQuery.error)}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2"
-            onPress={() => void detailQuery.refetch()}
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+          <div
+            role="alert"
+            className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
           >
-            重试
-          </Button>
+            <p className="type-body text-danger">
+              发布详情刷新失败：{toUserMessage(detailQuery.error)}
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onPress={retryDetailAndProjectContext}
+            >
+              重试
+            </Button>
+          </div>
         </div>
       ) : null}
       {detailQuery.isError && !detailContent ? (
-        <p className="type-body text-danger">
-          发布详情加载失败：{toUserMessage(detailQuery.error)}
-        </p>
-      ) : null}
-      {detailQuery.isError && !detailContent ? (
-        <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
-          重试
-        </Button>
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+          <p className="type-body text-danger">
+            发布详情加载失败：{toUserMessage(detailQuery.error)}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" onPress={retryDetailAndProjectContext}>
+              重试
+            </Button>
+            {routeProjectQuery.isError ? (
+              // detail==null 时归属解析失败的独立重试入口（pi NOTE 佐证）：
+              // 主"重试"已并行重发归属解析，此入口供单独重试归属解析
+              <Button variant="ghost" onPress={retryProjectContext}>
+                重试确认项目归属
+              </Button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
       {detailContent}
       {!detailQuery.isError && !detailContent ? (
-        <EmptyHint>未找到该发布。</EmptyHint>
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+          <EmptyHint>未找到该发布。</EmptyHint>
+        </div>
       ) : null}
       {dialogs}
     </div>
