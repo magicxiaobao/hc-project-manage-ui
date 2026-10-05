@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useBlocker } from "@tanstack/react-router";
+import { Link, useBlocker } from "@tanstack/react-router";
 import { Button } from "@heroui/react";
 import { AppModal } from "@/components/biz/app-modal";
 import { useAuthStore } from "@/lib/api/auth-store";
@@ -143,7 +143,10 @@ export function WorkLogListPage({ projectKey }: { projectKey?: string }) {
   if (!authenticated) return <p>请登录后查看工时管理。</p>;
   return (
     <main className="flex flex-col gap-4 p-6">
-      <h1 className="type-title">工时管理</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="type-title">工时管理</h1>
+        <Link to="/worklogs/analytics" className="text-accent underline">统计分析</Link>
+      </div>
       {projectKey ? (
         <div>
           <p>

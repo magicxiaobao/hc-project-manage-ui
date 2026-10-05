@@ -29,6 +29,13 @@ const user = {
   extraInfo: {},
   authorities: [],
 };
+const analyticsParams = { startDate: "2026-10-01", endDate: "2026-10-31", projectIds: [7] };
+const analyticsKeys = [
+  queryKeys.workLog.analytics(analyticsParams),
+  ...(["projects", "users", "tasks"] as const).map((d) =>
+    queryKeys.workLog.statisticsGroup(d, analyticsParams),
+  ),
+];
 function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -108,15 +115,18 @@ it.each(["createWorkLog", "startWork"] as const)(
     const api = vi.spyOn(workLogApi, method).mockResolvedValueOnce(0).mockResolvedValueOnce(11);
     const s = setup();
     const invalidate = vi.spyOn(s.client, "invalidateQueries");
+    for (const key of analyticsKeys) s.client.setQueryData(key, { fixture: true });
     const h = renderHook(() => (method === "startWork" ? useStartWork() : useCreateWorkLog()), s);
     const input = { projectId: 7, taskId: 8, workDescription: "开始", workType: "开发" };
     await act(async () => {
       await expect(h.result.current.mutateAsync(input)).rejects.toThrow("ID");
     });
     expect(invalidate).not.toHaveBeenCalled();
+    for (const key of analyticsKeys) expect(s.client.getQueryState(key)?.isInvalidated).toBe(false);
     await act(async () => {
       await h.result.current.mutateAsync(input);
     });
+    for (const key of analyticsKeys) expect(s.client.getQueryState(key)?.isInvalidated).toBe(true);
     expect(invalidate).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: queryKeys.workLog.detail(11) }),
     );
@@ -144,6 +154,7 @@ it.each(["update", "invalid", "pause", "complete", "approve", "reject"] as const
       .mockResolvedValueOnce("ok");
     const s = setup();
     const invalidate = vi.spyOn(s.client, "invalidateQueries");
+    for (const key of analyticsKeys) s.client.setQueryData(key, { fixture: true });
     const h = renderHook(
       () => ({
         update: useUpdateWorkLog(7),
@@ -165,9 +176,11 @@ it.each(["update", "invalid", "pause", "complete", "approve", "reject"] as const
       await expect(run()).rejects.toThrow("拒绝");
     });
     expect(invalidate).not.toHaveBeenCalled();
+    for (const key of analyticsKeys) expect(s.client.getQueryState(key)?.isInvalidated).toBe(false);
     await act(async () => {
       await run();
     });
+    for (const key of analyticsKeys) expect(s.client.getQueryState(key)?.isInvalidated).toBe(true);
     expect(invalidate).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: queryKeys.workLog.detail(11) }),
     );
@@ -193,6 +206,7 @@ it("导入守卫不调用空成功 API，导出不失效且捕获快照", async 
   const exp = vi.spyOn(workLogApi, "exportWorkLogs").mockResolvedValue(null);
   const s = setup();
   const invalidate = vi.spyOn(s.client, "invalidateQueries");
+  for (const key of analyticsKeys) s.client.setQueryData(key, { fixture: true });
   const h = renderHook(() => ({ batch: useBatchImportWorkLogs(), exp: useExportWorkLogs() }), s);
   await act(async () => {
     await expect(h.result.current.batch.mutateAsync({ items: [] })).rejects.toThrow("暂不可用");
@@ -201,6 +215,7 @@ it("导入守卫不调用空成功 API，导出不失效且捕获快照", async 
   expect(batch).not.toHaveBeenCalled();
   expect(exp).toHaveBeenCalledWith({ page: 1, pageSize: 10, bean: { projectId: 7, userId: 9 } });
   expect(invalidate).not.toHaveBeenCalled();
+  for (const key of analyticsKeys) expect(s.client.getQueryState(key)?.isInvalidated).toBe(false);
 });
 it("实际缓存失效覆盖所有列表范围/页、目标详情与统计族；无关详情保持有效", async () => {
   vi.spyOn(workLogApi, "completeWork").mockResolvedValue("ok");
@@ -216,6 +231,7 @@ it("实际缓存失效覆盖所有列表范围/页、目标详情与统计族；
   );
   const affected = [
     ...lists,
+    ...analyticsKeys,
     queryKeys.workLog.detail(11),
     queryKeys.task.detail(8),
     queryKeys.project.detail(7),

@@ -70,7 +70,7 @@ export function invalidateWorkLogMutation(
 ) {
   void client.invalidateQueries({
     queryKey: queryKeys.workLog.all,
-    predicate: (q) => q.queryKey[2] === "list",
+    predicate: (q) => ["list", "analytics", "statisticsGroup"].includes(String(q.queryKey[2])),
   });
   void client.invalidateQueries({ queryKey: queryKeys.workLog.detail(id) });
   if (!recalculate) return;
@@ -171,7 +171,7 @@ export const useRejectWorkLog = (projectId?: number | null) =>
     (data) => data.id,
     projectId,
   );
-/** B2 未解除：业务入口保持禁用，避免 service 空成功污染缓存。 */
+/** POST workLog/v1/batchImport 尚不可用：业务入口保持禁用，避免 service 空成功污染缓存。 */
 export function useBatchImportWorkLogs() {
   return useMutation({
     retry: false,

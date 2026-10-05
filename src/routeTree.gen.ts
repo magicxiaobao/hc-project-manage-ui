@@ -19,6 +19,7 @@ import { Route as WorklogsRouteImport } from './routes/worklogs'
 import { Route as DashboardProjectIdRouteImport } from './routes/dashboard/$projectId'
 import { Route as PProjectKeyRouteImport } from './routes/p/$projectKey'
 import { Route as ProjectsNewRouteImport } from './routes/projects_.new'
+import { Route as WorklogsAnalyticsRouteImport } from './routes/worklogs_.analytics'
 import { Route as PProjectKeyIndexRouteImport } from './routes/p/$projectKey/index'
 import { Route as PProjectKeyAssignmentRouteImport } from './routes/p/$projectKey/assignment'
 import { Route as PProjectKeyBacklogRouteImport } from './routes/p/$projectKey/backlog'
@@ -114,6 +115,11 @@ const PProjectKeyRoute = PProjectKeyRouteImport.update({
 const ProjectsNewRoute = ProjectsNewRouteImport.update({
   id: '/projects_/new',
   path: '/projects/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorklogsAnalyticsRoute = WorklogsAnalyticsRouteImport.update({
+  id: '/worklogs_/analytics',
+  path: '/worklogs/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PProjectKeyIndexRoute = PProjectKeyIndexRouteImport.update({
@@ -374,6 +380,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
+  '/worklogs/analytics': typeof WorklogsAnalyticsRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsRouteWithChildren
@@ -431,6 +438,7 @@ export interface FileRoutesByTo {
   '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/worklogs/analytics': typeof WorklogsAnalyticsRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
@@ -479,6 +487,7 @@ export interface FileRoutesById {
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects_/new': typeof ProjectsNewRoute
+  '/worklogs_/analytics': typeof WorklogsAnalyticsRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsRouteWithChildren
@@ -539,6 +548,7 @@ export interface FileRouteTypes {
     | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects/new'
+    | '/worklogs/analytics'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/boards'
@@ -596,6 +606,7 @@ export interface FileRouteTypes {
     | '/worklogs'
     | '/dashboard/$projectId'
     | '/projects/new'
+    | '/worklogs/analytics'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/dashboard'
@@ -643,6 +654,7 @@ export interface FileRouteTypes {
     | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects_/new'
+    | '/worklogs_/analytics'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/boards'
@@ -702,6 +714,7 @@ export interface RootRouteChildren {
   DashboardProjectIdRoute: typeof DashboardProjectIdRoute
   PProjectKeyRoute: typeof PProjectKeyRouteWithChildren
   ProjectsNewRoute: typeof ProjectsNewRoute
+  WorklogsAnalyticsRoute: typeof WorklogsAnalyticsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -774,6 +787,13 @@ declare module '@tanstack/react-router' {
       path: '/projects/new'
       fullPath: '/projects/new'
       preLoaderRoute: typeof ProjectsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/worklogs_/analytics': {
+      id: '/worklogs_/analytics'
+      path: '/worklogs/analytics'
+      fullPath: '/worklogs/analytics'
+      preLoaderRoute: typeof WorklogsAnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p/$projectKey/': {
@@ -1324,6 +1344,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardProjectIdRoute: DashboardProjectIdRoute,
   PProjectKeyRoute: PProjectKeyRouteWithChildren,
   ProjectsNewRoute: ProjectsNewRoute,
+  WorklogsAnalyticsRoute: WorklogsAnalyticsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

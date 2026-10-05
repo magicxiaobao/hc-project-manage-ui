@@ -67,27 +67,27 @@ export const workLogApi = {
   /** Controller 使用 startDate/endDate/projectIds/taskIds。 */
   getTaskStatisticsList: (payload: WorkLogAnalyticsRequest) =>
     api.post<WorkLogStatisticsResponse[]>('/workLog/v1/statistics/tasks', payload),
-  /** U1：导入 body 未定型，结果为 String；格式待联调确认。 */
+  /** POST workLog/v1/batchImport：导入 body 未定型，结果为 String；格式待联调确认。 */
   batchImport: (workLogData: unknown) => api.post<string>('/workLog/v1/batchImport', workLogData),
-  /** U2：结果为未定型的 Result<Object>；不使用文件流或 api.raw。 */
+  /** POST workLog/v1/export：结果为未定型的 Result<Object>；不使用文件流或 api.raw。 */
   exportWorkLogs: (page: PageRequest<WorkLogQueryRequest>) =>
     api.post<unknown>('/workLog/v1/export', page),
-  /** U3：结果未定型，实际使用 startDate/endDate/projectIds。 */
+  /** POST workLog/v1/analytics/trend：结果未定型，实际使用 startDate/endDate/projectIds。 */
   getTrendAnalysis: (payload: WorkLogAnalyticsRequest) =>
     api.post<unknown>('/workLog/v1/analytics/trend', payload),
-  /** U4：结果未定型，不套用综合分析的 EfficiencyAnalysis。 */
+  /** POST workLog/v1/analytics/efficiency：结果未定型，不套用综合分析的 EfficiencyAnalysis。 */
   getEfficiencyAnalysis: (payload: WorkLogAnalyticsRequest) =>
     api.post<unknown>('/workLog/v1/analytics/efficiency', payload),
-  /** U5：结果未定型，不套用综合分析的 TeamCollaborationAnalysis。 */
+  /** POST workLog/v1/analytics/collaboration：结果未定型，不套用综合分析的 TeamCollaborationAnalysis。 */
   getCollaborationAnalysis: (payload: WorkLogAnalyticsRequest) =>
     api.post<unknown>('/workLog/v1/analytics/collaboration', payload),
-  /** U6：单项目统计结果待联调。 */
+  /** GET workLog/v1/statistics/project/{projectId}：单项目统计结果待联调。 */
   getProjectStatistics: (projectId: number, params: WorkLogProjectStatisticsParams) =>
     api.get<unknown>(withQuery(`/workLog/v1/statistics/project/${projectId}`, params)),
-  /** U7：单用户统计结果待联调；三个 query 参数均必填。 */
+  /** GET workLog/v1/statistics/user/{userId}：单用户统计结果待联调；三个 query 参数均必填。 */
   getUserStatistics: (userId: number, params: WorkLogUserStatisticsParams) =>
     api.get<unknown>(withQuery(`/workLog/v1/statistics/user/${userId}`, params)),
-  /** U8：单任务统计结果待联调；只有 projectIds query。 */
+  /** GET workLog/v1/statistics/task/{taskId}：单任务统计结果待联调；只有 projectIds query。 */
   getTaskStatistics: (taskId: number, params: WorkLogTaskStatisticsParams) =>
     api.get<unknown>(withQuery(`/workLog/v1/statistics/task/${taskId}`, params)),
 };

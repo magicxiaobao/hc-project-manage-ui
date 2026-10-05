@@ -10,6 +10,7 @@ import type {
   WorkLogStatisticsResponse,
 } from '../worklog-types';
 import type { PageRequest } from '../types';
+import { normalizeWorkLogAnalytics } from '../../worklog-analytics-data';
 
 // 仅替换模块单例的配置，get/post/request 与错误处理使用真实统一客户端。
 vi.mock('../client', async (importOriginal) => {
@@ -329,36 +330,36 @@ describe('workLogApi 已定型端点（19 个）', () => {
   );
 });
 
-describe('workLogApi U1–U8：仅 pathname + HTTP method 契约', () => {
+describe('workLogApi 未定型端点：仅 pathname + HTTP method 契约', () => {
   it.each([
-    ['U1 batchImport', () => workLogApi.batchImport(null), '/workLog/v1/batchImport', 'POST'],
-    ['U2 exportWorkLogs', () => workLogApi.exportWorkLogs(page), '/workLog/v1/export', 'POST'],
+    ['POST workLog/v1/batchImport', () => workLogApi.batchImport(null), '/workLog/v1/batchImport', 'POST'],
+    ['POST workLog/v1/export', () => workLogApi.exportWorkLogs(page), '/workLog/v1/export', 'POST'],
     [
-      'U3 getTrendAnalysis',
+      'POST workLog/v1/analytics/trend',
       () => workLogApi.getTrendAnalysis(analysisRequest),
       '/workLog/v1/analytics/trend',
       'POST',
     ],
     [
-      'U4 getEfficiencyAnalysis',
+      'POST workLog/v1/analytics/efficiency',
       () => workLogApi.getEfficiencyAnalysis(analysisRequest),
       '/workLog/v1/analytics/efficiency',
       'POST',
     ],
     [
-      'U5 getCollaborationAnalysis',
+      'POST workLog/v1/analytics/collaboration',
       () => workLogApi.getCollaborationAnalysis(analysisRequest),
       '/workLog/v1/analytics/collaboration',
       'POST',
     ],
     [
-      'U6 getProjectStatistics',
+      'GET workLog/v1/statistics/project/{projectId}',
       () => workLogApi.getProjectStatistics(5, { startDate: '2026-10-05', endDate: '2026-10-05' }),
       '/workLog/v1/statistics/project/5',
       'GET',
     ],
     [
-      'U7 getUserStatistics',
+      'GET workLog/v1/statistics/user/{userId}',
       () =>
         workLogApi.getUserStatistics(4, {
           startDate: '2026-10-05',
@@ -369,7 +370,7 @@ describe('workLogApi U1–U8：仅 pathname + HTTP method 契约', () => {
       'GET',
     ],
     [
-      'U8 getTaskStatistics',
+      'GET workLog/v1/statistics/task/{taskId}',
       () => workLogApi.getTaskStatistics(3, { projectIds: [5, 6] }),
       '/workLog/v1/statistics/task/3',
       'GET',
@@ -377,5 +378,22 @@ describe('workLogApi U1–U8：仅 pathname + HTTP method 契约', () => {
   ] as const)('%s', async (_name, invoke, path, method) => {
     await invoke();
     pathAndMethod(path, method);
+  });
+});
+
+// 按路径标注，避免与 analytics spec 局部编号冲突。
+describe('统计页定型 POST 请求口径与 Result 解包', () => {
+  it.each([
+    ['analytics', 'getAnalytics', '/workLog/v1/analytics'],
+    ['projects', 'getProjectStatisticsList', '/workLog/v1/statistics/projects'],
+    ['users', 'getUserStatisticsList', '/workLog/v1/statistics/users'],
+    ['tasks', 'getTaskStatisticsList', '/workLog/v1/statistics/tasks'],
+  ] as const)('POST %s', async (view, method, path) => {
+    const body = normalizeWorkLogAnalytics(view, { ...analysisRequest, projectIds: [6, 5, 6], userIds: [9,4,9], taskIds: [8,3,8] });
+    const expected = { startDate: analysisRequest.startDate, endDate: analysisRequest.endDate, projectIds: [5,6], ...(view === 'users' ? {userIds:[4,9]} : view === 'tasks' ? {taskIds:[3,8]} : {}) };
+    const response = view === 'analytics' ? { ...analytics, keyMetricsSummary: { unconfirmed: { mystery: 'value' } } } : [statistics, { ...statistics, statisticDate: '2026-10-06', totalHours: 1.25 }];
+    reply(response);
+    expect(await workLogApi[method](body)).toEqual(response);
+    request(path, 'POST', expected);
   });
 });

@@ -1,5 +1,6 @@
-import { normalizeRelationQuery } from '../trace-relations';
-import type { AlmObjectKey, AlmRelationType } from '../api/trace-types';
+import type { WorkLogAnalyticsRequest } from '../api/worklog-types';
+import { normalizeWorkLogAnalytics, type WorkLogDimension } from '../worklog-analytics-data';
+
 /**
  * query key 约定（P1 起所有数据获取统一使用）：
  * - 根命名空间 'hc'：避免与第三方库或其它 QueryClient 的缓存冲突
@@ -50,22 +51,11 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
 }
 
 export const queryKeys = {
-  traceRelation: {
-    ...domainKeys('traceRelation'),
-    batch: (projectId: number | null, objects: readonly AlmObjectKey[], relationTypes: readonly AlmRelationType[] = []) =>
-      ['hc', 'traceRelation', 'batch', projectId, normalizeRelationQuery(objects, relationTypes)] as const,
+  workLog: {
+    ...domainKeys('workLog'),
+    analytics: (params: WorkLogAnalyticsRequest | null) => ['hc', 'workLog', 'analytics', params ? normalizeWorkLogAnalytics('analytics', params) : null] as const,
+    statisticsGroup: (dimension: WorkLogDimension, params: WorkLogAnalyticsRequest | null) => ['hc', 'workLog', 'statisticsGroup', dimension, params ? normalizeWorkLogAnalytics(dimension, params) : null] as const,
   },
-  taskDependency: {
-    ...domainKeys("taskDependency"),
-    statistics: (projectId: number | null) =>
-      ["hc", "taskDependency", "statistics", projectId] as const,
-    conflicts: (projectId: number | null) =>
-      ["hc", "taskDependency", "conflicts", projectId] as const,
-    predecessors: (taskId: number | null) =>
-      ["hc", "taskDependency", "predecessors", taskId] as const,
-    successors: (taskId: number | null) => ["hc", "taskDependency", "successors", taskId] as const,
-  },
-  workLog: domainKeys('workLog'),
   dashboard: domainKeys('dashboard'),
   dashboardWidget: domainKeys('dashboardWidget'),
   project: {
