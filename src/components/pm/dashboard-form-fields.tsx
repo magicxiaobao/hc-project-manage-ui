@@ -38,7 +38,8 @@ export const DashboardFormFields = forwardRef<LeaveHandle, {
   const dirty = open && snapshot !== null && formDirty(draft, snapshot);
   // 保存期间直接拒绝导航；共享 dirty blocker 在保存之外处理放弃确认。
   useBlocker({ shouldBlockFn: () => busy.current, enableBeforeUnload: () => busy.current });
-  const { guard, markClean, dialog, blocker } = useUnsavedChangesGuard(dirty);
+  // 保存期间暂停 dirty 拦截，避免先弹放弃确认后仍被 busy blocker 拒绝导航。
+  const { guard, markClean, dialog, blocker } = useUnsavedChangesGuard(dirty && !pending);
   const leave = (action: () => void) => { if (!busy.current) guard(action); };
   useImperativeHandle(ref, () => ({ requestLeave: leave }));
   const edit = (name: string, value: string | boolean | null) => {
