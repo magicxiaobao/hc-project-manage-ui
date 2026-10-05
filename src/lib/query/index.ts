@@ -185,3 +185,16 @@ export {
   useTaskGanttDependencies,
   useUpdateMilestone,
 } from './hooks/useGantt';
+export {
+  useTaskDependencyListAll,
+  useTaskDependencyStatistics,
+  useDependencyConflicts,
+  useTaskPredecessors,
+  useTaskSuccessors,
+  useCheckCircularDependency,
+  useCreateTaskDependency,
+  useInvalidTaskDependency,
+  useBatchDeleteTaskDependencies,
+  useTaskDependencyWriting,
+  useRefreshTaskDependencyDomains,
+} from "./hooks/useTaskDependencies";

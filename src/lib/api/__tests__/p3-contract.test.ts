@@ -251,13 +251,65 @@ describe('冲刺契约（P3）', () => {
 });
 
 describe('任务依赖契约（P3）', () => {
+  it("分页使用 page/pageSize/bean，响应为平铺边；valid/findById 已有契约", async () => {
+    const edge = {
+      id: 11,
+      predecessorId: 201,
+      successorId: 202,
+      projectId: 3,
+      dependencyType: "finish-to-start",
+      lag: 3,
+      description: "等待验收",
+      status: "ACTIVE",
+      createdAt: null,
+      updatedAt: null,
+    };
+    const paged = { list: [edge], total: 1, pageNumber: 1, pageSize: 200 };
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: "ok", result: paged } },
+      { body: { code: 1, msg: "ok", result: [edge] } },
+      { body: { code: 1, msg: "ok", result: [edge] } },
+      { body: { code: 1, msg: "ok", result: false } },
+      { body: { code: 1, msg: "ok", result: "success" } },
+      { body: { code: 1, msg: "ok", result: edge } },
+    ]);
+    const args = { page: 1, pageSize: 200, bean: { projectId: 3 } };
+    expect(await taskDependencyApi.findByPage(args)).toEqual(paged);
+    expect(await taskDependencyApi.getPredecessors(202)).toEqual([edge]);
+    expect(await taskDependencyApi.getSuccessors(201)).toEqual([edge]);
+    const payload = {
+      predecessorId: 201,
+      successorId: 202,
+      projectId: 3,
+      dependencyType: "finish-to-start",
+      lag: 3,
+      description: "等待验收",
+    };
+    expect(await taskDependencyApi.checkCircularDependency(payload)).toBe(false);
+    await taskDependencyApi.validDependency(11);
+    expect(await taskDependencyApi.getById(11)).toEqual(edge);
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toBe("/api/taskDependency/v1/findByPage");
+    expect(calls[0][1].method).toBe("POST");
+    expect(JSON.parse(calls[0][1].body as string)).toEqual(args);
+    expect(calls[1][1].method).toBe("GET");
+    expect(calls[1][1].body).toBeUndefined();
+    expect(calls[2][1].method).toBe("GET");
+    expect(calls[2][1].body).toBeUndefined();
+    expect(JSON.parse(calls[3][1].body as string)).toEqual(payload);
+    expect(calls[4][0]).toBe("/api/taskDependency/v1/valid/11");
+    expect(calls[4][1].method).toBe("POST");
+    expect(calls[5][0]).toBe("/api/taskDependency/v1/findById/11");
+    expect(calls[5][1].method).toBe("GET");
+  });
+
   it('依赖 CRUD/启用/归档', async () => {
     const fetchMock = mockFetchSequence([
       { body: { code: 1, msg: 'ok', result: 81 } },
       { body: { code: 1, msg: 'ok', result: 'success' } },
       { body: { code: 1, msg: 'ok', result: 'success' } },
     ]);
-    const createPayload = { predecessorId: 201, successorId: 202, dependencyType: 'FINISH_TO_START', projectId: 3 };
+    const createPayload = { predecessorId: 201, successorId: 202, dependencyType: 'finish-to-start', projectId: 3, lag: 3, description: '等待验收' };
     const newId = await taskDependencyApi.createTaskDependency(createPayload);
     expect(newId).toBe(81);
     await taskDependencyApi.updateTaskDependency({ id: 11, lag: 2 });
@@ -265,8 +317,11 @@ describe('任务依赖契约（P3）', () => {
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls[0][0]).toBe('/api/taskDependency/v1/createTaskDependency');
+    expect(calls[0][1].method).toBe('POST');
     expect(JSON.parse(calls[0][1].body as string)).toEqual(createPayload);
     expect(calls[1][0]).toBe('/api/taskDependency/v1/updateTaskDependency');
+    expect(calls[1][1].method).toBe('POST');
+    expect(JSON.parse(calls[1][1].body as string)).toEqual({ id: 11, lag: 2 });
     expect(calls[2][0]).toBe('/api/taskDependency/v1/invalid/11');
     expect(calls[2][1].method).toBe('POST');
   });
@@ -286,6 +341,9 @@ describe('任务依赖契约（P3）', () => {
     expect(JSON.parse(calls[0][1].body as string)).toEqual({ projectId: 3 });
     expect(calls[1][0]).toBe('/api/taskDependency/v1/getStatistics');
     expect(JSON.parse(calls[1][1].body as string)).toEqual({ projectId: 3 });
+    expect(calls[0][1].method).toBe('POST');
+    expect(calls[1][1].method).toBe('POST');
+    expect(calls[2][1].method).toBe('POST');
     expect(calls[2][0]).toBe('/api/taskDependency/v1/batchDelete');
     expect(JSON.parse(calls[2][1].body as string)).toEqual({ ids: [11, 12] });
   });

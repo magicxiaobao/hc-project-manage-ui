@@ -7,7 +7,7 @@
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
-function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone' | 'taskDependency') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -47,6 +47,16 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
 }
 
 export const queryKeys = {
+  taskDependency: {
+    ...domainKeys("taskDependency"),
+    statistics: (projectId: number | null) =>
+      ["hc", "taskDependency", "statistics", projectId] as const,
+    conflicts: (projectId: number | null) =>
+      ["hc", "taskDependency", "conflicts", projectId] as const,
+    predecessors: (taskId: number | null) =>
+      ["hc", "taskDependency", "predecessors", taskId] as const,
+    successors: (taskId: number | null) => ["hc", "taskDependency", "successors", taskId] as const,
+  },
   project: domainKeys('project'),
   requirement: domainKeys('requirement'),
   task: domainKeys('task'),

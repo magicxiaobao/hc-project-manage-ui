@@ -26,6 +26,7 @@ import {
   PriorityMark,
   StatusChip,
 } from "@/components/biz";
+import { TaskDependencySidebar } from "./task-dependency-sidebar";
 import { statusLabel } from "@/lib/pm/domain";
 import { useAuthStore } from "@/lib/api/auth-store";
 import { parseOptionalPositiveInt } from "@/lib/task-create";
@@ -301,32 +302,38 @@ export function TaskDetailLive({
         </div>
       </div>
 
-      <section aria-label="基本信息">
-        <h2 className="type-emphasis mb-2">基本信息</h2>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-4">
-          <MetaItem label="执行人 ID" value={detail.assigneeId != null ? String(detail.assigneeId) : "-"} />
-          <MetaItem label="报告人 ID" value={detail.reporterId != null ? String(detail.reporterId) : "-"} />
-          <MetaItem label="故事点" value={detail.storyPoints != null ? `${detail.storyPoints} 点` : "-"} />
-          <MetaItem label="进度" value={detail.progress != null ? `${detail.progress}%` : "-"} />
-          <MetaItem label="预计开始" value={detail.estimatedStartDate ?? "-"} />
-          <MetaItem label="预计结束" value={detail.estimatedEndDate ?? "-"} />
-          <MetaItem label="实际开始" value={formatEpochSecond(detail.actualStartDate)} />
-          <MetaItem label="实际结束" value={formatEpochSecond(detail.actualEndDate)} />
-          <MetaItem label="预估工时" value={detail.estimatedHours != null ? `${detail.estimatedHours} 小时` : "-"} />
-          <MetaItem label="实际工时" value={detail.actualHours != null ? `${detail.actualHours} 小时` : "-"} />
-          <MetaItem label="所属项目 ID" value={detail.projectId != null ? String(detail.projectId) : "-"} />
-          <MetaItem label="所属冲刺 ID" value={detail.sprintId != null ? String(detail.sprintId) : "-"} />
-          <MetaItem label="标签" value={detail.tags ?? "-"} />
-          <MetaItem label="创建时间" value={formatEpochSecond(detail.createdAt)} />
-        </dl>
-        {detail.description ? (
-          <p className="type-body mt-3 whitespace-pre-wrap rounded-sm border border-border bg-surface p-4">
-            {detail.description}
-          </p>
-        ) : (
-          <p className="type-caption mt-3 text-default-500">暂无描述。</p>
-        )}
-      </section>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <section aria-label="基本信息">
+          <h2 className="type-emphasis mb-2">基本信息</h2>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-sm border border-border bg-surface p-4 sm:grid-cols-4">
+            <MetaItem label="执行人 ID" value={detail.assigneeId != null ? String(detail.assigneeId) : "-"} />
+            <MetaItem label="报告人 ID" value={detail.reporterId != null ? String(detail.reporterId) : "-"} />
+            <MetaItem label="故事点" value={detail.storyPoints != null ? `${detail.storyPoints} 点` : "-"} />
+            <MetaItem label="进度" value={detail.progress != null ? `${detail.progress}%` : "-"} />
+            <MetaItem label="预计开始" value={detail.estimatedStartDate ?? "-"} />
+            <MetaItem label="预计结束" value={detail.estimatedEndDate ?? "-"} />
+            <MetaItem label="实际开始" value={formatEpochSecond(detail.actualStartDate)} />
+            <MetaItem label="实际结束" value={formatEpochSecond(detail.actualEndDate)} />
+            <MetaItem label="预估工时" value={detail.estimatedHours != null ? `${detail.estimatedHours} 小时` : "-"} />
+            <MetaItem label="实际工时" value={detail.actualHours != null ? `${detail.actualHours} 小时` : "-"} />
+            <MetaItem label="所属项目 ID" value={detail.projectId != null ? String(detail.projectId) : "-"} />
+            <MetaItem label="所属冲刺 ID" value={detail.sprintId != null ? String(detail.sprintId) : "-"} />
+            <MetaItem label="标签" value={detail.tags ?? "-"} />
+            <MetaItem label="创建时间" value={formatEpochSecond(detail.createdAt)} />
+          </dl>
+          {detail.description ? (
+            <p className="type-body mt-3 whitespace-pre-wrap rounded-sm border border-border bg-surface p-4">
+              {detail.description}
+            </p>
+          ) : (
+            <p className="type-caption mt-3 text-default-500">暂无描述。</p>
+          )}
+        </section>
+
+        {projectContextVerified ? (
+          <TaskDependencySidebar key={taskId} taskId={taskId} projectId={routeProjectId as number} projectKey={projectKey} />
+        ) : null}
+      </div>
 
       {/* Codex review 4175337049：项目归属未确认前不渲染写操作区。 */}
       {projectContextVerified ? (
