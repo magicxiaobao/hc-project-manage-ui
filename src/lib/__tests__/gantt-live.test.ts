@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  batchValuesConfirmed,
   buildBatchUpdateItems,
   buildGanttRows,
   chartWidth,
@@ -18,6 +19,7 @@ import {
   dateOnlyToInstant,
   dayNumber,
   diffMilestoneFields,
+  dropUnsupportedDraftEntries,
   findUnscheduledTasks,
   instantToDateOnly,
   isProgressLocked,
@@ -31,14 +33,17 @@ import {
   normalizeTaskDependencies,
   overlayCommittedBaseline,
   partitionConfirmedBatches,
-  shouldReleaseCommittedDraft,
+  pruneDeadBatches,
+  restoreDraftAfterFailure,
   sortMilestones,
   tickLabel,
   ticksFor,
   validateMilestoneForm,
   weekendDays,
   xPercent,
+  type CommittedBatch,
   type GanttTask,
+  type TaskDraft,
 } from "../gantt-live";
 
 function makeTask(overrides: Partial<GanttTask> = {}): GanttTask {
@@ -320,35 +325,241 @@ describe("buildBatchUpdateItems", () => {
   });
 });
 
-describe("partitionConfirmedBatches（r26-2：按批确认释放）", () => {
-  const batch = (version: number, taskId: number) => ({
-    version,
-    snapshot: { [taskId]: { startDate: "2026-10-03" } },
+describe("partitionConfirmedBatches（r26-2 按批确认 / r27-1 值确认）", () => {
+  const batch = (
+    taskId: number,
+    startDate: string,
+    extra: Partial<CommittedBatch> = {},
+  ): CommittedBatch => ({
+    version: 100,
+    items: [{ id: taskId, start_date: startDate }],
+    snapshot: { [taskId]: { startDate } },
+    ...extra,
+  });
+  // 权威数据：任务 1 已落到 2026-10-11（A 批的写入），任务 2 仍是旧值
+  const authoritative = (overrides: Record<number, Partial<GanttTask>> = {}) => {
+    const map = new Map<number, GanttTask>();
+    map.set(1, makeTask({ id: 1, startDate: "2026-10-11", endDate: "2026-10-15" }));
+    map.set(2, makeTask({ id: 2, startDate: "2026-10-01", endDate: "2026-10-05" }));
+    for (const [idKey, patch] of Object.entries(overrides)) {
+      const id = Number(idKey);
+      const task = map.get(id);
+      if (task) map.set(id, { ...task, ...patch });
+    }
+    return map;
+  };
+
+  it("r27-1 回归：过期重取（不含后提交写入）不确认在途批次", () => {
+    // A 批（任务 1 → 10-11）已成功；B 批（任务 2 → 10-12）在途；
+    // 某次重取返回了 10-11 但不含 B 的写入——只能确认 A，不能动 B。
+    const batchA = batch(1, "2026-10-11");
+    const batchB = batch(2, "2026-10-12");
+    const { confirmed, remaining } = partitionConfirmedBatches(
+      [batchA, batchB],
+      authoritative(),
+    );
+    expect(confirmed).toEqual([batchA]);
+    expect(remaining).toEqual([batchB]);
   });
 
-  it("数据版本未推进时全部保留（在途批次不受影响）", () => {
-    const { confirmed, remaining } = partitionConfirmedBatches(
-      [batch(100, 1), batch(100, 2)],
-      100,
-    );
-    expect(confirmed).toEqual([]);
-    expect(remaining).toHaveLength(2);
-  });
-
-  it("只确认提交版本 < 当前数据版本的批次", () => {
-    const { confirmed, remaining } = partitionConfirmedBatches(
-      [batch(100, 1), batch(100, 2), batch(200, 3)],
-      200,
-    );
-    expect(confirmed.map((b) => b.version)).toEqual([100, 100]);
-    expect(remaining.map((b) => b.version)).toEqual([200]);
+  it("权威数据包含写入后才确认（版本计数器不再作为依据）", () => {
+    const batchB = batch(2, "2026-10-12");
+    // 权威数据尚未包含 B 的写入 → 不确认（旧规则只看版本会误确认）
+    expect(
+      partitionConfirmedBatches([batchB], authoritative()).confirmed,
+    ).toEqual([]);
+    // 后续重取包含了 B 的写入 → 确认
+    const withB = authoritative({ 2: { startDate: "2026-10-12" } });
+    expect(
+      partitionConfirmedBatches([batchB], withB).confirmed,
+    ).toEqual([batchB]);
   });
 
   it("空日志返回双空数组", () => {
-    expect(partitionConfirmedBatches([], 200)).toEqual({
+    expect(partitionConfirmedBatches([], authoritative())).toEqual({
       confirmed: [],
       remaining: [],
     });
+  });
+});
+
+describe("batchValuesConfirmed（r27-1：值确认）", () => {
+  const batchOf = (items: CommittedBatch["items"]): CommittedBatch => ({
+    version: 100,
+    items,
+    snapshot: {},
+  });
+  const authoritative = () => {
+    const map = new Map<number, GanttTask>();
+    map.set(1, makeTask({ id: 1, startDate: "2026-10-11", endDate: "2026-10-15", progress: 60 }));
+    return map;
+  };
+
+  it("全部发送字段落地才算确认", () => {
+    expect(
+      batchValuesConfirmed(
+        batchOf([{ id: 1, start_date: "2026-10-11", progress: 60 }]),
+        authoritative(),
+      ),
+    ).toBe(true);
+    expect(
+      batchValuesConfirmed(
+        batchOf([{ id: 1, start_date: "2026-10-11", progress: 61 }]),
+        authoritative(),
+      ),
+    ).toBe(false);
+    expect(
+      batchValuesConfirmed(
+        batchOf([{ id: 1, end_date: "2026-10-16" }]),
+        authoritative(),
+      ),
+    ).toBe(false);
+  });
+
+  it("权威数据中已不存在的任务视为确认（无可遮蔽内容）", () => {
+    expect(
+      batchValuesConfirmed(
+        batchOf([{ id: 999, start_date: "2026-10-11" }]),
+        authoritative(),
+      ),
+    ).toBe(true);
+  });
+
+  it("多任务批次需全部落地", () => {
+    const map = authoritative();
+    map.set(2, makeTask({ id: 2, startDate: "2026-10-12", endDate: "2026-10-16", progress: 0 }));
+    expect(
+      batchValuesConfirmed(
+        batchOf([
+          { id: 1, start_date: "2026-10-11" },
+          { id: 2, start_date: "2026-10-12" },
+        ]),
+        map,
+      ),
+    ).toBe(true);
+    expect(
+      batchValuesConfirmed(
+        batchOf([
+          { id: 1, start_date: "2026-10-11" },
+          { id: 2, start_date: "2026-10-13" },
+        ]),
+        map,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("pruneDeadBatches（r27-1：死批次裁剪）", () => {
+  const batchOf = (snapshot: Record<number, TaskDraft>): CommittedBatch => ({
+    version: 100,
+    items: [],
+    snapshot,
+  });
+
+  it("快照条目全部被覆盖/消失的批次被裁掉", () => {
+    const dead = batchOf({ 1: { startDate: "2026-10-11" } });
+    const live = batchOf({ 2: { startDate: "2026-10-12" } });
+    const draft: Record<number, TaskDraft> = {
+      1: { startDate: "2026-10-13" }, // 被更新的拖拽覆盖
+      2: { startDate: "2026-10-12" }, // 仍等于快照
+    };
+    expect(pruneDeadBatches([dead, live], draft)).toEqual([live]);
+  });
+
+  it("空快照的批次被裁掉（无可释放条目）", () => {
+    expect(pruneDeadBatches([batchOf({})], { 1: { progress: 10 } })).toEqual([]);
+  });
+});
+
+describe("dropUnsupportedDraftEntries（r27-2：无差量污染清理）", () => {
+  const originals = () => {
+    const map = new Map<number, GanttTask>();
+    map.set(1, makeTask({ id: 1, startDate: "2026-10-01", endDate: "2026-10-05" }));
+    return map;
+  };
+  const logOf = (snapshot: Record<number, TaskDraft>): CommittedBatch[] => [
+    { version: 100, items: [{ id: 2, progress: 80 }], snapshot },
+  ];
+
+  it("删除无日志支撑的同值条目，保留已提交未释放的值", () => {
+    const draft: Record<number, TaskDraft> = {
+      // 任务 1：原地单击留下的同值污染（无日志支撑）→ 删除
+      1: { startDate: "2026-10-01", endDate: "2026-10-05" },
+      // 任务 2：已提交未释放（在日志快照中）→ 保留
+      2: { progress: 80 },
+    };
+    const cleaned = dropUnsupportedDraftEntries(
+      draft,
+      logOf({ 2: { progress: 80 } }),
+      originals(),
+    );
+    expect(cleaned).toEqual({ 2: { progress: 80 } });
+    // 返回新对象，原对象不动
+    expect(draft[1]).toBeDefined();
+  });
+
+  it("无可清理条目时返回原对象（引用不变）", () => {
+    const draft: Record<number, TaskDraft> = { 2: { progress: 80 } };
+    expect(
+      dropUnsupportedDraftEntries(draft, logOf({ 2: { progress: 80 } }), originals()),
+    ).toBe(draft);
+  });
+
+  it("有差量但暂无日志支撑的条目不删除（防御）", () => {
+    const draft: Record<number, TaskDraft> = {
+      1: { startDate: "2026-10-03", endDate: "2026-10-05" },
+    };
+    expect(dropUnsupportedDraftEntries(draft, [], originals())).toBe(draft);
+  });
+});
+
+describe("restoreDraftAfterFailure（r27-3：失败恢复不过度复活）", () => {
+  it("r27-3 回归：在途期间已释放的条目不被复活", () => {
+    // A=11 先成功；B 提交时快照含 A=11、B=12；B 在途期间 A 被确认释放
+    // （当前 draft 已无 A）；B 失败 → 只恢复 B=12，A=11 不复活。
+    const snapshot: Record<number, TaskDraft> = {
+      1: { startDate: "2026-10-11" },
+      2: { startDate: "2026-10-12" },
+    };
+    const currentDraft: Record<number, TaskDraft> = {
+      2: { startDate: "2026-10-12" },
+    };
+    const restored = restoreDraftAfterFailure(snapshot, currentDraft, new Set([2]));
+    expect(restored).toEqual({ 2: { startDate: "2026-10-12" } });
+  });
+
+  it("失败批次自身缺失的条目会被补回", () => {
+    const snapshot: Record<number, TaskDraft> = {
+      2: { startDate: "2026-10-12" },
+    };
+    const restored = restoreDraftAfterFailure(snapshot, {}, new Set([2]));
+    expect(restored).toEqual({ 2: { startDate: "2026-10-12" } });
+  });
+
+  it("提交后新增的条目保留", () => {
+    const snapshot: Record<number, TaskDraft> = {
+      2: { startDate: "2026-10-12" },
+    };
+    const currentDraft: Record<number, TaskDraft> = {
+      2: { startDate: "2026-10-12" },
+      3: { progress: 90 },
+    };
+    const restored = restoreDraftAfterFailure(snapshot, currentDraft, new Set([2]));
+    expect(restored).toEqual(currentDraft);
+  });
+
+  it("未释放的旧条目（仍在 draft 中）保留", () => {
+    // A 的批次仍在日志中、未被确认：draft 里还有 A=11，恢复后仍在
+    const snapshot: Record<number, TaskDraft> = {
+      1: { startDate: "2026-10-11" },
+      2: { startDate: "2026-10-12" },
+    };
+    const currentDraft: Record<number, TaskDraft> = {
+      1: { startDate: "2026-10-11" },
+      2: { startDate: "2026-10-12" },
+    };
+    const restored = restoreDraftAfterFailure(snapshot, currentDraft, new Set([2]));
+    expect(restored).toEqual(currentDraft);
   });
 });
 
@@ -548,7 +759,7 @@ describe("milestoneToFormValues / sortMilestones", () => {
   });
 });
 
-describe("r25-1 overlayCommittedBaseline / shouldReleaseCommittedDraft", () => {
+describe("r25-1 overlayCommittedBaseline", () => {
   it("已提交值叠加到权威基线：窗口内 diff 按已提交值判定", () => {
     const originals = new Map<number, GanttTask>([
       [1, makeTask({ id: 1, startDate: "2026-10-01", endDate: "2026-10-05" })],
@@ -573,13 +784,6 @@ describe("r25-1 overlayCommittedBaseline / shouldReleaseCommittedDraft", () => {
     const baseline = overlayCommittedBaseline(originals, { 999: { progress: 80 } });
     expect(baseline.has(999)).toBe(false);
     expect(baseline.get(1)?.progress).toBe(50);
-  });
-
-  it("草稿释放：仅数据版本推进后释放", () => {
-    expect(shouldReleaseCommittedDraft(null, 100)).toBe(false);
-    expect(shouldReleaseCommittedDraft(100, 100)).toBe(false);
-    expect(shouldReleaseCommittedDraft(100, 99)).toBe(false);
-    expect(shouldReleaseCommittedDraft(100, 101)).toBe(true);
   });
 });
 

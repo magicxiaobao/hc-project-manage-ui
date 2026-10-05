@@ -457,49 +457,89 @@ export function overlayCommittedBaseline(
 }
 
 /**
- * r25-1：提交后草稿释放判定（纯逻辑）。
- * 仅当记录了提交版本、且查询数据版本已推进（权威重取到达）时才释放草稿；
- * 其它情况保持草稿应用，保证"成功后无永久草稿残留"与"窗口内不覆盖"兼得。
+ * r27-1：值确认（纯逻辑）——判定权威数据是否已实际包含该批的写入。
+ *
+ * dataUpdatedAt 只是取数完成计数器，不是服务端状态标记：在某次写入
+ * POST 完成前发起的重取，其响应不含该写入，却会把计数器推过提交时
+ * 记录的版本。旧规则"提交版本 < 当前数据版本"会把这种过期重取当作
+ * 确认，提前释放后提交的在途批次（复现：A=11 成功后触发重取#1 返回
+ * 11 日，B=12 在途；effect 见版本推进把 A、B 两批一起确认，B 的草稿
+ * 被删、图表回退到 11 日）。
+ *
+ * 新边界：只有当权威数据中该批每个 item 的发送字段值都已落地，才算
+ * 确认。权威数据中已不存在的任务视为确认（无可遮蔽的内容）。
  */
-export function shouldReleaseCommittedDraft(
-  committedVersion: number | null,
-  dataUpdatedAt: number,
+export function batchValuesConfirmed(
+  batch: CommittedBatch,
+  authoritative: Map<number, GanttTask>,
 ): boolean {
-  return committedVersion !== null && dataUpdatedAt > committedVersion;
+  for (const item of batch.items) {
+    const task = authoritative.get(item.id);
+    if (!task) continue;
+    if (item.start_date !== undefined && task.startDate !== item.start_date) {
+      return false;
+    }
+    if (item.end_date !== undefined && task.endDate !== item.end_date) {
+      return false;
+    }
+    if (item.progress !== undefined && task.progress !== item.progress) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
- * r26-2：一次提交的已提交快照。提交成功后记入提交日志（commitLog），
- * 记录提交瞬间的数据版本；只有当某次权威重取的数据版本推进超过该版本
- * （即该次重取已包含这次提交）时，该批才被"确认"并释放。
- * 单一 commitVersionRef 无法区分"先提交的重取"与"后提交的在途批次"，
- * 会导致第一次保存的重取清掉第二次在途保存的草稿——故按批次记版本。
+ * r26-2/r27-1：一次提交的已提交快照。提交成功后记入提交日志（commitLog）。
+ * r27-1 起确认依据改为值确认（batchValuesConfirmed）；version 只保留做
+ * 诊断，不再参与释放判定（提交时捕获的缓存版本不足以证明包含该次写入）。
  */
 export interface CommittedBatch {
-  /** 提交瞬间 ganttQuery.dataUpdatedAt */
+  /** 提交成功瞬间的 ganttQuery.dataUpdatedAt（诊断用，不做确认依据） */
   version: number;
+  /** 该批实际发送的 batchUpdate items（id + 变化字段），用于值确认 */
+  items: GanttBatchUpdateItem[];
   /** 该批提交时的草稿快照（id → 已提交差量） */
   snapshot: Record<number, TaskDraft>;
 }
 
 /**
- * r26-2：把提交日志拆成"已被本次权威数据确认"与"仍需保留"两部分（纯逻辑）。
- * 确认规则沿用 shouldReleaseCommittedDraft：提交版本 < 当前数据版本。
+ * r26-2/r27-1：把提交日志拆成"已被权威数据确认"与"仍需保留"两部分（纯逻辑）。
+ * r27-1 起确认规则改为值确认：提交版本 < 当前数据版本不再作为释放条件。
  */
 export function partitionConfirmedBatches(
   log: CommittedBatch[],
-  dataUpdatedAt: number,
+  authoritative: Map<number, GanttTask>,
 ): { confirmed: CommittedBatch[]; remaining: CommittedBatch[] } {
   const confirmed: CommittedBatch[] = [];
   const remaining: CommittedBatch[] = [];
   for (const batch of log) {
-    if (shouldReleaseCommittedDraft(batch.version, dataUpdatedAt)) {
+    if (batchValuesConfirmed(batch, authoritative)) {
       confirmed.push(batch);
     } else {
       remaining.push(batch);
     }
   }
   return { confirmed, remaining };
+}
+
+/**
+ * r27-1：剔除"已无可释放条目"的死批次（纯逻辑）。
+ * 某批快照的每个条目在当前 draft 中都不存在、或值已不同时，该批永远无法
+ * 再释放任何条目（释放只删除仍等于快照的条目）——留着只会让日志无限增长
+ * （如 A=11 被 B=12 覆盖后，A 批的值确认永远通不过）。
+ * 未来同值的新拖拽会产生自己的新批次负责释放，裁剪不影响正确性。
+ */
+export function pruneDeadBatches(
+  log: CommittedBatch[],
+  draft: Record<number, TaskDraft>,
+): CommittedBatch[] {
+  return log.filter((batch) =>
+    Object.entries(batch.snapshot).some(([idKey, change]) => {
+      const existing = draft[Number(idKey)];
+      return existing !== undefined && isSameTaskDraft(existing, change);
+    }),
+  );
 }
 
 /**
@@ -513,6 +553,62 @@ export function isSameTaskDraft(a: TaskDraft, b: TaskDraft): boolean {
     a.endDate === b.endDate &&
     a.progress === b.progress
   );
+}
+
+/**
+ * r27-2：剔除草稿中"无提交日志支撑的无差量条目"（纯逻辑）。
+ * 调用方在 buildBatchUpdateItems 为空（整份 draft 相对基线无差量）时调用：
+ * 其中不在任何未确认批次快照中的条目，是历史无差量写入留下的污染——它们
+ * 永远不会被确认释放，会永久遮蔽权威数据。r26-1 要求保留的"已提交未释放"
+ * 的值必在快照中，不受影响。函数内对每条目再做一次差量防御：有差量但暂无
+ * 日志支撑的条目（如失败恢复的值）必须保留。
+ */
+export function dropUnsupportedDraftEntries(
+  draft: Record<number, TaskDraft>,
+  log: CommittedBatch[],
+  baseline: Map<number, GanttTask>,
+): Record<number, TaskDraft> {
+  const supported = new Set<number>();
+  for (const batch of log) {
+    for (const idKey of Object.keys(batch.snapshot)) {
+      supported.add(Number(idKey));
+    }
+  }
+  let next = draft;
+  for (const idKey of Object.keys(draft)) {
+    const id = Number(idKey);
+    if (supported.has(id)) continue;
+    const entry = draft[id];
+    if (entry === undefined) continue;
+    if (buildBatchUpdateItems({ [id]: entry }, baseline).length === 0) {
+      if (next === draft) next = { ...draft };
+      delete next[id];
+    }
+  }
+  return next;
+}
+
+/**
+ * r27-3：提交失败后的草稿恢复（纯逻辑）。
+ * 不能无条件恢复整份提交前快照：在途期间已被确认释放的条目（其批次已从
+ * 提交日志中移除），若恢复会永久复活旧值——后续重取无法再清除，且下次
+ * 提交会把旧值重新带入载荷、静默覆盖服务端的新值。
+ * 规则：快照中"当前 draft 已不存在、且不属于本次失败批次"的条目视为
+ * 已释放→丢弃；其余保留（失败批次自身的值、提交后新增的条目）。
+ */
+export function restoreDraftAfterFailure(
+  snapshot: Record<number, TaskDraft>,
+  currentDraft: Record<number, TaskDraft>,
+  failedIds: Set<number>,
+): Record<number, TaskDraft> {
+  const restored: Record<number, TaskDraft> = { ...currentDraft };
+  for (const [idKey, change] of Object.entries(snapshot)) {
+    const id = Number(idKey);
+    if (!(id in restored) && failedIds.has(id)) {
+      restored[id] = change;
+    }
+  }
+  return restored;
 }
 
 /**
