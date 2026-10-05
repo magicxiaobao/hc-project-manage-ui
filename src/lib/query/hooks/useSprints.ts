@@ -53,6 +53,10 @@ export function useSprintList(params: SprintListParams = {}) {
     queryKey: queryKeys.sprint.list(normalized),
     queryFn: () => sprintApi.findByProject(projectId as number, normalized),
     enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+    // 跨域投影（Codex review 4183634372/4183634379/4183634386）：任务的流转/
+    // 新建/改派/依赖等写入散落在任务域各 mutation，逐个补失效既漏不全、也会
+    // 打断看板自身的乐观刷新协调。改为进入页面时总是重取，不吃 30s staleTime。
+    refetchOnMount: 'always',
   });
 }
 
@@ -96,6 +100,7 @@ export function useSprintDetail(id: number | null | undefined) {
     queryKey: queryKeys.sprint.detail(id ?? 0),
     queryFn: () => sprintApi.getById(id as number),
     enabled: typeof id === 'number' && Number.isFinite(id) && id > 0,
+    refetchOnMount: 'always', // 跨域投影：进入页面总是重取（见 useSprintList）
   });
 }
 
@@ -110,6 +115,7 @@ export function useSprintBurndown(id: number | null | undefined) {
     queryKey: [...queryKeys.sprint.all, 'burndown', id ?? 0] as const,
     queryFn: () => sprintApi.getBurndownChart(id as number),
     enabled: typeof id === 'number' && Number.isFinite(id) && id > 0,
+    refetchOnMount: 'always', // 跨域投影：进入页面总是重取（见 useSprintList）
   });
 }
 

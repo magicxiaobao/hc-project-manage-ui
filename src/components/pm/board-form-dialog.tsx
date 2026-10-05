@@ -205,6 +205,11 @@ export function BoardFormDialog({
           >
             <span className="type-body">启用 WIP 在制品限制</span>
           </Checkbox>
+          {/* Codex review 4183634413：后端未消费看板级 wipEnabled，老前端也只按列
+              wipLimit 展示；按开关隐藏会让存量看板（默认 false）的列上限全部消失 */}
+          <p className="type-caption -mt-2 text-default-500">
+            目前仅保存设置；列的 WIP 显示由各列的上限决定。
+          </p>
           {submitError ? (
             <p role="alert" className="text-sm text-danger">
               {submitError}

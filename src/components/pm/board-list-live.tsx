@@ -54,8 +54,10 @@ import {
   useBoardListAll,
   useCopyBoard,
   useInvalidBoard,
+  useProjectAllSprints,
   useSetDefaultBoard,
 } from "@/lib/query";
+import { sprintStatusLabel } from "@/lib/sprint-form";
 import type { BoardResponse } from "@/lib/api/board-types";
 import { BoardFormDialog } from "@/components/pm/board-form-dialog";
 
@@ -514,7 +516,7 @@ export function BoardListLive({ projectId, projectKey }: { projectId: number; pr
       </AppModal>
 
       {sprintBoardOpen ? (
-        <SprintBoardDialog onClose={() => setSprintBoardOpen(false)} />
+        <SprintBoardDialog projectId={projectId} onClose={() => setSprintBoardOpen(false)} />
       ) : null}
     </div>
   );
@@ -628,11 +630,16 @@ function CopyBoardDialog({
  * 直接返回 null（Controller 包成功响应）。前端做 null 防护：创建返回的 id
  * 无效时诚实提示"后端未实现"，不假装创建成功。
  *
+ * 冲刺只能从当前项目的冲刺中选择（Codex review 4183634394/4183634403）：
+ * 自由输入 ID 既无法保证归属当前项目，也有数值强转误差。
+ *
  * 表单 UX 约定：dirty 按初始快照比较判定；失败时弹窗保留、守卫继续布防；
  * 成功是程序化关闭，直接卸载。
  */
-function SprintBoardDialog({ onClose }: { onClose: () => void }) {
+function SprintBoardDialog({ projectId, onClose }: { projectId: number; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const sprintsQuery = useProjectAllSprints({ projectId });
+  const sprints = sprintsQuery.data ?? [];
   const [sprintIdInput, setSprintIdInput] = useState("");
   const [boardName, setBoardName] = useState("");
   const [fieldError, setFieldError] = useState("");
@@ -656,9 +663,9 @@ function SprintBoardDialog({ onClose }: { onClose: () => void }) {
     // 字段级校验：收集全部错误（不首错即停），逐个挂到对应输入下方。
     // 名称上限与复制弹窗/board-form.ts 保持一致：MAX_BOARD_NAME_LENGTH（100）。
     const errors: { field: "sprintId" | "boardName"; message: string }[] = [];
-    const sprintId = Number(sprintIdInput.trim());
-    if (!Number.isInteger(sprintId) || sprintId <= 0) {
-      errors.push({ field: "sprintId", message: "请填写有效的冲刺 ID（正整数）" });
+    const sprint = sprints.find((item) => String(item.id) === sprintIdInput);
+    if (!sprint) {
+      errors.push({ field: "sprintId", message: "请选择当前项目的冲刺" });
     }
     const trimmedName = boardName.trim();
     if (trimmedName.length > MAX_BOARD_NAME_LENGTH) {
@@ -669,7 +676,8 @@ function SprintBoardDialog({ onClose }: { onClose: () => void }) {
     }
     setFieldError(errors.find((error) => error.field === "sprintId")?.message ?? "");
     setNameError(errors.find((error) => error.field === "boardName")?.message ?? "");
-    if (errors.length > 0) return;
+    if (!sprint || errors.length > 0) return;
+    const sprintId = sprint.id;
     setSubmitError("");
     setIsPending(true);
     try {
@@ -709,26 +717,48 @@ function SprintBoardDialog({ onClose }: { onClose: () => void }) {
         {dialog}
         <div className="flex flex-col gap-4">
           <p className="type-caption text-default-500">
-            先按冲刺 ID 查询已有看板；没有则创建（名称可留空自动生成）。
+            先查询所选冲刺的已有看板；没有则创建（名称可留空自动生成）。
           </p>
-          <div>
-            <TextField
-              value={sprintIdInput}
-              onChange={(value) => {
-                setSprintIdInput(value);
-                setFieldError("");
-                setSubmitError("");
-              }}
-              isDisabled={isPending}
-              inputMode="numeric"
-            >
-              <Label>
-                冲刺 ID<RequiredMark />
+          {sprintsQuery.isPending ? (
+            <div className="flex items-center gap-2 py-2 text-sm text-default-500">
+              <Spinner size="sm" />
+              正在加载本项目冲刺…
+            </div>
+          ) : sprintsQuery.isError ? (
+            <div className="flex flex-col items-start gap-3">
+              <p role="alert" className="text-sm text-danger">
+                冲刺加载失败：{toUserMessage(sprintsQuery.error)}
+              </p>
+              <Button variant="ghost" onPress={() => void sprintsQuery.refetch()}>
+                重试
+              </Button>
+            </div>
+          ) : sprints.length === 0 ? (
+            <p role="alert" className="text-sm text-warning-600">
+              当前项目还没有冲刺，请先新建冲刺。
+            </p>
+          ) : (
+            <div>
+              <Label className="mb-1 block">
+                冲刺<RequiredMark />
               </Label>
-              <Input placeholder="例如：12" />
-            </TextField>
-            <FieldError message={fieldError} />
-          </div>
+              <OptionSelect
+                label="冲刺（必填）"
+                value={sprintIdInput}
+                options={sprints.map((item) => ({
+                  id: String(item.id),
+                  label: `#${item.id} ${item.sprintName}（${sprintStatusLabel(item.status, item.statusLabel)}）`,
+                }))}
+                onChange={(value) => {
+                  setSprintIdInput(value);
+                  setFieldError("");
+                  setSubmitError("");
+                }}
+                isDisabled={isPending}
+              />
+              <FieldError message={fieldError} />
+            </div>
+          )}
           <div>
             <TextField
               value={boardName}
@@ -753,7 +783,11 @@ function SprintBoardDialog({ onClose }: { onClose: () => void }) {
             <Button variant="ghost" onPress={close} isDisabled={isPending}>
               取消
             </Button>
-            <Button variant="primary" onPress={() => void handleConfirm()} isDisabled={isPending}>
+            <Button
+              variant="primary"
+              onPress={() => void handleConfirm()}
+              isDisabled={isPending || sprints.length === 0}
+            >
               {isPending ? <Spinner size="sm" /> : null}
               查询 / 创建
             </Button>

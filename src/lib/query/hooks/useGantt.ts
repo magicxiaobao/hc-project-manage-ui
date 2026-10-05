@@ -34,6 +34,10 @@ export function useGanttData(params: { projectId?: number | null }) {
       return { response, readVersion };
     },
     enabled: enabledId(projectId),
+    // 跨域投影（Codex review 4183634372/4183634379/4183634386）：任务的流转/
+    // 新建/改派/依赖等写入散落在任务域各 mutation，逐个补失效既漏不全、也会
+    // 打断看板自身的乐观刷新协调。改为进入页面时总是重取，不吃 30s staleTime。
+    refetchOnMount: 'always',
   });
   return { ...query, data: query.data?.response, readVersion: query.data?.readVersion ?? 0 };
 }
