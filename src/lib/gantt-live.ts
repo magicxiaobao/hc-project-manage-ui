@@ -469,6 +469,53 @@ export function shouldReleaseCommittedDraft(
 }
 
 /**
+ * r26-2：一次提交的已提交快照。提交成功后记入提交日志（commitLog），
+ * 记录提交瞬间的数据版本；只有当某次权威重取的数据版本推进超过该版本
+ * （即该次重取已包含这次提交）时，该批才被"确认"并释放。
+ * 单一 commitVersionRef 无法区分"先提交的重取"与"后提交的在途批次"，
+ * 会导致第一次保存的重取清掉第二次在途保存的草稿——故按批次记版本。
+ */
+export interface CommittedBatch {
+  /** 提交瞬间 ganttQuery.dataUpdatedAt */
+  version: number;
+  /** 该批提交时的草稿快照（id → 已提交差量） */
+  snapshot: Record<number, TaskDraft>;
+}
+
+/**
+ * r26-2：把提交日志拆成"已被本次权威数据确认"与"仍需保留"两部分（纯逻辑）。
+ * 确认规则沿用 shouldReleaseCommittedDraft：提交版本 < 当前数据版本。
+ */
+export function partitionConfirmedBatches(
+  log: CommittedBatch[],
+  dataUpdatedAt: number,
+): { confirmed: CommittedBatch[]; remaining: CommittedBatch[] } {
+  const confirmed: CommittedBatch[] = [];
+  const remaining: CommittedBatch[] = [];
+  for (const batch of log) {
+    if (shouldReleaseCommittedDraft(batch.version, dataUpdatedAt)) {
+      confirmed.push(batch);
+    } else {
+      remaining.push(batch);
+    }
+  }
+  return { confirmed, remaining };
+}
+
+/**
+ * r26-2：TaskDraft 浅相等。释放已确认批次时，只从 draft 中移除"仍等于
+ * 该批快照"的条目——窗口内新增的未提交拖拽（值已不同）必须保留，
+ * 不能随确认批次一起被清掉。
+ */
+export function isSameTaskDraft(a: TaskDraft, b: TaskDraft): boolean {
+  return (
+    a.startDate === b.startDate &&
+    a.endDate === b.endDate &&
+    a.progress === b.progress
+  );
+}
+
+/**
  * r25-3：甘特条宽钳制——保留至少 1.5% 的最小视觉宽度，但右端不得超过
  * 100%。长时间轴末端任务（如 100 天范围末日单日任务：起点 99%、自然
  * 宽度 1%）按旧逻辑会被拉到 100.5% 越界，与依赖连线端点（100%）错位。

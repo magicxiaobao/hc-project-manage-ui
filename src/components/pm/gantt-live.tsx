@@ -40,6 +40,7 @@ import {
   findUnscheduledTasks,
   instantToDateOnly,
   isProgressLocked,
+  isSameTaskDraft,
   isValidDateOnly,
   isoFromDay,
   milestoneStatusLabel,
@@ -47,13 +48,14 @@ import {
   normalizeGanttData,
   normalizeTaskDependencies,
   overlayCommittedBaseline,
-  shouldReleaseCommittedDraft,
+  partitionConfirmedBatches,
   sortMilestones,
   tickLabel,
   ticksFor,
   todayNumber,
   weekendDays,
   xPercent,
+  type CommittedBatch,
   type GanttRow,
   type GanttScale,
   type GanttTask,
@@ -141,19 +143,35 @@ function GanttLiveInner({
     [],
   );
 
-  // r25-1：已提交但权威重取尚未到达的值（id → 已提交差量），以及提交时
-  // 的查询数据版本。提交成功后草稿保持应用（与服务端数据合并渲染），
-  // 直到 dataUpdatedAt 推进（权威重取到达）才释放——窗口内的再次拖拽按
-  // 含草稿的合并值计算基线，不会用旧缓存基线覆盖已保存的新日期；
-  // 权威数据一到即清，保证"成功后无永久草稿残留"。
-  const committedRef = useRef<Record<number, TaskDraft>>({});
-  const commitVersionRef = useRef<number | null>(null);
+  // r25-1/r26-2：已提交但尚未被权威重取确认的批次日志。
+  // 提交成功后草稿保持应用（与服务端数据合并渲染）；每次 dataUpdatedAt
+  // 推进时，只释放"提交版本 < 当前数据版本"的批次（该次重取已包含这些
+  // 提交）——后提交的在途批次不受先提交的重取影响（r26-2：单一版本号 +
+  // 无条件清空曾导致第一次保存的重取清掉第二次在途保存的草稿）。
+  // 释放时只从 draft 移除仍等于已确认快照的条目：窗口内新增的未提交拖拽
+  // （值已不同）必须保留。
+  const commitLogRef = useRef<CommittedBatch[]>([]);
   useEffect(() => {
-    if (shouldReleaseCommittedDraft(commitVersionRef.current, ganttQuery.dataUpdatedAt)) {
-      commitVersionRef.current = null;
-      committedRef.current = {};
-      setDraft(() => ({}));
-    }
+    const { confirmed, remaining } = partitionConfirmedBatches(
+      commitLogRef.current,
+      ganttQuery.dataUpdatedAt,
+    );
+    if (confirmed.length === 0) return;
+    commitLogRef.current = remaining;
+    const released: Record<number, TaskDraft> = {};
+    for (const batch of confirmed) Object.assign(released, batch.snapshot);
+    setDraft((current) => {
+      let next = current;
+      for (const [idKey, change] of Object.entries(released)) {
+        const id = Number(idKey);
+        const existing = next[id];
+        if (existing !== undefined && isSameTaskDraft(existing, change)) {
+          if (next === current) next = { ...current };
+          delete next[id];
+        }
+      }
+      return next;
+    });
   }, [ganttQuery.dataUpdatedAt, setDraft]);
 
   const chartRef = useRef<HTMLDivElement>(null);
@@ -164,7 +182,8 @@ function GanttLiveInner({
     () => new Map(normalized.tasks.map((task) => [task.id, task])),
     [normalized],
   );
-  // 草稿合并到任务上渲染（mutation 成功前保留，失败回滚清空）
+  // 草稿合并到任务上渲染：提交成功后保持应用，直到某次权威重取确认
+  // 该批（上方 effect 按批释放）；提交失败恢复提交前快照（r26-3）
   const mergedTasks = useMemo(
     () =>
       normalized.tasks.map((task) => {
@@ -270,28 +289,38 @@ function GanttLiveInner({
     // r25-1：diff 基线 = 权威缓存叠加已提交值。提交成功后、权威重取到达前
     // 旧缓存仍是提交前的值，直接相对它比较会误判（窗口内再次拖拽按旧几何
     // 基线提交，覆盖已保存的新日期）。
-    const baseline = overlayCommittedBaseline(originalsById, committedRef.current);
+    const committed: Record<number, TaskDraft> = {};
+    for (const batch of commitLogRef.current) Object.assign(committed, batch.snapshot);
+    const baseline = overlayCommittedBaseline(originalsById, committed);
     const items = buildBatchUpdateItems(draftRef.current, baseline);
     if (items.length === 0) {
-      setDraft(() => ({}));
+      // r26-1：无变化（如原地单击 delta=0）时绝不清空 draft——draft 中
+      // 可能含有已提交未释放的值，清空会导致图表回退到旧缓存值、且后续
+      // 拖拽按回退后的旧几何基线提交错误日期。保留无害（值与基线一致）。
       return;
     }
-    // 本次提交的草稿快照：onSuccess 时记入已提交基线（不能读闭包外的
-    // draftRef.current——窗口内可能已有新的未提交拖拽）。
-    const committedSnapshot = { ...draftRef.current };
+    // 提交前快照：一份记入提交日志（onSuccess），同一份用于 onError 恢复
+    // （不能读闭包外的 draftRef.current——窗口内可能已有新的未提交拖拽）。
+    const snapshot = { ...draftRef.current };
     // 成功前保留草稿（与服务端数据合并渲染）；成功后继续保持应用直到
-    // 权威重取到达（上方 effect 释放），失败回滚清空
+    // 某次权威重取确认该批（上方 effect 按批释放）；失败恢复提交前快照
+    // （r26-3：只回滚到提交前，不清空——已提交未释放的值必须保留）
     batchMutation.mutate(
       { projectId, payload: { tasks: items } },
       {
         onSuccess: () => {
-          committedRef.current = { ...committedRef.current, ...committedSnapshot };
-          commitVersionRef.current = ganttQuery.dataUpdatedAt;
+          commitLogRef.current = [
+            ...commitLogRef.current,
+            { version: ganttQuery.dataUpdatedAt, snapshot },
+          ];
           toast.success(`已保存 ${items.length} 个任务的计划调整`);
         },
-        onError: (error) => {
-          setDraft(() => ({}));
-          toast.error(`保存失败，已回滚到服务端数据：${toUserMessage(error)}`);
+        onError: () => {
+          // r26-3：恢复提交前快照。失败提示由 useBatchUpdateGanttTasks 的
+          // hook 级 onError 统一发出（r26-4：跨卸载可见），这里不再 toast，
+          // 避免挂载时双重提示；旧文案"已回滚到服务端数据"也不再准确
+          // （恢复的是提交前快照，不是服务端数据）。
+          setDraft(() => snapshot);
         },
       },
     );
@@ -855,11 +884,10 @@ function SelectedTaskPanel({
           onClose();
         },
         onError: (error) => {
-          // r25-5：失败必须全局可见——内联错误 + toast。面板若在请求在途
-          // 时已卸载，内联错误随之消失，只有 toast 能让用户看到失败
-          const message = toUserMessage(error);
-          setSubmitError(message);
-          toast.error(`保存失败：${message}`);
+          // r25-5/r26-4：内联错误保留在面板内（挂载时可见）；跨卸载的
+          // 失败 toast 由 useBatchUpdateGanttTasks 的 hook 级 onError 发出
+          // （mutate 单次回调在面板卸载后不会执行），这里不再重复 toast。
+          setSubmitError(toUserMessage(error));
         },
       },
     );

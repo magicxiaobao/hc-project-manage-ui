@@ -10,9 +10,11 @@
  * - 失效：甘特变更 → task 域 + gantt 域；里程碑变更 → milestone 域
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { ganttApi, milestoneApi } from '../../api/gantt';
 import type { GanttBatchUpdatePayload } from '../../api/gantt-types';
 import { createKeyedSerialQueue } from '../../gantt-live';
+import { toUserMessage } from '../error';
 import { queryKeys } from '../keys';
 
 /** projectId/taskId 无效时不发起请求的守卫 */
@@ -106,6 +108,14 @@ export function useBatchUpdateGanttTasks() {
       queueFor(input.projectId).run(input.projectId, () =>
         ganttApi.batchUpdateTasks(input.payload),
       ),
+    onError: (error) => {
+      // r26-4：失败通知必须跨组件卸载可见。mutate() 第二参数的单次回调
+      // 仅在观察者仍有订阅者时执行——面板在请求在途时卸载（如点"查看
+      // 详情"/浏览器后退并确认放弃）后它们不会执行；hook 级 onError 由
+      // mutationCache 持有，卸载后仍会触发。Toaster 挂在应用 shell 全局，
+      // 路由离开后依然可见。调用方不再在单次 onError 里重复 toast。
+      toast.error(`保存失败：${toUserMessage(error)}`);
+    },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.gantt.all });

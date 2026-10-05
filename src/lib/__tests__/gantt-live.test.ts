@@ -21,6 +21,7 @@ import {
   findUnscheduledTasks,
   instantToDateOnly,
   isProgressLocked,
+  isSameTaskDraft,
   isValidDateOnly,
   isoFromDay,
   milestoneStatusLabel,
@@ -29,6 +30,7 @@ import {
   normalizeGanttData,
   normalizeTaskDependencies,
   overlayCommittedBaseline,
+  partitionConfirmedBatches,
   shouldReleaseCommittedDraft,
   sortMilestones,
   tickLabel,
@@ -315,6 +317,58 @@ describe("buildBatchUpdateItems", () => {
     const items = buildBatchUpdateItems({ 1: { progress: 80 } }, originals);
     expect(items[0]).not.toHaveProperty("text");
     expect(items[0]).not.toHaveProperty("status");
+  });
+});
+
+describe("partitionConfirmedBatches（r26-2：按批确认释放）", () => {
+  const batch = (version: number, taskId: number) => ({
+    version,
+    snapshot: { [taskId]: { startDate: "2026-10-03" } },
+  });
+
+  it("数据版本未推进时全部保留（在途批次不受影响）", () => {
+    const { confirmed, remaining } = partitionConfirmedBatches(
+      [batch(100, 1), batch(100, 2)],
+      100,
+    );
+    expect(confirmed).toEqual([]);
+    expect(remaining).toHaveLength(2);
+  });
+
+  it("只确认提交版本 < 当前数据版本的批次", () => {
+    const { confirmed, remaining } = partitionConfirmedBatches(
+      [batch(100, 1), batch(100, 2), batch(200, 3)],
+      200,
+    );
+    expect(confirmed.map((b) => b.version)).toEqual([100, 100]);
+    expect(remaining.map((b) => b.version)).toEqual([200]);
+  });
+
+  it("空日志返回双空数组", () => {
+    expect(partitionConfirmedBatches([], 200)).toEqual({
+      confirmed: [],
+      remaining: [],
+    });
+  });
+});
+
+describe("isSameTaskDraft（r26-2：释放时相等判定）", () => {
+  it("三字段全等才算相同", () => {
+    expect(
+      isSameTaskDraft(
+        { startDate: "2026-10-03", endDate: "2026-10-07", progress: 50 },
+        { startDate: "2026-10-03", endDate: "2026-10-07", progress: 50 },
+      ),
+    ).toBe(true);
+    expect(
+      isSameTaskDraft(
+        { startDate: "2026-10-03" },
+        { startDate: "2026-10-04" },
+      ),
+    ).toBe(false);
+    // 缺字段 vs undefined 视为相同（都是"未设置"）
+    expect(isSameTaskDraft({}, { progress: undefined })).toBe(true);
+    expect(isSameTaskDraft({ progress: 50 }, {})).toBe(false);
   });
 });
 
