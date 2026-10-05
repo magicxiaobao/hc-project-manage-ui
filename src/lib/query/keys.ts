@@ -54,8 +54,6 @@ export const queryKeys = {
     batch: (projectId: number | null, objects: readonly AlmObjectKey[], relationTypes: readonly AlmRelationType[] = []) =>
       ['hc', 'traceRelation', 'batch', projectId, normalizeRelationQuery(objects, relationTypes)] as const,
   },
-  defect: domainKeys('defect'),
-  testCase: domainKeys('testCase'),
   taskDependency: {
     ...domainKeys("taskDependency"),
     statistics: (projectId: number | null) =>

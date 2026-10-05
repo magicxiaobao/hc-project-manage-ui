@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import { traceabilityRelationApi } from "../../api/trace";
 import { defectApi } from "../../api/defect";
+import type { DefectResponse } from "../../api/defect-types";
 import { testCaseApi } from "../../api/test-case";
 import { useAuthStore } from "../../api/auth-store";
 import { ApiBusinessError } from "../../api/client";
@@ -200,13 +201,13 @@ describe("关联读取", () => {
   it("标题按 ID 读取，保留既有详情缓存结构并校验项目归属", async () => {
     const client = makeClient();
     const object = { objectType: "DEFECT" as const, objectId: 3 };
-    const row = { id: 3, projectId: 7, title: "标题" };
+    const row = { id: 3, projectId: 7, title: "标题" } as DefectResponse;
     const spy = vi.spyOn(defectApi, "findById").mockResolvedValue(row);
     const hook = renderHook(client, () => useTraceObjectTitle(object, 7, true));
     expect((await hook.refetch({ throwOnError: true })).data).toEqual(row);
     expect(spy).toHaveBeenCalledWith(3);
     expect(client.getQueryData(queryKeys.defect.detail(3))).toEqual(row);
-    spy.mockResolvedValue({ ...row, projectId: 8 });
+    spy.mockResolvedValue({ ...row, projectId: 8 } as DefectResponse);
     await expect(hook.refetch({ throwOnError: true })).rejects.toThrow("归属不匹配");
     expect(client.getQueryData(queryKeys.defect.detail(3))).toEqual(row);
   });
