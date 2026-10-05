@@ -15,6 +15,7 @@ import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as WorklogsRouteImport } from './routes/worklogs'
 import { Route as DashboardProjectIdRouteImport } from './routes/dashboard/$projectId'
 import { Route as PProjectKeyRouteImport } from './routes/p/$projectKey'
 import { Route as ProjectsNewRouteImport } from './routes/projects_.new'
@@ -93,6 +94,11 @@ const MeRoute = MeRouteImport.update({
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorklogsRoute = WorklogsRouteImport.update({
+  id: '/worklogs',
+  path: '/worklogs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardProjectIdRoute = DashboardProjectIdRouteImport.update({
@@ -364,6 +370,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
@@ -421,6 +428,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
@@ -467,6 +475,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects_/new': typeof ProjectsNewRoute
@@ -526,6 +535,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/projects'
+    | '/worklogs'
     | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects/new'
@@ -583,6 +593,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/projects'
+    | '/worklogs'
     | '/dashboard/$projectId'
     | '/projects/new'
     | '/p/$projectKey/assignment'
@@ -628,6 +639,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/projects'
+    | '/worklogs'
     | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects_/new'
@@ -686,6 +698,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
   ProjectsRoute: typeof ProjectsRoute
+  WorklogsRoute: typeof WorklogsRoute
   DashboardProjectIdRoute: typeof DashboardProjectIdRoute
   PProjectKeyRoute: typeof PProjectKeyRouteWithChildren
   ProjectsNewRoute: typeof ProjectsNewRoute
@@ -733,6 +746,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/worklogs': {
+      id: '/worklogs'
+      path: '/worklogs'
+      fullPath: '/worklogs'
+      preLoaderRoute: typeof WorklogsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard/$projectId': {
@@ -1300,6 +1320,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
   ProjectsRoute: ProjectsRoute,
+  WorklogsRoute: WorklogsRoute,
   DashboardProjectIdRoute: DashboardProjectIdRoute,
   PProjectKeyRoute: PProjectKeyRouteWithChildren,
   ProjectsNewRoute: ProjectsNewRoute,

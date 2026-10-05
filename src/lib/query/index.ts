@@ -209,3 +209,6 @@ export {
   useTraceRelationCandidates,
   useTraceObjectTitle,
 } from './hooks/useTraceRelations';
+
+
+export * from './hooks/useWorkLogs';

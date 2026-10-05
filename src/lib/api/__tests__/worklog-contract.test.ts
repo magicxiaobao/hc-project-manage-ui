@@ -51,6 +51,9 @@ function pathAndMethod(path: string, method: 'GET' | 'POST') {
 
 function request(path: string, method: 'GET' | 'POST', body?: unknown) {
   const sent = pathAndMethod(path, method);
+  const headers = new Headers(sent.init?.headers);
+  expect(headers.get('token')).toBe('collab-token');
+  expect(headers.has('Authorization')).toBe(false);
   if (body === undefined) expect(sent.init?.body).toBeUndefined();
   else {
     expect(new Headers(sent.init?.headers).get('Content-Type')).toBe('application/json');
