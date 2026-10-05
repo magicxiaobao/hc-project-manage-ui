@@ -8,6 +8,7 @@
  */
 export { createQueryClient, isRetryableQueryError } from './client';
 export * from './hooks/useDashboards';
+export * from './hooks/useProjectStats';
 export * from './hooks/useDashboardWidgets';
 export { clearQueryCache, setQueryCacheClearer } from './session';
 export { queryKeys } from './keys';

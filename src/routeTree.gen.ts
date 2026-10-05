@@ -15,6 +15,7 @@ import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as DashboardProjectIdRouteImport } from './routes/dashboard/$projectId'
 import { Route as PProjectKeyRouteImport } from './routes/p/$projectKey'
 import { Route as ProjectsNewRouteImport } from './routes/projects_.new'
 import { Route as PProjectKeyIndexRouteImport } from './routes/p/$projectKey/index'
@@ -92,6 +93,11 @@ const MeRoute = MeRouteImport.update({
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardProjectIdRoute = DashboardProjectIdRouteImport.update({
+  id: '/dashboard/$projectId',
+  path: '/dashboard/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PProjectKeyRoute = PProjectKeyRouteImport.update({
@@ -358,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
@@ -414,6 +421,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
@@ -459,6 +467,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects_/new': typeof ProjectsNewRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
@@ -517,6 +526,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/projects'
+    | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects/new'
     | '/p/$projectKey/assignment'
@@ -573,6 +583,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/projects'
+    | '/dashboard/$projectId'
     | '/projects/new'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
@@ -617,6 +628,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/projects'
+    | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects_/new'
     | '/p/$projectKey/assignment'
@@ -674,6 +686,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
   ProjectsRoute: typeof ProjectsRoute
+  DashboardProjectIdRoute: typeof DashboardProjectIdRoute
   PProjectKeyRoute: typeof PProjectKeyRouteWithChildren
   ProjectsNewRoute: typeof ProjectsNewRoute
 }
@@ -720,6 +733,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/$projectId': {
+      id: '/dashboard/$projectId'
+      path: '/dashboard/$projectId'
+      fullPath: '/dashboard/$projectId'
+      preLoaderRoute: typeof DashboardProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p/$projectKey': {
@@ -1280,6 +1300,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
   ProjectsRoute: ProjectsRoute,
+  DashboardProjectIdRoute: DashboardProjectIdRoute,
   PProjectKeyRoute: PProjectKeyRouteWithChildren,
   ProjectsNewRoute: ProjectsNewRoute,
 }
