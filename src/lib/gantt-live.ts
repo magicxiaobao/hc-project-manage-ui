@@ -265,11 +265,15 @@ export function buildGanttRows(tasks: GanttTask[]): GanttRow[] {
     visiting.add(task.id);
     let start = task.startDate;
     let end = task.endDate;
-    for (const child of children.get(task.id) ?? []) {
-      const sub = spanOf(child, visiting);
-      if (!sub) continue;
-      if (!start || sub.start < start) start = sub.start;
-      if (!end || sub.end > end) end = sub.end;
+    // 自身有完整计划日期 → 优先用自身日期渲染，不再被子任务跨度覆盖
+    // （按 estimated 日期渲染 / 自身日期优先口径）
+    if (!(start && end)) {
+      for (const child of children.get(task.id) ?? []) {
+        const sub = spanOf(child, visiting);
+        if (!sub) continue;
+        if (!start || sub.start < start) start = sub.start;
+        if (!end || sub.end > end) end = sub.end;
+      }
     }
     visiting.delete(task.id);
     return start && end ? { start, end } : null;
@@ -300,6 +304,16 @@ export function buildGanttRows(tasks: GanttTask[]): GanttRow[] {
 /** 未排期的任务（无 start/end，图表画不出来，调用方另行提示） */
 export function findUnscheduledTasks(tasks: GanttTask[]): GanttTask[] {
   return tasks.filter((task) => !task.startDate || !task.endDate);
+}
+
+/**
+ * 终态进度锁定（后端 Task.isProgressLocked() 口径）：COMPLETED / CANCELLED
+ * 任务的 progress 变更会 400 且整批原子回滚，前端直接锁住进度入口
+ * （拖柄、面板进度输入），只允许改期。
+ * wire 的 status 为 TaskStatusEnum 的 @JsonValue（"COMPLETED"/"CANCELLED"）。
+ */
+export function isProgressLocked(status: string | null | undefined): boolean {
+  return status === "COMPLETED" || status === "CANCELLED";
 }
 
 // ---------------------------------------------------------------- 日期几何

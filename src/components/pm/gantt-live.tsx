@@ -17,7 +17,7 @@
  * gantt 首次失败（data === undefined）才走全页错误态；后台重取失败保留
  * 图表 + 顶部错误横幅 + 重试；里程碑/关键路径失败只出横幅，不影响主图。
  */
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Button, Label, Spinner } from "@heroui/react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import {
   FieldError,
   GanttSkeleton,
   PageHeading,
+  RequiredMark,
   useUnsavedChangesGuard,
 } from "@/components/biz";
 import { MilestoneDialog } from "@/components/pm/milestone-dialog";
@@ -36,6 +37,7 @@ import {
   dayNumber,
   findUnscheduledTasks,
   instantToDateOnly,
+  isProgressLocked,
   isValidDateOnly,
   isoFromDay,
   milestoneStatusLabel,
@@ -102,6 +104,18 @@ function GanttLiveInner({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [milestoneOpen, setMilestoneOpen] = useState(false);
   const [milestoneEdit, setMilestoneEdit] = useState<MilestoneResponse | null>(null);
+
+  // 选中任务面板的脏态上报到这里：切换/取消选中任务（= 卸载脏面板）
+  // 必须经过这里的 dirty guard，否则面板自己的守卫随卸载一起消失，
+  // 形同虚设
+  const [panelDirty, setPanelDirty] = useState(false);
+  const selectionGuard = useUnsavedChangesGuard(panelDirty);
+  const reportPanelDirty = useCallback((dirty: boolean) => setPanelDirty(dirty), []);
+  const requestSelectTask = (taskId: number) => {
+    selectionGuard.guard(() =>
+      setSelectedId((current) => (current === taskId ? null : taskId)),
+    );
+  };
 
   // 拖拽草稿：id → 差量。state 驱动渲染，ref 供 pointerup 闭包读最新值。
   const [draft, setDraftState] = useState<Record<number, TaskDraft>>({});
@@ -184,7 +198,9 @@ function GanttLiveInner({
   const today = todayNumber();
   const origin = rangeDays.length > 0 ? Math.min(...rangeDays) : today;
   const finish = rangeDays.length > 0 ? Math.max(...rangeDays) : origin + 14;
-  const span = Math.max(finish - origin, 1);
+  // 条宽与依赖起点按 end+1（含结束日）计算，范围跨度也要含结束日，
+  // 否则条末端坐标会超过 100% 越界
+  const span = Math.max(finish - origin + 1, 1);
   const ticks = ticksFor(origin, finish, scale);
   const showToday = today >= origin && today <= finish;
   const weekends = weekendDays(origin, finish);
@@ -228,11 +244,14 @@ function GanttLiveInner({
       setDraft(() => ({}));
       return;
     }
-    // 成功前保留草稿（与服务端数据合并渲染）；失败回滚清空
+    // 成功前保留草稿（与服务端数据合并渲染）；成功后清空草稿并以失效重取的
+    // 服务端权威数据为准——草稿残留会导致旧值被后续拖拽载荷再次写回；
+    // 失败回滚清空
     batchMutation.mutate(
       { projectId, payload: { tasks: items } },
       {
         onSuccess: () => {
+          setDraft(() => ({}));
           toast.success(`已保存 ${items.length} 个任务的计划调整`);
         },
         onError: (error) => {
@@ -249,6 +268,8 @@ function GanttLiveInner({
     event: ReactPointerEvent<HTMLElement>,
   ) => {
     if (row.summary || row.task.readonly || batchMutation.isPending) return;
+    // 终态任务进度只读（后端 COMPLETED/CANCELLED 口径）：禁止拖进度，改期仍允许
+    if (edge === "progress" && isProgressLocked(row.task.status)) return;
     event.preventDefault();
     event.stopPropagation();
     const taskId = row.task.id;
@@ -430,7 +451,9 @@ function GanttLiveInner({
         <span className="type-caption">灰条 只读（依赖上下文）</span>
       </div>
 
-      {visibleRows.length === 0 ? (
+      {/* 无可见任务行但有里程碑时仍渲染图表：里程碑泳道是时间线的一部分，
+          里程碑日期也参与了范围计算 */}
+      {visibleRows.length === 0 && milestoneDates.length === 0 ? (
         <EmptyHint>还没有可画到时间线上的任务（需要计划开始/结束日期）。</EmptyHint>
       ) : (
         <div ref={scroller} className="overflow-x-auto rounded-sm border border-border bg-surface">
@@ -502,6 +525,8 @@ function GanttLiveInner({
                 const isCritical = showCritical && criticalIds.has(row.task.id);
                 const isSelected = selectedId === row.task.id;
                 const draggable = !row.summary && !row.task.readonly && !batchMutation.isPending;
+                // 终态任务的进度拖柄禁用（进度只读，改期仍可拖）
+                const progressDraggable = draggable && !isProgressLocked(row.task.status);
                 return (
                   <div
                     key={row.task.id}
@@ -532,7 +557,7 @@ function GanttLiveInner({
                         type="button"
                         className="min-w-0 flex-1 truncate text-left"
                         title={`${row.task.text}（#${row.task.id}）`}
-                        onClick={() => setSelectedId((current) => (current === row.task.id ? null : row.task.id))}
+                        onClick={() => requestSelectTask(row.task.id)}
                       >
                         <span className={cn("type-body block truncate", row.summary && "font-medium")}>
                           #{row.task.id} {row.task.text}
@@ -550,7 +575,7 @@ function GanttLiveInner({
                     <span className="relative">
                       <span
                         data-gantt-bar={draggable ? true : undefined}
-                        title={draggable ? `拖动调整 ${row.task.text} 的计划日期；拖左右缘改工期，拖末端小块改进度` : undefined}
+                        title={draggable ? (progressDraggable ? `拖动调整 ${row.task.text} 的计划日期；拖左右缘改工期，拖末端小块改进度` : `拖动调整 ${row.task.text} 的计划日期；拖左右缘改工期（已完成/已取消任务进度只读）`) : undefined}
                         className={cn(
                           "absolute top-1/2 h-6 -translate-y-1/2",
                           row.summary ? "h-3 opacity-80" : "",
@@ -575,15 +600,17 @@ function GanttLiveInner({
                               className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize"
                               onPointerDown={(event) => dragBar(row, "end", event)}
                             />
-                            {/* 进度拖柄：进度填充末端的小三角 */}
-                            <span
-                              className="absolute top-0 bottom-0 z-10 w-3 cursor-ew-resize"
-                              style={{ left: `calc(${progress}% - 6px)` }}
-                              title="拖动调整进度"
-                              onPointerDown={(event) => dragBar(row, "progress", event)}
-                            >
-                              <span className="absolute top-1/2 left-1/2 h-3 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm bg-fg" />
-                            </span>
+                            {/* 进度拖柄：进度填充末端的小三角（终态任务禁用） */}
+                            {progressDraggable ? (
+                              <span
+                                className="absolute top-0 bottom-0 z-10 w-3 cursor-ew-resize"
+                                style={{ left: `calc(${progress}% - 6px)` }}
+                                title="拖动调整进度"
+                                onPointerDown={(event) => dragBar(row, "progress", event)}
+                              >
+                                <span className="absolute top-1/2 left-1/2 h-3 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm bg-fg" />
+                              </span>
+                            ) : null}
                           </>
                         ) : null}
                       </span>
@@ -621,22 +648,20 @@ function GanttLiveInner({
       ) : null}
 
       {selectedTask ? (
-        <SelectedTaskPanel
-          key={selectedId}
-          projectKey={projectKey}
-          task={selectedTask}
-          batchPending={batchMutation.isPending}
-          onSubmit={(items) => {
-            batchMutation.mutate(
-              { projectId, payload: { tasks: items } },
-              {
-                onSuccess: () => toast.success("已保存计划调整"),
-                onError: (error) => toast.error(`保存失败：${toUserMessage(error)}`),
-              },
-            );
-          }}
-          onClose={() => setSelectedId(null)}
-        />
+        <>
+          {selectionGuard.dialog}
+          {selectionGuard.blocker}
+          <SelectedTaskPanel
+            key={selectedId}
+            projectId={projectId}
+            projectKey={projectKey}
+            task={selectedTask}
+            guard={selectionGuard.guard}
+            markClean={selectionGuard.markClean}
+            onDirtyChange={reportPanelDirty}
+            onClose={() => setSelectedId(null)}
+          />
+        </>
       ) : null}
 
       {milestoneOpen ? (
@@ -657,34 +682,62 @@ function GanttLiveInner({
 /**
  * 选中任务面板：计划日期/进度编辑（键盘可达的改期入口，与拖拽同一
  * batchUpdate 通道）+ 前置/后置依赖明细。
- * 内联表单接 dirty 守卫：blocker 挂在面板根部（非弹窗，无 AppModal 嵌套问题）。
+ * 脏拦截由父级的 selectionGuard 统一接管：切换/取消选中任务（= 卸载面板）
+ * 也要先过确认，面板自己的守卫随卸载消失、覆盖不到这里。dirty 判定基线是
+ * 挂载瞬间的冻结快照（board-form-dialog 的 initialRef 约定），不是实时 task
+ * prop——打开面板期间后台重取带来的 prop 变化不能翻脏，否则会把刚保存的
+ * 拖拽值写回旧值。
  */
 function SelectedTaskPanel({
+  projectId,
   projectKey,
   task,
-  batchPending,
-  onSubmit,
+  guard,
+  markClean,
+  onDirtyChange,
   onClose,
 }: {
+  projectId: number;
   projectKey: string;
   task: GanttTask;
-  batchPending: boolean;
-  onSubmit: (items: { id: number; start_date?: string; end_date?: string; progress?: number }[]) => void;
+  guard: (action: () => void) => void;
+  markClean: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onClose: () => void;
 }) {
   const depsQuery = useTaskGanttDependencies({ taskId: task.id });
   const deps = useMemo(() => normalizeTaskDependencies(depsQuery.data), [depsQuery.data]);
 
-  const [startDate, setStartDate] = useState(task.startDate ?? "");
-  const [endDate, setEndDate] = useState(task.endDate ?? "");
-  const [progress, setProgress] = useState(String(task.progress ?? 0));
+  // 挂载瞬间的冻结基线（只捕获一次）：dirty = 当前值偏离该快照
+  const initialRef = useRef({
+    startDate: task.startDate ?? "",
+    endDate: task.endDate ?? "",
+    progress: String(task.progress ?? 0),
+  });
+  const initial = initialRef.current;
+
+  const [startDate, setStartDate] = useState(initial.startDate);
+  const [endDate, setEndDate] = useState(initial.endDate);
+  const [progress, setProgress] = useState(initial.progress);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
+
+  const saveMutation = useBatchUpdateGanttTasks();
+  const batchPending = saveMutation.isPending;
+  // 终态任务进度只读（后端 COMPLETED/CANCELLED 口径）：进度输入禁用，
+  // 不参与脏判断与提交载荷
+  const progressLocked = isProgressLocked(task.status);
 
   const isDirty =
-    startDate !== (task.startDate ?? "") ||
-    endDate !== (task.endDate ?? "") ||
-    progress !== String(task.progress ?? 0);
-  const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(isDirty);
+    startDate !== initial.startDate ||
+    endDate !== initial.endDate ||
+    (!progressLocked && progress !== initial.progress);
+
+  // 脏态上报给父级守卫；卸载时清零，避免残留脏标记拦截后续切换
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+    return () => onDirtyChange?.(false);
+  }, [isDirty, onDirtyChange]);
 
   const close = () => guard(onClose);
 
@@ -697,6 +750,7 @@ function SelectedTaskPanel({
     });
 
   const handleSave = () => {
+    setSubmitError("");
     const next: Record<string, string> = {};
     if (startDate && !isValidDateOnly(startDate)) next.startDate = "开始日期格式无效（YYYY-MM-DD）";
     if (endDate && !isValidDateOnly(endDate)) next.endDate = "结束日期格式无效（YYYY-MM-DD）";
@@ -713,16 +767,16 @@ function SelectedTaskPanel({
       id: task.id,
     };
     let changed = false;
-    if (startDate !== (task.startDate ?? "") && isValidDateOnly(startDate)) {
+    if (startDate !== initial.startDate && isValidDateOnly(startDate)) {
       item.start_date = startDate;
       changed = true;
     }
-    if (endDate !== (task.endDate ?? "") && isValidDateOnly(endDate)) {
+    if (endDate !== initial.endDate && isValidDateOnly(endDate)) {
       item.end_date = endDate;
       changed = true;
     }
     const rounded = Math.round(progressNum);
-    if (rounded !== (task.progress ?? 0)) {
+    if (!progressLocked && rounded !== Number(initial.progress)) {
       item.progress = rounded;
       changed = true;
     }
@@ -736,18 +790,26 @@ function SelectedTaskPanel({
       item.start_date = item.end_date;
       item.end_date = swap;
     }
-    // 提交即授权离开：面板关闭，不拦截
-    markClean();
-    onClose();
-    onSubmit([item]);
+    // 成功才放行并关闭；失败时保留草稿与面板，只展示错误（不 markClean、不关闭）
+    saveMutation.mutate(
+      { projectId, payload: { tasks: [item] } },
+      {
+        onSuccess: () => {
+          markClean();
+          toast.success("已保存计划调整");
+          onClose();
+        },
+        onError: (error) => {
+          setSubmitError(toUserMessage(error));
+        },
+      },
+    );
   };
 
   const inputClass = "type-body h-9 w-full rounded-sm border border-border bg-surface px-2";
 
   return (
     <section aria-label={`任务 #${task.id} ${task.text}`} className="rounded-sm border border-border bg-surface p-4">
-      {blocker}
-      {dialog}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="type-section">
           #{task.id} {task.text}
@@ -766,6 +828,12 @@ function SelectedTaskPanel({
           </button>
         </div>
       </div>
+
+      {submitError ? (
+        <p role="alert" className="type-caption mb-3 text-danger">
+          保存失败：{submitError}
+        </p>
+      ) : null}
 
       {task.readonly ? (
         <p className="type-caption mb-3 text-default-500">
@@ -804,7 +872,10 @@ function SelectedTaskPanel({
             <FieldError message={errors.endDate} />
           </div>
           <div>
-            <Label className="mb-1 block">进度（0–100）</Label>
+            <Label className="mb-1 block">
+              进度（0–100）
+              <RequiredMark />
+            </Label>
             <input
               type="number"
               aria-label="进度百分比"
@@ -812,12 +883,17 @@ function SelectedTaskPanel({
               value={progress}
               min={0}
               max={100}
-              disabled={batchPending}
+              disabled={batchPending || progressLocked}
               onChange={(event) => {
                 setProgress(event.target.value);
                 clearError("progress");
               }}
             />
+            {progressLocked ? (
+              <p className="type-caption mt-1 text-default-400">
+                已完成/已取消任务进度只读（后端状态机锁定），只能改期。
+              </p>
+            ) : null}
             <FieldError message={errors.progress} />
           </div>
           <div className="flex items-end gap-2">

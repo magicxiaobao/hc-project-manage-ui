@@ -18,6 +18,7 @@ import {
   diffMilestoneFields,
   findUnscheduledTasks,
   instantToDateOnly,
+  isProgressLocked,
   isValidDateOnly,
   isoFromDay,
   milestoneStatusLabel,
@@ -180,6 +181,23 @@ describe("buildGanttRows", () => {
     expect(rows[0]).toMatchObject({ start: "2026-10-01", end: "2026-10-10" });
   });
 
+  it("父有自身日期且子跨度更大时仍用自身日期（不被子跨度覆盖）", () => {
+    const rows = buildGanttRows([
+      makeTask({ id: 1, text: "父", startDate: "2026-10-01", endDate: "2026-10-10" }),
+      makeTask({ id: 2, text: "子", parent: 1, startDate: "2026-10-03", endDate: "2026-10-15" }),
+    ]);
+    expect(rows[0]).toMatchObject({ start: "2026-10-01", end: "2026-10-10" });
+    expect(rows[1]).toMatchObject({ start: "2026-10-03", end: "2026-10-15" });
+  });
+
+  it("父无日期时仍取子任务跨度汇总", () => {
+    const rows = buildGanttRows([
+      makeTask({ id: 1, text: "父", startDate: null, endDate: null }),
+      makeTask({ id: 2, text: "子", parent: 1, startDate: "2026-10-03", endDate: "2026-10-05" }),
+    ]);
+    expect(rows[0]).toMatchObject({ start: "2026-10-03", end: "2026-10-05", summary: true });
+  });
+
   it("无日期任务不进图表", () => {
     const tasks = [makeTask({ id: 9, startDate: null, endDate: null })];
     expect(buildGanttRows(tasks)).toHaveLength(0);
@@ -193,6 +211,17 @@ describe("buildGanttRows", () => {
     ]);
     // 互为父子时都不是对方的根子节点，但不应挂起；至少不抛异常
     expect(Array.isArray(rows)).toBe(true);
+  });
+});
+
+describe("isProgressLocked（后端 Task.isProgressLocked() 口径）", () => {
+  it("COMPLETED/CANCELLED 锁定进度，其它状态与空值不锁定", () => {
+    expect(isProgressLocked("COMPLETED")).toBe(true);
+    expect(isProgressLocked("CANCELLED")).toBe(true);
+    expect(isProgressLocked("IN_PROGRESS")).toBe(false);
+    expect(isProgressLocked("TODO")).toBe(false);
+    expect(isProgressLocked(null)).toBe(false);
+    expect(isProgressLocked(undefined)).toBe(false);
   });
 });
 

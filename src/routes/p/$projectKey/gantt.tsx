@@ -34,11 +34,35 @@ function LiveGantt({ projectKey }: { projectKey: string }) {
   const resolution = useProjectIdByKey(projectKey);
   // 上次解析成功的项目 id：后台重取失败（isError）时保留已挂载的
   // 图表与其弹窗子树，脏表单不被卸载（沿用 backlog 路由的 P3 经验）。
-  const lastGoodProjectId = useRef<number | null>(null);
+  // ref 按 projectKey 归属：切换项目后旧 key 的 lastGood 不再复用。
+  const lastGood = useRef<{ key: string; id: number } | null>(null);
   if (typeof resolution.data === "number") {
-    lastGoodProjectId.current = resolution.data;
+    lastGood.current = { key: projectKey, id: resolution.data };
   }
-  const projectId = typeof resolution.data === "number" ? resolution.data : lastGoodProjectId.current;
+  const projectId =
+    typeof resolution.data === "number"
+      ? resolution.data
+      : lastGood.current?.key === projectKey
+        ? lastGood.current.id
+        : null;
+
+  // 解析成功但返回 null = 项目不存在：必须显式展示错误态，
+  // 不能回退到旧项目的甘特图（否则页面显示的不是当前 key 的项目）
+  if (!resolution.isPending && !resolution.isError && resolution.data == null) {
+    return (
+      <div className="flex flex-col items-start gap-3 px-4 py-8">
+        <p className="type-body text-danger">
+          {`项目不存在（${projectKey}）。请检查项目标识是否正确，或确认你有该项目的访问权限。`}
+        </p>
+        <Button
+          variant="ghost"
+          onPress={() => window.history.back()}
+        >
+          返回上一页
+        </Button>
+      </div>
+    );
+  }
 
   if (resolution.isPending && projectId == null) {
     return (
