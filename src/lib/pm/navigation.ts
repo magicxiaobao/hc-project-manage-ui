@@ -121,7 +121,7 @@ export type ItemOrigin = {
   browseIds?: string[];
 };
 
-declare module "@tanstack/history" {
+declare module "@tanstack/react-router" {
   interface HistoryState {
     pmItemOrigin?: ItemOrigin;
   }

@@ -14,6 +14,8 @@ export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey,
 export type { ProjectListParams } from './hooks/useProjects';
 export { useRequirementList, useRequirementOptions } from './hooks/useRequirements';
 export type { RequirementListParams, RequirementOptions } from './hooks/useRequirements';
+export { useDefectList, useDefectStatusOptions, useDefectBoard, useDefectStatistics, useCreateDefect, useDefectDetail, useUpdateDefect, useUpdateDefectStatus, useChangeDefectSeverity, buildChangeDefectSeverityOptions, DEFECT_TRANSITIONS_BY_STATUS, defectTransitionTargets, defectNeedsReason, defectNeedsActor, defectTransitionLabel } from './hooks/useDefects';
+export type { DefectListParams, DefectActorField } from './hooks/useDefects';
 export { useTaskList } from './hooks/useTasks';
 export type { TaskListParams } from './hooks/useTasks';
 export {
@@ -46,3 +48,82 @@ export {
   transitionFieldRequirements,
 } from './hooks/useRequirements';
 export type { TraceMatrixParams, TransitionFieldRequirements } from './hooks/useRequirements';
+export {
+  normalizeTestCaseListParams,
+  useArchiveTestCase,
+  useCreateTestCase,
+  useDuplicateTestCase,
+  useTestCaseDetail,
+  useTestCaseList,
+  useUpdateTestCase,
+} from './hooks/useTestCases';
+export type { TestCaseListParams } from './hooks/useTestCases';
+export {
+  normalizeTestSuiteListParams,
+  useCreateTestSuite,
+  useInvalidTestSuite,
+  useTestSuiteDetail,
+  useTestSuiteList,
+  useUpdateTestSuite,
+  useValidTestSuite,
+} from './hooks/useTestSuites';
+export type { TestSuiteListParams } from './hooks/useTestSuites';
+export {
+  normalizeTestRunListParams,
+  useCancelTestRun,
+  useCompleteExecution,
+  useCompleteTestRun,
+  useCreateAdHocRun,
+  useCreateDefectFromExecution,
+  useCreateFullRegression,
+  useCreateTargetedRetest,
+  useLinkExistingDefect,
+  useRetryExecution,
+  useStartExecution,
+  useStartTestRun,
+  useTestRunDetail,
+  useTestRunList,
+  useTestRunReport,
+} from './hooks/useTestRuns';
+export type { TestRunListParams } from './hooks/useTestRuns';
+export {
+  useVersionList,
+  useVersionListAll,
+  useVersionDetail,
+  useCreateVersion,
+  useUpdateVersion,
+  useTransitionVersion,
+  normalizeVersionListParams,
+  versionTransitionEvents,
+  versionEventRequiresReason,
+  buildTransitionVersionOptions,
+} from './hooks/useVersions';
+export type { VersionListParams, VersionListAllParams } from './hooks/useVersions';
+export {
+  useCreateReleaseEnvironment,
+  useDisableReleaseEnvironment,
+  useReleaseEnvironmentList,
+  useUpdateReleaseEnvironment,
+} from './hooks/useReleaseEnvironments';
+export type { ReleaseEnvironmentListParams } from './hooks/useReleaseEnvironments';
+export {
+  normalizeReleaseListParams,
+  useApproveRelease,
+  useCancelRelease,
+  useCopyReleaseAsDraft,
+  useCreateReleaseDraft,
+  useDeleteReleaseDraft,
+  usePreviewReleaseGates,
+  useRecordFailed,
+  useRecordReleased,
+  useRejectRelease,
+  useReleaseDetail,
+  useReleaseList,
+  useReleaseListAll,
+  useRevokeReleaseWaiver,
+  useRollbackReleaseAsDraft,
+  useSubmitRelease,
+  useUpdateReleaseDraft,
+  useWaiveReleaseGate,
+} from './hooks/useReleases';
+export type { ReleaseListParams, ReleaseListAllParams } from './hooks/useReleases';

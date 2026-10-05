@@ -1,0 +1,7 @@
+{
+  "command": "pnpm exec node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts",
+  "started_at": "2026-10-05T04:48:51.262575+00:00",
+  "ended_at": "2026-10-05T04:48:53.091748+00:00",
+  "exit_code": 0,
+  "head_after": "f48411cb1ca05be1c9e904ad5c5471c5727e663c"
+}

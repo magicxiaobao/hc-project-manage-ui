@@ -9,6 +9,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { OptionSelect, PageHeading } from "@/components/biz";
+import { FieldError, RequiredMark, useUnsavedChangesGuard } from "@/components/biz";
 import { AppShell } from "@/components/pm/shell";
 import { DemoCreateProject } from "@/components/pm/demo-create-project";
 import { useAuthStore } from "@/lib/api/auth-store";
@@ -81,20 +82,31 @@ function LiveCreateProject() {
   // 但本组件的 useState 初始化器只在挂载时读了一次 A 的 userId，表单会残留 A 的
   // 经理 ID 并被 B 静默建出项目。跟踪初始化时的账号：账号变化且用户未手动改过
   // 该字段时，跟随新账号重置默认值；用户已手动编辑则保留其输入。
-  const initUserIdRef = useRef(
+  // dirty-check 要求基线更新必须触发重渲染（P2 finding）：若用 ref 持有基线，
+  // effect 里更新 ref 不会重渲染，dirty 会停留在旧基线上的过期值直到下一次
+  // 无关渲染——改用 state 持有基线。
+  const [initManagerId, setInitManagerId] = useState(
     user && isCanonicalUserId(user.userId) ? user.userId : "",
   );
   const defaultManagerId = user && isCanonicalUserId(user.userId) ? user.userId : "";
   useEffect(() => {
-    if (defaultManagerId !== initUserIdRef.current) {
-      if (managerIdText === initUserIdRef.current) setManagerIdText(defaultManagerId);
-      initUserIdRef.current = defaultManagerId;
+    if (defaultManagerId !== initManagerId) {
+      if (managerIdText === initManagerId) setManagerIdText(defaultManagerId);
+      setInitManagerId(defaultManagerId);
     }
-  }, [defaultManagerId, managerIdText]);
+  }, [defaultManagerId, initManagerId, managerIdText]);
   const [description, setDescription] = useState("");
   const [keyExists, setKeyExists] = useState<boolean | null>(null);
   const [checkingKey, setCheckingKey] = useState(false);
-  const [formError, setFormError] = useState("");
+  // 字段级校验错误：提交时按字段收集，展示在对应输入下方；编辑对应字段时清除
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const clearFieldError = (field: string) =>
+    setFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
   // Codex review 4175472567：提交按钮只在 mutation 开始后才禁用，唯一性预检
   // 在途时表单仍可编辑/重复提交——两个 handler 可能各自通过检查、建出两个项目。
   // submitting 覆盖“预检 + 创建”整个异步操作，锁住期间禁止再次提交。
@@ -106,6 +118,19 @@ function LiveCreateProject() {
   // Codex review 4175265689：可用性检查是异步的，过期的响应不能覆盖新输入
   // 的状态。每次检查递增代际，只有最新一次请求的响应才允许写回。
   const keyCheckGeneration = useRef(0);
+
+  // dirty check：任一字段偏离初始值即视为脏。managerIdText 的初始值是
+  // initManagerId（"用户未手动改过时的默认值"，跨账号跟随逻辑更新它），
+  // 未改过即不脏。
+  const isDirty =
+    projectName !== "" ||
+    projectKey !== "" ||
+    description !== "" ||
+    startIso !== "" ||
+    endIso !== "" ||
+    projectType !== PROJECT_CREATE_TYPES[0] ||
+    managerIdText !== initManagerId;
+  const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(isDirty);
 
   const typeOptions =
     enums && enums.projectTypes.length > 0
@@ -134,32 +159,23 @@ function LiveCreateProject() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const nextErrors: Record<string, string> = {};
     const name = projectName.trim();
     const key = projectKey.trim().toUpperCase();
-    if (!name) {
-      setFormError("请填写项目名称");
-      return;
-    }
-    if (!key) {
-      setFormError("请填写项目键");
-      return;
-    }
+    if (!name) nextErrors.projectName = "请填写项目名称";
+    if (!key) nextErrors.projectKey = "请填写项目键";
     // 十进制严格解析：拒绝 1e3/0x10 等 JS 数字语法与超安全整数舍入
     const managerId = parseRequiredPositiveInt(managerIdText);
-    if (managerId === null) {
-      setFormError("项目经理用户 ID 必须为正整数");
-      return;
-    }
-    if (startIso && endIso && startIso > endIso) {
-      setFormError("开始日期不能晚于结束日期");
-      return;
-    }
-    setFormError("");
+    if (managerId === null) nextErrors.managerIdText = "项目经理用户 ID 必须为正整数";
+    if (startIso && endIso && startIso > endIso) nextErrors.dates = "开始日期不能晚于结束日期";
+    setFieldErrors(nextErrors);
+    // managerId === null 时必已记入 nextErrors；显式写出以便 TS 收窄
+    if (Object.keys(nextErrors).length > 0 || managerId === null) return;
     setSubmitting(true);
     try {
       // 提交前再确认一次唯一性，堵住失焦校验与提交之间的竞态
       if (await projectApi.checkKeyExists(key)) {
-        setFormError(`项目键 ${key} 已存在，请换一个`);
+        setFieldErrors({ projectKey: `项目键 ${key} 已存在，请换一个` });
         return;
       }
       const payload: ProjectCreatePayload = {
@@ -173,6 +189,8 @@ function LiveCreateProject() {
       };
       await createProject.mutateAsync(payload);
       toast.success("已创建项目");
+      // 成功跳转是程序化离开：先 markClean 放行守卫（state 回落有延迟，ref 级别放行）
+      markClean();
       void navigate({ to: "/projects" });
     } catch (error) {
       toast.error(toUserMessage(error, "创建项目失败"));
@@ -183,6 +201,8 @@ function LiveCreateProject() {
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 p-4 md:p-6">
+      {blocker}
+      {dialog}
       <PageHeading
         title="新建项目"
         hint="直接创建到后端。项目键会用在事项编号上，创建后不能改。成员可稍后在项目设置里调整。"
@@ -197,6 +217,7 @@ function LiveCreateProject() {
           onChange={(value) => {
             setProjectKey(value.toUpperCase());
             setKeyExists(null);
+            clearFieldError("projectKey");
             // Codex review 4175337057：输入变化即宣告在途检查过期——代际递增并
             // 清除 checkingKey，否则键 A 的待定响应会在用户改成键 B 后写回 B 的状态。
             keyCheckGeneration.current += 1;
@@ -204,18 +225,31 @@ function LiveCreateProject() {
           }}
           onBlur={() => void checkKeyUniqueness(projectKey)}
         >
-          <Label>项目键</Label>
+          <Label>
+            项目键<RequiredMark />
+          </Label>
           <Input placeholder="OPS2" />
         </TextField>
+        <FieldError message={fieldErrors.projectKey} />
         {checkingKey ? (
           <p className="text-xs text-faint">正在检查项目键是否可用…</p>
         ) : keyExists === true ? (
           <p className="text-xs text-danger">项目键已存在，请换一个</p>
         ) : null}
-        <TextField value={projectName} onChange={setProjectName} isDisabled={formDisabled}>
-          <Label>项目名称</Label>
+        <TextField
+          value={projectName}
+          onChange={(value) => {
+            setProjectName(value);
+            clearFieldError("projectName");
+          }}
+          isDisabled={formDisabled}
+        >
+          <Label>
+            项目名称<RequiredMark />
+          </Label>
           <Input placeholder="值班改进二期" />
         </TextField>
+        <FieldError message={fieldErrors.projectName} />
         <OptionSelect
           label="项目类型"
           value={projectType}
@@ -224,18 +258,48 @@ function LiveCreateProject() {
           isDisabled={formDisabled}
         />
         <div className="grid gap-3 sm:grid-cols-2">
-          <IsoDateInput label="开始日期" value={startIso} onChange={setStartIso} disabled={formDisabled} />
-          <IsoDateInput label="结束日期" value={endIso} onChange={setEndIso} disabled={formDisabled} />
+          <IsoDateInput
+            label="开始日期"
+            value={startIso}
+            onChange={(value) => {
+              setStartIso(value);
+              clearFieldError("dates");
+            }}
+            disabled={formDisabled}
+          />
+          <IsoDateInput
+            label="结束日期"
+            value={endIso}
+            onChange={(value) => {
+              setEndIso(value);
+              clearFieldError("dates");
+            }}
+            disabled={formDisabled}
+          />
         </div>
-        <TextField value={managerIdText} onChange={setManagerIdText} isDisabled={formDisabled}>
-          <Label>项目经理用户 ID</Label>
+        <FieldError message={fieldErrors.dates} />
+        <TextField
+          value={managerIdText}
+          onChange={(value) => {
+            setManagerIdText(value);
+            clearFieldError("managerIdText");
+          }}
+          isDisabled={formDisabled}
+        >
+          <Label>
+            项目经理用户 ID<RequiredMark />
+          </Label>
           <Input inputMode="numeric" placeholder="填写后端用户 ID" />
         </TextField>
-        <TextField value={description} onChange={setDescription} isDisabled={formDisabled}>
+        <FieldError message={fieldErrors.managerIdText} />
+        <TextField
+          value={description}
+          onChange={setDescription}
+          isDisabled={formDisabled}
+        >
           <Label>项目描述</Label>
           <TextArea placeholder="这个项目要解决什么" />
         </TextField>
-        {formError ? <p className="text-xs text-danger">{formError}</p> : null}
         <div className="flex gap-2">
           <Button
             type="submit"
@@ -244,7 +308,11 @@ function LiveCreateProject() {
           >
             {submitting || createProject.isPending ? "创建中…" : "创建"}
           </Button>
-          <Button type="button" variant="outline" onPress={() => void navigate({ to: "/projects" })}>
+          <Button
+            type="button"
+            variant="outline"
+            onPress={() => guard(() => void navigate({ to: "/projects" }))}
+          >
             取消
           </Button>
         </div>

@@ -1,0 +1,8 @@
+{
+  "command": "pnpm exec node --test --test-isolation=none --test-reporter=tap scripts/brand-check.test.mjs scripts/check-auth-invariant.test.mjs scripts/with-app-env.test.mjs scripts/write-atomic.test.mjs",
+  "purpose": "diagnostic only; altered worker isolation, not replacement gate",
+  "started_at": "2026-10-05T04:49:32.910591+00:00",
+  "ended_at": "2026-10-05T04:49:35.558409+00:00",
+  "exit_code": 1,
+  "head_after": "f48411cb1ca05be1c9e904ad5c5471c5727e663c"
+}

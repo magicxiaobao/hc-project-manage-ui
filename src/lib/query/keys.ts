@@ -7,7 +7,7 @@
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
-function domainKeys(domain: 'project' | 'requirement' | 'task') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -23,6 +23,8 @@ function domainKeys(domain: 'project' | 'requirement' | 'task') {
     trace: (id: number | string) => [...all, 'trace', id] as const,
     /** 需求影响范围：GET /requirement/v1/trace/{id}/impact */
     impact: (id: number | string) => [...all, 'impact', id] as const,
+    /** 测试报告：GET /testRun/v1/{id}/report */
+    report: (id: number | string) => [...all, 'report', id] as const,
     /** 追溯矩阵分页：params 为矩阵查询参数对象 */
     matrix: (params: Record<string, unknown> = {}) => [...all, 'matrix', params] as const,
     /** 子需求列表：GET /requirement/v1/{id}/children */
@@ -31,8 +33,14 @@ function domainKeys(domain: 'project' | 'requirement' | 'task') {
     hierarchy: (projectId: number | null = null) => [...all, 'hierarchy', projectId] as const,
     /** 评论查询：params 为分页参数对象（如 { page, pageSize }） */
     comments: (id: number | string, params: Record<string, unknown> = {}) => [...all, 'comments', id, params] as const,
+    /** 发布门禁实时预览：GET /release/v1/{id}/previewGates */
+    gates: (id: number | string) => [...all, 'gates', id] as const,
     /** 按业务 key（项目 key 等）解析 id 的查询 */
     byKey: (key: string) => [...all, 'byKey', key] as const,
+    /** 缺陷看板数据：GET /defect/v1/board?projectId= */
+    board: (projectId: number | null = null) => [...all, 'board', projectId] as const,
+    /** 缺陷统计：GET /defect/v1/statistics?projectId= */
+    statistics: (projectId: number | null = null) => [...all, 'statistics', projectId] as const,
     /** 枚举/选项查询 */
     enums: () => [...all, 'enums'] as const,
   };
@@ -42,4 +50,11 @@ export const queryKeys = {
   project: domainKeys('project'),
   requirement: domainKeys('requirement'),
   task: domainKeys('task'),
+  defect: domainKeys('defect'),
+  testCase: domainKeys('testCase'),
+  testSuite: domainKeys('testSuite'),
+  testRun: domainKeys('testRun'),
+  version: domainKeys('version'),
+  releaseEnvironment: domainKeys('releaseEnvironment'),
+  release: domainKeys('release'),
 };

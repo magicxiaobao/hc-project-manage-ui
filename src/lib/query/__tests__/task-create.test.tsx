@@ -84,56 +84,76 @@ describe('解析可选数字字段', () => {
 });
 
 describe('validateTaskCreateInput 表单校验', () => {
-  it('标题/类型/优先级缺失时给出对应错误', () => {
-    expect(validateTaskCreateInput(validInput({ title: '  ' }))).toBe('请填写任务标题');
-    expect(validateTaskCreateInput(validInput({ taskType: '' }))).toBe('请填写任务类型');
-    expect(validateTaskCreateInput(validInput({ priority: '' }))).toBe('请选择优先级');
-    expect(validateTaskCreateInput(validInput({ priority: 'URGENT' }))).toBe('请选择优先级');
+  it('标题/类型/优先级缺失时给出对应字段错误', () => {
+    expect(validateTaskCreateInput(validInput({ title: '  ' }))).toEqual([
+      { field: 'title', message: '请填写任务标题' },
+    ]);
+    expect(validateTaskCreateInput(validInput({ taskType: '' }))).toEqual([
+      { field: 'taskType', message: '请填写任务类型' },
+    ]);
+    expect(validateTaskCreateInput(validInput({ priority: '' }))).toEqual([
+      { field: 'priority', message: '请选择优先级' },
+    ]);
+    expect(validateTaskCreateInput(validInput({ priority: 'URGENT' }))).toEqual([
+      { field: 'priority', message: '请选择优先级' },
+    ]);
+  });
+
+  it('多字段同时非法时一次性返回全部字段错误', () => {
+    expect(
+      validateTaskCreateInput(validInput({ title: '  ', taskType: '', priority: 'URGENT' })),
+    ).toEqual([
+      { field: 'title', message: '请填写任务标题' },
+      { field: 'taskType', message: '请填写任务类型' },
+      { field: 'priority', message: '请选择优先级' },
+    ]);
   });
 
   it('id 类字段非法时阻断提交（校验规则与载荷解析一致）', () => {
-    expect(validateTaskCreateInput(validInput({ assigneeIdText: 'a1' }))).toBe(
-      '执行人用户 ID必须为正整数',
-    );
-    expect(validateTaskCreateInput(validInput({ parentIdText: 'x' }))).toBe('父任务 ID必须为正整数');
+    expect(validateTaskCreateInput(validInput({ assigneeIdText: 'a1' }))).toEqual([
+      { field: 'assigneeIdText', message: '执行人用户 ID必须为正整数' },
+    ]);
+    expect(validateTaskCreateInput(validInput({ parentIdText: 'x' }))).toEqual([
+      { field: 'parentIdText', message: '父任务 ID必须为正整数' },
+    ]);
     // Codex review 4175265685："0" / 超过安全整数范围的输入此前会通过校验，
     // 却在组装载荷时被静默丢弃。现在校验直接阻断。
-    expect(validateTaskCreateInput(validInput({ assigneeIdText: '0' }))).toBe(
-      '执行人用户 ID必须为正整数',
-    );
+    expect(validateTaskCreateInput(validInput({ assigneeIdText: '0' }))).toEqual([
+      { field: 'assigneeIdText', message: '执行人用户 ID必须为正整数' },
+    ]);
     expect(
       validateTaskCreateInput(validInput({ reporterIdText: `${Number.MAX_SAFE_INTEGER + 1}` })),
-    ).toBe('报告人用户 ID必须为正整数');
-    expect(validateTaskCreateInput(validInput({ storyPointsText: '-1' }))).toBe(
-      '故事点必须为非负整数',
-    );
-    expect(validateTaskCreateInput(validInput({ estimatedHoursText: '很多' }))).toBe(
-      '预估工时必须为非负数字',
-    );
+    ).toEqual([{ field: 'reporterIdText', message: '报告人用户 ID必须为正整数' }]);
+    expect(validateTaskCreateInput(validInput({ storyPointsText: '-1' }))).toEqual([
+      { field: 'storyPointsText', message: '故事点必须为非负整数' },
+    ]);
+    expect(validateTaskCreateInput(validInput({ estimatedHoursText: '很多' }))).toEqual([
+      { field: 'estimatedHoursText', message: '预估工时必须为非负数字' },
+    ]);
   });
 
   it('开始日期晚于结束日期时阻断', () => {
     expect(
       validateTaskCreateInput(validInput({ startIso: '2026-10-10', endIso: '2026-10-01' })),
-    ).toBe('开始日期不能晚于结束日期');
+    ).toEqual([{ field: 'dates', message: '开始日期不能晚于结束日期' }]);
   });
 
   it('关联需求超过 200 个时阻断提交，而不是静默截断（Codex review 4175337091）', () => {
     const over = Array.from({ length: 201 }, (_, i) => i + 1);
-    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: over }))).toBe(
-      '关联需求不能超过200个（后端约束）',
-    );
+    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: over }))).toEqual([
+      { field: 'implementsRequirementIds', message: '关联需求不能超过200个（后端约束）' },
+    ]);
     // 去重前超限同样阻断
     const withDupes = [...over, ...over.slice(0, 50)];
-    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: withDupes }))).toBe(
-      '关联需求不能超过200个（后端约束）',
-    );
+    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: withDupes }))).toEqual([
+      { field: 'implementsRequirementIds', message: '关联需求不能超过200个（后端约束）' },
+    ]);
     // 恰好 200 个（去重后）可以通过
     const ok = Array.from({ length: 200 }, (_, i) => i + 1);
-    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: ok }))).toBeNull();
+    expect(validateTaskCreateInput(validInput({ implementsRequirementIds: ok }))).toEqual([]);
   });
 
-  it('完整合法输入 → null', () => {
+  it('完整合法输入 → 空数组', () => {
     expect(
       validateTaskCreateInput(
         validInput({
@@ -143,7 +163,7 @@ describe('validateTaskCreateInput 表单校验', () => {
           estimatedHoursText: '2.5',
         }),
       ),
-    ).toBeNull();
+    ).toEqual([]);
   });
 });
 

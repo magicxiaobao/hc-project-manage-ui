@@ -24,20 +24,38 @@ import { Route as PProjectKeyDefectsRouteImport } from './routes/p/$projectKey/d
 import { Route as PProjectKeyDependenciesRouteImport } from './routes/p/$projectKey/dependencies'
 import { Route as PProjectKeyGanttRouteImport } from './routes/p/$projectKey/gantt'
 import { Route as PProjectKeyIssuesRouteImport } from './routes/p/$projectKey/issues'
+import { Route as PProjectKeyReleaseEnvironmentsRouteImport } from './routes/p/$projectKey/release-environments'
 import { Route as PProjectKeyReleasesRouteImport } from './routes/p/$projectKey/releases'
 import { Route as PProjectKeyRequirementsRouteImport } from './routes/p/$projectKey/requirements'
 import { Route as PProjectKeySettingsRouteImport } from './routes/p/$projectKey/settings'
 import { Route as PProjectKeySprintsRouteImport } from './routes/p/$projectKey/sprints'
 import { Route as PProjectKeyStatsRouteImport } from './routes/p/$projectKey/stats'
+import { Route as PProjectKeyTestcasesRouteImport } from './routes/p/$projectKey/testcases'
 import { Route as PProjectKeyTestsRouteImport } from './routes/p/$projectKey/tests'
+import { Route as PProjectKeyTestsuitesRouteImport } from './routes/p/$projectKey/testsuites'
 import { Route as PProjectKeyTraceRouteImport } from './routes/p/$projectKey/trace'
+import { Route as PProjectKeyVersionsRouteImport } from './routes/p/$projectKey/versions'
 import { Route as PProjectKeyWorklogsRouteImport } from './routes/p/$projectKey/worklogs'
+import { Route as PProjectKeyDefectsIndexRouteImport } from './routes/p/$projectKey/defects/index'
+import { Route as PProjectKeyDefectsDefectIdRouteImport } from './routes/p/$projectKey/defects/$defectId'
+import { Route as PProjectKeyDefectsBoardRouteImport } from './routes/p/$projectKey/defects/board'
 import { Route as PProjectKeyIssuesIndexRouteImport } from './routes/p/$projectKey/issues/index'
 import { Route as PProjectKeyIssuesTaskIdRouteImport } from './routes/p/$projectKey/issues/$taskId'
 import { Route as PProjectKeyIssuesNewRouteImport } from './routes/p/$projectKey/issues/new'
 import { Route as PProjectKeyItemsItemKeyRouteImport } from './routes/p/$projectKey/items/$itemKey'
+import { Route as PProjectKeyReleaseEnvironmentsIndexRouteImport } from './routes/p/$projectKey/release-environments/index'
+import { Route as PProjectKeyReleasesIndexRouteImport } from './routes/p/$projectKey/releases/index'
+import { Route as PProjectKeyReleasesReleaseIdRouteImport } from './routes/p/$projectKey/releases/$releaseId'
 import { Route as PProjectKeyRequirementsIndexRouteImport } from './routes/p/$projectKey/requirements/index'
 import { Route as PProjectKeyRequirementsRequirementIdRouteImport } from './routes/p/$projectKey/requirements.$requirementId'
+import { Route as PProjectKeyTestcasesIndexRouteImport } from './routes/p/$projectKey/testcases/index'
+import { Route as PProjectKeyTestcasesTestCaseIdRouteImport } from './routes/p/$projectKey/testcases/$testCaseId'
+import { Route as PProjectKeyTestsIndexRouteImport } from './routes/p/$projectKey/tests/index'
+import { Route as PProjectKeyTestsTestRunIdRouteImport } from './routes/p/$projectKey/tests/$testRunId'
+import { Route as PProjectKeyTestsuitesIndexRouteImport } from './routes/p/$projectKey/testsuites/index'
+import { Route as PProjectKeyTestsuitesTestSuiteIdRouteImport } from './routes/p/$projectKey/testsuites/$testSuiteId'
+import { Route as PProjectKeyVersionsIndexRouteImport } from './routes/p/$projectKey/versions/index'
+import { Route as PProjectKeyVersionsVersionIdRouteImport } from './routes/p/$projectKey/versions/$versionId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -114,6 +132,12 @@ const PProjectKeyIssuesRoute = PProjectKeyIssuesRouteImport.update({
   path: '/issues',
   getParentRoute: () => PProjectKeyRoute,
 } as any)
+const PProjectKeyReleaseEnvironmentsRoute =
+  PProjectKeyReleaseEnvironmentsRouteImport.update({
+    id: '/release-environments',
+    path: '/release-environments',
+    getParentRoute: () => PProjectKeyRoute,
+  } as any)
 const PProjectKeyReleasesRoute = PProjectKeyReleasesRouteImport.update({
   id: '/releases',
   path: '/releases',
@@ -139,9 +163,19 @@ const PProjectKeyStatsRoute = PProjectKeyStatsRouteImport.update({
   path: '/stats',
   getParentRoute: () => PProjectKeyRoute,
 } as any)
+const PProjectKeyTestcasesRoute = PProjectKeyTestcasesRouteImport.update({
+  id: '/testcases',
+  path: '/testcases',
+  getParentRoute: () => PProjectKeyRoute,
+} as any)
 const PProjectKeyTestsRoute = PProjectKeyTestsRouteImport.update({
   id: '/tests',
   path: '/tests',
+  getParentRoute: () => PProjectKeyRoute,
+} as any)
+const PProjectKeyTestsuitesRoute = PProjectKeyTestsuitesRouteImport.update({
+  id: '/testsuites',
+  path: '/testsuites',
   getParentRoute: () => PProjectKeyRoute,
 } as any)
 const PProjectKeyTraceRoute = PProjectKeyTraceRouteImport.update({
@@ -149,10 +183,31 @@ const PProjectKeyTraceRoute = PProjectKeyTraceRouteImport.update({
   path: '/trace',
   getParentRoute: () => PProjectKeyRoute,
 } as any)
+const PProjectKeyVersionsRoute = PProjectKeyVersionsRouteImport.update({
+  id: '/versions',
+  path: '/versions',
+  getParentRoute: () => PProjectKeyRoute,
+} as any)
 const PProjectKeyWorklogsRoute = PProjectKeyWorklogsRouteImport.update({
   id: '/worklogs',
   path: '/worklogs',
   getParentRoute: () => PProjectKeyRoute,
+} as any)
+const PProjectKeyDefectsIndexRoute = PProjectKeyDefectsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PProjectKeyDefectsRoute,
+} as any)
+const PProjectKeyDefectsDefectIdRoute =
+  PProjectKeyDefectsDefectIdRouteImport.update({
+    id: '/$defectId',
+    path: '/$defectId',
+    getParentRoute: () => PProjectKeyDefectsRoute,
+  } as any)
+const PProjectKeyDefectsBoardRoute = PProjectKeyDefectsBoardRouteImport.update({
+  id: '/board',
+  path: '/board',
+  getParentRoute: () => PProjectKeyDefectsRoute,
 } as any)
 const PProjectKeyIssuesIndexRoute = PProjectKeyIssuesIndexRouteImport.update({
   id: '/',
@@ -174,6 +229,24 @@ const PProjectKeyItemsItemKeyRoute = PProjectKeyItemsItemKeyRouteImport.update({
   path: '/items/$itemKey',
   getParentRoute: () => PProjectKeyRoute,
 } as any)
+const PProjectKeyReleaseEnvironmentsIndexRoute =
+  PProjectKeyReleaseEnvironmentsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => PProjectKeyReleaseEnvironmentsRoute,
+  } as any)
+const PProjectKeyReleasesIndexRoute =
+  PProjectKeyReleasesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => PProjectKeyReleasesRoute,
+  } as any)
+const PProjectKeyReleasesReleaseIdRoute =
+  PProjectKeyReleasesReleaseIdRouteImport.update({
+    id: '/$releaseId',
+    path: '/$releaseId',
+    getParentRoute: () => PProjectKeyReleasesRoute,
+  } as any)
 const PProjectKeyRequirementsIndexRoute =
   PProjectKeyRequirementsIndexRouteImport.update({
     id: '/',
@@ -185,6 +258,53 @@ const PProjectKeyRequirementsRequirementIdRoute =
     id: '/$requirementId',
     path: '/$requirementId',
     getParentRoute: () => PProjectKeyRequirementsRoute,
+  } as any)
+const PProjectKeyTestcasesIndexRoute =
+  PProjectKeyTestcasesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => PProjectKeyTestcasesRoute,
+  } as any)
+const PProjectKeyTestcasesTestCaseIdRoute =
+  PProjectKeyTestcasesTestCaseIdRouteImport.update({
+    id: '/$testCaseId',
+    path: '/$testCaseId',
+    getParentRoute: () => PProjectKeyTestcasesRoute,
+  } as any)
+const PProjectKeyTestsIndexRoute = PProjectKeyTestsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PProjectKeyTestsRoute,
+} as any)
+const PProjectKeyTestsTestRunIdRoute =
+  PProjectKeyTestsTestRunIdRouteImport.update({
+    id: '/$testRunId',
+    path: '/$testRunId',
+    getParentRoute: () => PProjectKeyTestsRoute,
+  } as any)
+const PProjectKeyTestsuitesIndexRoute =
+  PProjectKeyTestsuitesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => PProjectKeyTestsuitesRoute,
+  } as any)
+const PProjectKeyTestsuitesTestSuiteIdRoute =
+  PProjectKeyTestsuitesTestSuiteIdRouteImport.update({
+    id: '/$testSuiteId',
+    path: '/$testSuiteId',
+    getParentRoute: () => PProjectKeyTestsuitesRoute,
+  } as any)
+const PProjectKeyVersionsIndexRoute =
+  PProjectKeyVersionsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => PProjectKeyVersionsRoute,
+  } as any)
+const PProjectKeyVersionsVersionIdRoute =
+  PProjectKeyVersionsVersionIdRouteImport.update({
+    id: '/$versionId',
+    path: '/$versionId',
+    getParentRoute: () => PProjectKeyVersionsRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -198,25 +318,43 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
-  '/p/$projectKey/defects': typeof PProjectKeyDefectsRoute
+  '/p/$projectKey/defects': typeof PProjectKeyDefectsRouteWithChildren
   '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
   '/p/$projectKey/gantt': typeof PProjectKeyGanttRoute
   '/p/$projectKey/issues': typeof PProjectKeyIssuesRouteWithChildren
-  '/p/$projectKey/releases': typeof PProjectKeyReleasesRoute
+  '/p/$projectKey/release-environments': typeof PProjectKeyReleaseEnvironmentsRouteWithChildren
+  '/p/$projectKey/releases': typeof PProjectKeyReleasesRouteWithChildren
   '/p/$projectKey/requirements': typeof PProjectKeyRequirementsRouteWithChildren
   '/p/$projectKey/settings': typeof PProjectKeySettingsRoute
   '/p/$projectKey/sprints': typeof PProjectKeySprintsRoute
   '/p/$projectKey/stats': typeof PProjectKeyStatsRoute
-  '/p/$projectKey/tests': typeof PProjectKeyTestsRoute
+  '/p/$projectKey/testcases': typeof PProjectKeyTestcasesRouteWithChildren
+  '/p/$projectKey/tests': typeof PProjectKeyTestsRouteWithChildren
+  '/p/$projectKey/testsuites': typeof PProjectKeyTestsuitesRouteWithChildren
   '/p/$projectKey/trace': typeof PProjectKeyTraceRoute
+  '/p/$projectKey/versions': typeof PProjectKeyVersionsRouteWithChildren
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey/': typeof PProjectKeyIndexRoute
+  '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
+  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
   '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
   '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
   '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
+  '/p/$projectKey/releases/$releaseId': typeof PProjectKeyReleasesReleaseIdRoute
   '/p/$projectKey/requirements/$requirementId': typeof PProjectKeyRequirementsRequirementIdRoute
+  '/p/$projectKey/testcases/$testCaseId': typeof PProjectKeyTestcasesTestCaseIdRoute
+  '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
+  '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
+  '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
+  '/p/$projectKey/defects/': typeof PProjectKeyDefectsIndexRoute
   '/p/$projectKey/issues/': typeof PProjectKeyIssuesIndexRoute
+  '/p/$projectKey/release-environments/': typeof PProjectKeyReleaseEnvironmentsIndexRoute
+  '/p/$projectKey/releases/': typeof PProjectKeyReleasesIndexRoute
   '/p/$projectKey/requirements/': typeof PProjectKeyRequirementsIndexRoute
+  '/p/$projectKey/testcases/': typeof PProjectKeyTestcasesIndexRoute
+  '/p/$projectKey/tests/': typeof PProjectKeyTestsIndexRoute
+  '/p/$projectKey/testsuites/': typeof PProjectKeyTestsuitesIndexRoute
+  '/p/$projectKey/versions/': typeof PProjectKeyVersionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -228,23 +366,34 @@ export interface FileRoutesByTo {
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
-  '/p/$projectKey/defects': typeof PProjectKeyDefectsRoute
   '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
   '/p/$projectKey/gantt': typeof PProjectKeyGanttRoute
-  '/p/$projectKey/releases': typeof PProjectKeyReleasesRoute
   '/p/$projectKey/settings': typeof PProjectKeySettingsRoute
   '/p/$projectKey/sprints': typeof PProjectKeySprintsRoute
   '/p/$projectKey/stats': typeof PProjectKeyStatsRoute
-  '/p/$projectKey/tests': typeof PProjectKeyTestsRoute
   '/p/$projectKey/trace': typeof PProjectKeyTraceRoute
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey': typeof PProjectKeyIndexRoute
+  '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
+  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
   '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
   '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
   '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
+  '/p/$projectKey/releases/$releaseId': typeof PProjectKeyReleasesReleaseIdRoute
   '/p/$projectKey/requirements/$requirementId': typeof PProjectKeyRequirementsRequirementIdRoute
+  '/p/$projectKey/testcases/$testCaseId': typeof PProjectKeyTestcasesTestCaseIdRoute
+  '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
+  '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
+  '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
+  '/p/$projectKey/defects': typeof PProjectKeyDefectsIndexRoute
   '/p/$projectKey/issues': typeof PProjectKeyIssuesIndexRoute
+  '/p/$projectKey/release-environments': typeof PProjectKeyReleaseEnvironmentsIndexRoute
+  '/p/$projectKey/releases': typeof PProjectKeyReleasesIndexRoute
   '/p/$projectKey/requirements': typeof PProjectKeyRequirementsIndexRoute
+  '/p/$projectKey/testcases': typeof PProjectKeyTestcasesIndexRoute
+  '/p/$projectKey/tests': typeof PProjectKeyTestsIndexRoute
+  '/p/$projectKey/testsuites': typeof PProjectKeyTestsuitesIndexRoute
+  '/p/$projectKey/versions': typeof PProjectKeyVersionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -258,25 +407,43 @@ export interface FileRoutesById {
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
-  '/p/$projectKey/defects': typeof PProjectKeyDefectsRoute
+  '/p/$projectKey/defects': typeof PProjectKeyDefectsRouteWithChildren
   '/p/$projectKey/dependencies': typeof PProjectKeyDependenciesRoute
   '/p/$projectKey/gantt': typeof PProjectKeyGanttRoute
   '/p/$projectKey/issues': typeof PProjectKeyIssuesRouteWithChildren
-  '/p/$projectKey/releases': typeof PProjectKeyReleasesRoute
+  '/p/$projectKey/release-environments': typeof PProjectKeyReleaseEnvironmentsRouteWithChildren
+  '/p/$projectKey/releases': typeof PProjectKeyReleasesRouteWithChildren
   '/p/$projectKey/requirements': typeof PProjectKeyRequirementsRouteWithChildren
   '/p/$projectKey/settings': typeof PProjectKeySettingsRoute
   '/p/$projectKey/sprints': typeof PProjectKeySprintsRoute
   '/p/$projectKey/stats': typeof PProjectKeyStatsRoute
-  '/p/$projectKey/tests': typeof PProjectKeyTestsRoute
+  '/p/$projectKey/testcases': typeof PProjectKeyTestcasesRouteWithChildren
+  '/p/$projectKey/tests': typeof PProjectKeyTestsRouteWithChildren
+  '/p/$projectKey/testsuites': typeof PProjectKeyTestsuitesRouteWithChildren
   '/p/$projectKey/trace': typeof PProjectKeyTraceRoute
+  '/p/$projectKey/versions': typeof PProjectKeyVersionsRouteWithChildren
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey/': typeof PProjectKeyIndexRoute
+  '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
+  '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
   '/p/$projectKey/issues/$taskId': typeof PProjectKeyIssuesTaskIdRoute
   '/p/$projectKey/issues/new': typeof PProjectKeyIssuesNewRoute
   '/p/$projectKey/items/$itemKey': typeof PProjectKeyItemsItemKeyRoute
+  '/p/$projectKey/releases/$releaseId': typeof PProjectKeyReleasesReleaseIdRoute
   '/p/$projectKey/requirements/$requirementId': typeof PProjectKeyRequirementsRequirementIdRoute
+  '/p/$projectKey/testcases/$testCaseId': typeof PProjectKeyTestcasesTestCaseIdRoute
+  '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
+  '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
+  '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
+  '/p/$projectKey/defects/': typeof PProjectKeyDefectsIndexRoute
   '/p/$projectKey/issues/': typeof PProjectKeyIssuesIndexRoute
+  '/p/$projectKey/release-environments/': typeof PProjectKeyReleaseEnvironmentsIndexRoute
+  '/p/$projectKey/releases/': typeof PProjectKeyReleasesIndexRoute
   '/p/$projectKey/requirements/': typeof PProjectKeyRequirementsIndexRoute
+  '/p/$projectKey/testcases/': typeof PProjectKeyTestcasesIndexRoute
+  '/p/$projectKey/tests/': typeof PProjectKeyTestsIndexRoute
+  '/p/$projectKey/testsuites/': typeof PProjectKeyTestsuitesIndexRoute
+  '/p/$projectKey/versions/': typeof PProjectKeyVersionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -295,21 +462,39 @@ export interface FileRouteTypes {
     | '/p/$projectKey/dependencies'
     | '/p/$projectKey/gantt'
     | '/p/$projectKey/issues'
+    | '/p/$projectKey/release-environments'
     | '/p/$projectKey/releases'
     | '/p/$projectKey/requirements'
     | '/p/$projectKey/settings'
     | '/p/$projectKey/sprints'
     | '/p/$projectKey/stats'
+    | '/p/$projectKey/testcases'
     | '/p/$projectKey/tests'
+    | '/p/$projectKey/testsuites'
     | '/p/$projectKey/trace'
+    | '/p/$projectKey/versions'
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey/'
+    | '/p/$projectKey/defects/$defectId'
+    | '/p/$projectKey/defects/board'
     | '/p/$projectKey/issues/$taskId'
     | '/p/$projectKey/issues/new'
     | '/p/$projectKey/items/$itemKey'
+    | '/p/$projectKey/releases/$releaseId'
     | '/p/$projectKey/requirements/$requirementId'
+    | '/p/$projectKey/testcases/$testCaseId'
+    | '/p/$projectKey/tests/$testRunId'
+    | '/p/$projectKey/testsuites/$testSuiteId'
+    | '/p/$projectKey/versions/$versionId'
+    | '/p/$projectKey/defects/'
     | '/p/$projectKey/issues/'
+    | '/p/$projectKey/release-environments/'
+    | '/p/$projectKey/releases/'
     | '/p/$projectKey/requirements/'
+    | '/p/$projectKey/testcases/'
+    | '/p/$projectKey/tests/'
+    | '/p/$projectKey/testsuites/'
+    | '/p/$projectKey/versions/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -321,23 +506,34 @@ export interface FileRouteTypes {
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/dashboard'
-    | '/p/$projectKey/defects'
     | '/p/$projectKey/dependencies'
     | '/p/$projectKey/gantt'
-    | '/p/$projectKey/releases'
     | '/p/$projectKey/settings'
     | '/p/$projectKey/sprints'
     | '/p/$projectKey/stats'
-    | '/p/$projectKey/tests'
     | '/p/$projectKey/trace'
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey'
+    | '/p/$projectKey/defects/$defectId'
+    | '/p/$projectKey/defects/board'
     | '/p/$projectKey/issues/$taskId'
     | '/p/$projectKey/issues/new'
     | '/p/$projectKey/items/$itemKey'
+    | '/p/$projectKey/releases/$releaseId'
     | '/p/$projectKey/requirements/$requirementId'
+    | '/p/$projectKey/testcases/$testCaseId'
+    | '/p/$projectKey/tests/$testRunId'
+    | '/p/$projectKey/testsuites/$testSuiteId'
+    | '/p/$projectKey/versions/$versionId'
+    | '/p/$projectKey/defects'
     | '/p/$projectKey/issues'
+    | '/p/$projectKey/release-environments'
+    | '/p/$projectKey/releases'
     | '/p/$projectKey/requirements'
+    | '/p/$projectKey/testcases'
+    | '/p/$projectKey/tests'
+    | '/p/$projectKey/testsuites'
+    | '/p/$projectKey/versions'
   id:
     | '__root__'
     | '/'
@@ -354,21 +550,39 @@ export interface FileRouteTypes {
     | '/p/$projectKey/dependencies'
     | '/p/$projectKey/gantt'
     | '/p/$projectKey/issues'
+    | '/p/$projectKey/release-environments'
     | '/p/$projectKey/releases'
     | '/p/$projectKey/requirements'
     | '/p/$projectKey/settings'
     | '/p/$projectKey/sprints'
     | '/p/$projectKey/stats'
+    | '/p/$projectKey/testcases'
     | '/p/$projectKey/tests'
+    | '/p/$projectKey/testsuites'
     | '/p/$projectKey/trace'
+    | '/p/$projectKey/versions'
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey/'
+    | '/p/$projectKey/defects/$defectId'
+    | '/p/$projectKey/defects/board'
     | '/p/$projectKey/issues/$taskId'
     | '/p/$projectKey/issues/new'
     | '/p/$projectKey/items/$itemKey'
+    | '/p/$projectKey/releases/$releaseId'
     | '/p/$projectKey/requirements/$requirementId'
+    | '/p/$projectKey/testcases/$testCaseId'
+    | '/p/$projectKey/tests/$testRunId'
+    | '/p/$projectKey/testsuites/$testSuiteId'
+    | '/p/$projectKey/versions/$versionId'
+    | '/p/$projectKey/defects/'
     | '/p/$projectKey/issues/'
+    | '/p/$projectKey/release-environments/'
+    | '/p/$projectKey/releases/'
     | '/p/$projectKey/requirements/'
+    | '/p/$projectKey/testcases/'
+    | '/p/$projectKey/tests/'
+    | '/p/$projectKey/testsuites/'
+    | '/p/$projectKey/versions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -488,6 +702,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyIssuesRouteImport
       parentRoute: typeof PProjectKeyRoute
     }
+    '/p/$projectKey/release-environments': {
+      id: '/p/$projectKey/release-environments'
+      path: '/release-environments'
+      fullPath: '/p/$projectKey/release-environments'
+      preLoaderRoute: typeof PProjectKeyReleaseEnvironmentsRouteImport
+      parentRoute: typeof PProjectKeyRoute
+    }
     '/p/$projectKey/releases': {
       id: '/p/$projectKey/releases'
       path: '/releases'
@@ -523,11 +744,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyStatsRouteImport
       parentRoute: typeof PProjectKeyRoute
     }
+    '/p/$projectKey/testcases': {
+      id: '/p/$projectKey/testcases'
+      path: '/testcases'
+      fullPath: '/p/$projectKey/testcases'
+      preLoaderRoute: typeof PProjectKeyTestcasesRouteImport
+      parentRoute: typeof PProjectKeyRoute
+    }
     '/p/$projectKey/tests': {
       id: '/p/$projectKey/tests'
       path: '/tests'
       fullPath: '/p/$projectKey/tests'
       preLoaderRoute: typeof PProjectKeyTestsRouteImport
+      parentRoute: typeof PProjectKeyRoute
+    }
+    '/p/$projectKey/testsuites': {
+      id: '/p/$projectKey/testsuites'
+      path: '/testsuites'
+      fullPath: '/p/$projectKey/testsuites'
+      preLoaderRoute: typeof PProjectKeyTestsuitesRouteImport
       parentRoute: typeof PProjectKeyRoute
     }
     '/p/$projectKey/trace': {
@@ -537,12 +772,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyTraceRouteImport
       parentRoute: typeof PProjectKeyRoute
     }
+    '/p/$projectKey/versions': {
+      id: '/p/$projectKey/versions'
+      path: '/versions'
+      fullPath: '/p/$projectKey/versions'
+      preLoaderRoute: typeof PProjectKeyVersionsRouteImport
+      parentRoute: typeof PProjectKeyRoute
+    }
     '/p/$projectKey/worklogs': {
       id: '/p/$projectKey/worklogs'
       path: '/worklogs'
       fullPath: '/p/$projectKey/worklogs'
       preLoaderRoute: typeof PProjectKeyWorklogsRouteImport
       parentRoute: typeof PProjectKeyRoute
+    }
+    '/p/$projectKey/defects/': {
+      id: '/p/$projectKey/defects/'
+      path: '/'
+      fullPath: '/p/$projectKey/defects/'
+      preLoaderRoute: typeof PProjectKeyDefectsIndexRouteImport
+      parentRoute: typeof PProjectKeyDefectsRoute
+    }
+    '/p/$projectKey/defects/$defectId': {
+      id: '/p/$projectKey/defects/$defectId'
+      path: '/$defectId'
+      fullPath: '/p/$projectKey/defects/$defectId'
+      preLoaderRoute: typeof PProjectKeyDefectsDefectIdRouteImport
+      parentRoute: typeof PProjectKeyDefectsRoute
+    }
+    '/p/$projectKey/defects/board': {
+      id: '/p/$projectKey/defects/board'
+      path: '/board'
+      fullPath: '/p/$projectKey/defects/board'
+      preLoaderRoute: typeof PProjectKeyDefectsBoardRouteImport
+      parentRoute: typeof PProjectKeyDefectsRoute
     }
     '/p/$projectKey/issues/': {
       id: '/p/$projectKey/issues/'
@@ -572,6 +835,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyItemsItemKeyRouteImport
       parentRoute: typeof PProjectKeyRoute
     }
+    '/p/$projectKey/release-environments/': {
+      id: '/p/$projectKey/release-environments/'
+      path: '/'
+      fullPath: '/p/$projectKey/release-environments/'
+      preLoaderRoute: typeof PProjectKeyReleaseEnvironmentsIndexRouteImport
+      parentRoute: typeof PProjectKeyReleaseEnvironmentsRoute
+    }
+    '/p/$projectKey/releases/': {
+      id: '/p/$projectKey/releases/'
+      path: '/'
+      fullPath: '/p/$projectKey/releases/'
+      preLoaderRoute: typeof PProjectKeyReleasesIndexRouteImport
+      parentRoute: typeof PProjectKeyReleasesRoute
+    }
+    '/p/$projectKey/releases/$releaseId': {
+      id: '/p/$projectKey/releases/$releaseId'
+      path: '/$releaseId'
+      fullPath: '/p/$projectKey/releases/$releaseId'
+      preLoaderRoute: typeof PProjectKeyReleasesReleaseIdRouteImport
+      parentRoute: typeof PProjectKeyReleasesRoute
+    }
     '/p/$projectKey/requirements/': {
       id: '/p/$projectKey/requirements/'
       path: '/'
@@ -586,8 +870,79 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyRequirementsRequirementIdRouteImport
       parentRoute: typeof PProjectKeyRequirementsRoute
     }
+    '/p/$projectKey/testcases/': {
+      id: '/p/$projectKey/testcases/'
+      path: '/'
+      fullPath: '/p/$projectKey/testcases/'
+      preLoaderRoute: typeof PProjectKeyTestcasesIndexRouteImport
+      parentRoute: typeof PProjectKeyTestcasesRoute
+    }
+    '/p/$projectKey/testcases/$testCaseId': {
+      id: '/p/$projectKey/testcases/$testCaseId'
+      path: '/$testCaseId'
+      fullPath: '/p/$projectKey/testcases/$testCaseId'
+      preLoaderRoute: typeof PProjectKeyTestcasesTestCaseIdRouteImport
+      parentRoute: typeof PProjectKeyTestcasesRoute
+    }
+    '/p/$projectKey/tests/': {
+      id: '/p/$projectKey/tests/'
+      path: '/'
+      fullPath: '/p/$projectKey/tests/'
+      preLoaderRoute: typeof PProjectKeyTestsIndexRouteImport
+      parentRoute: typeof PProjectKeyTestsRoute
+    }
+    '/p/$projectKey/tests/$testRunId': {
+      id: '/p/$projectKey/tests/$testRunId'
+      path: '/$testRunId'
+      fullPath: '/p/$projectKey/tests/$testRunId'
+      preLoaderRoute: typeof PProjectKeyTestsTestRunIdRouteImport
+      parentRoute: typeof PProjectKeyTestsRoute
+    }
+    '/p/$projectKey/testsuites/': {
+      id: '/p/$projectKey/testsuites/'
+      path: '/'
+      fullPath: '/p/$projectKey/testsuites/'
+      preLoaderRoute: typeof PProjectKeyTestsuitesIndexRouteImport
+      parentRoute: typeof PProjectKeyTestsuitesRoute
+    }
+    '/p/$projectKey/testsuites/$testSuiteId': {
+      id: '/p/$projectKey/testsuites/$testSuiteId'
+      path: '/$testSuiteId'
+      fullPath: '/p/$projectKey/testsuites/$testSuiteId'
+      preLoaderRoute: typeof PProjectKeyTestsuitesTestSuiteIdRouteImport
+      parentRoute: typeof PProjectKeyTestsuitesRoute
+    }
+    '/p/$projectKey/versions/': {
+      id: '/p/$projectKey/versions/'
+      path: '/'
+      fullPath: '/p/$projectKey/versions/'
+      preLoaderRoute: typeof PProjectKeyVersionsIndexRouteImport
+      parentRoute: typeof PProjectKeyVersionsRoute
+    }
+    '/p/$projectKey/versions/$versionId': {
+      id: '/p/$projectKey/versions/$versionId'
+      path: '/$versionId'
+      fullPath: '/p/$projectKey/versions/$versionId'
+      preLoaderRoute: typeof PProjectKeyVersionsVersionIdRouteImport
+      parentRoute: typeof PProjectKeyVersionsRoute
+    }
   }
 }
+
+interface PProjectKeyDefectsRouteChildren {
+  PProjectKeyDefectsDefectIdRoute: typeof PProjectKeyDefectsDefectIdRoute
+  PProjectKeyDefectsBoardRoute: typeof PProjectKeyDefectsBoardRoute
+  PProjectKeyDefectsIndexRoute: typeof PProjectKeyDefectsIndexRoute
+}
+
+const PProjectKeyDefectsRouteChildren: PProjectKeyDefectsRouteChildren = {
+  PProjectKeyDefectsDefectIdRoute: PProjectKeyDefectsDefectIdRoute,
+  PProjectKeyDefectsBoardRoute: PProjectKeyDefectsBoardRoute,
+  PProjectKeyDefectsIndexRoute: PProjectKeyDefectsIndexRoute,
+}
+
+const PProjectKeyDefectsRouteWithChildren =
+  PProjectKeyDefectsRoute._addFileChildren(PProjectKeyDefectsRouteChildren)
 
 interface PProjectKeyIssuesRouteChildren {
   PProjectKeyIssuesTaskIdRoute: typeof PProjectKeyIssuesTaskIdRoute
@@ -603,6 +958,34 @@ const PProjectKeyIssuesRouteChildren: PProjectKeyIssuesRouteChildren = {
 
 const PProjectKeyIssuesRouteWithChildren =
   PProjectKeyIssuesRoute._addFileChildren(PProjectKeyIssuesRouteChildren)
+
+interface PProjectKeyReleaseEnvironmentsRouteChildren {
+  PProjectKeyReleaseEnvironmentsIndexRoute: typeof PProjectKeyReleaseEnvironmentsIndexRoute
+}
+
+const PProjectKeyReleaseEnvironmentsRouteChildren: PProjectKeyReleaseEnvironmentsRouteChildren =
+  {
+    PProjectKeyReleaseEnvironmentsIndexRoute:
+      PProjectKeyReleaseEnvironmentsIndexRoute,
+  }
+
+const PProjectKeyReleaseEnvironmentsRouteWithChildren =
+  PProjectKeyReleaseEnvironmentsRoute._addFileChildren(
+    PProjectKeyReleaseEnvironmentsRouteChildren,
+  )
+
+interface PProjectKeyReleasesRouteChildren {
+  PProjectKeyReleasesReleaseIdRoute: typeof PProjectKeyReleasesReleaseIdRoute
+  PProjectKeyReleasesIndexRoute: typeof PProjectKeyReleasesIndexRoute
+}
+
+const PProjectKeyReleasesRouteChildren: PProjectKeyReleasesRouteChildren = {
+  PProjectKeyReleasesReleaseIdRoute: PProjectKeyReleasesReleaseIdRoute,
+  PProjectKeyReleasesIndexRoute: PProjectKeyReleasesIndexRoute,
+}
+
+const PProjectKeyReleasesRouteWithChildren =
+  PProjectKeyReleasesRoute._addFileChildren(PProjectKeyReleasesRouteChildren)
 
 interface PProjectKeyRequirementsRouteChildren {
   PProjectKeyRequirementsRequirementIdRoute: typeof PProjectKeyRequirementsRequirementIdRoute
@@ -621,21 +1004,79 @@ const PProjectKeyRequirementsRouteWithChildren =
     PProjectKeyRequirementsRouteChildren,
   )
 
+interface PProjectKeyTestcasesRouteChildren {
+  PProjectKeyTestcasesTestCaseIdRoute: typeof PProjectKeyTestcasesTestCaseIdRoute
+  PProjectKeyTestcasesIndexRoute: typeof PProjectKeyTestcasesIndexRoute
+}
+
+const PProjectKeyTestcasesRouteChildren: PProjectKeyTestcasesRouteChildren = {
+  PProjectKeyTestcasesTestCaseIdRoute: PProjectKeyTestcasesTestCaseIdRoute,
+  PProjectKeyTestcasesIndexRoute: PProjectKeyTestcasesIndexRoute,
+}
+
+const PProjectKeyTestcasesRouteWithChildren =
+  PProjectKeyTestcasesRoute._addFileChildren(PProjectKeyTestcasesRouteChildren)
+
+interface PProjectKeyTestsRouteChildren {
+  PProjectKeyTestsTestRunIdRoute: typeof PProjectKeyTestsTestRunIdRoute
+  PProjectKeyTestsIndexRoute: typeof PProjectKeyTestsIndexRoute
+}
+
+const PProjectKeyTestsRouteChildren: PProjectKeyTestsRouteChildren = {
+  PProjectKeyTestsTestRunIdRoute: PProjectKeyTestsTestRunIdRoute,
+  PProjectKeyTestsIndexRoute: PProjectKeyTestsIndexRoute,
+}
+
+const PProjectKeyTestsRouteWithChildren =
+  PProjectKeyTestsRoute._addFileChildren(PProjectKeyTestsRouteChildren)
+
+interface PProjectKeyTestsuitesRouteChildren {
+  PProjectKeyTestsuitesTestSuiteIdRoute: typeof PProjectKeyTestsuitesTestSuiteIdRoute
+  PProjectKeyTestsuitesIndexRoute: typeof PProjectKeyTestsuitesIndexRoute
+}
+
+const PProjectKeyTestsuitesRouteChildren: PProjectKeyTestsuitesRouteChildren = {
+  PProjectKeyTestsuitesTestSuiteIdRoute: PProjectKeyTestsuitesTestSuiteIdRoute,
+  PProjectKeyTestsuitesIndexRoute: PProjectKeyTestsuitesIndexRoute,
+}
+
+const PProjectKeyTestsuitesRouteWithChildren =
+  PProjectKeyTestsuitesRoute._addFileChildren(
+    PProjectKeyTestsuitesRouteChildren,
+  )
+
+interface PProjectKeyVersionsRouteChildren {
+  PProjectKeyVersionsVersionIdRoute: typeof PProjectKeyVersionsVersionIdRoute
+  PProjectKeyVersionsIndexRoute: typeof PProjectKeyVersionsIndexRoute
+}
+
+const PProjectKeyVersionsRouteChildren: PProjectKeyVersionsRouteChildren = {
+  PProjectKeyVersionsVersionIdRoute: PProjectKeyVersionsVersionIdRoute,
+  PProjectKeyVersionsIndexRoute: PProjectKeyVersionsIndexRoute,
+}
+
+const PProjectKeyVersionsRouteWithChildren =
+  PProjectKeyVersionsRoute._addFileChildren(PProjectKeyVersionsRouteChildren)
+
 interface PProjectKeyRouteChildren {
   PProjectKeyAssignmentRoute: typeof PProjectKeyAssignmentRoute
   PProjectKeyBacklogRoute: typeof PProjectKeyBacklogRoute
   PProjectKeyDashboardRoute: typeof PProjectKeyDashboardRoute
-  PProjectKeyDefectsRoute: typeof PProjectKeyDefectsRoute
+  PProjectKeyDefectsRoute: typeof PProjectKeyDefectsRouteWithChildren
   PProjectKeyDependenciesRoute: typeof PProjectKeyDependenciesRoute
   PProjectKeyGanttRoute: typeof PProjectKeyGanttRoute
   PProjectKeyIssuesRoute: typeof PProjectKeyIssuesRouteWithChildren
-  PProjectKeyReleasesRoute: typeof PProjectKeyReleasesRoute
+  PProjectKeyReleaseEnvironmentsRoute: typeof PProjectKeyReleaseEnvironmentsRouteWithChildren
+  PProjectKeyReleasesRoute: typeof PProjectKeyReleasesRouteWithChildren
   PProjectKeyRequirementsRoute: typeof PProjectKeyRequirementsRouteWithChildren
   PProjectKeySettingsRoute: typeof PProjectKeySettingsRoute
   PProjectKeySprintsRoute: typeof PProjectKeySprintsRoute
   PProjectKeyStatsRoute: typeof PProjectKeyStatsRoute
-  PProjectKeyTestsRoute: typeof PProjectKeyTestsRoute
+  PProjectKeyTestcasesRoute: typeof PProjectKeyTestcasesRouteWithChildren
+  PProjectKeyTestsRoute: typeof PProjectKeyTestsRouteWithChildren
+  PProjectKeyTestsuitesRoute: typeof PProjectKeyTestsuitesRouteWithChildren
   PProjectKeyTraceRoute: typeof PProjectKeyTraceRoute
+  PProjectKeyVersionsRoute: typeof PProjectKeyVersionsRouteWithChildren
   PProjectKeyWorklogsRoute: typeof PProjectKeyWorklogsRoute
   PProjectKeyIndexRoute: typeof PProjectKeyIndexRoute
   PProjectKeyItemsItemKeyRoute: typeof PProjectKeyItemsItemKeyRoute
@@ -645,17 +1086,22 @@ const PProjectKeyRouteChildren: PProjectKeyRouteChildren = {
   PProjectKeyAssignmentRoute: PProjectKeyAssignmentRoute,
   PProjectKeyBacklogRoute: PProjectKeyBacklogRoute,
   PProjectKeyDashboardRoute: PProjectKeyDashboardRoute,
-  PProjectKeyDefectsRoute: PProjectKeyDefectsRoute,
+  PProjectKeyDefectsRoute: PProjectKeyDefectsRouteWithChildren,
   PProjectKeyDependenciesRoute: PProjectKeyDependenciesRoute,
   PProjectKeyGanttRoute: PProjectKeyGanttRoute,
   PProjectKeyIssuesRoute: PProjectKeyIssuesRouteWithChildren,
-  PProjectKeyReleasesRoute: PProjectKeyReleasesRoute,
+  PProjectKeyReleaseEnvironmentsRoute:
+    PProjectKeyReleaseEnvironmentsRouteWithChildren,
+  PProjectKeyReleasesRoute: PProjectKeyReleasesRouteWithChildren,
   PProjectKeyRequirementsRoute: PProjectKeyRequirementsRouteWithChildren,
   PProjectKeySettingsRoute: PProjectKeySettingsRoute,
   PProjectKeySprintsRoute: PProjectKeySprintsRoute,
   PProjectKeyStatsRoute: PProjectKeyStatsRoute,
-  PProjectKeyTestsRoute: PProjectKeyTestsRoute,
+  PProjectKeyTestcasesRoute: PProjectKeyTestcasesRouteWithChildren,
+  PProjectKeyTestsRoute: PProjectKeyTestsRouteWithChildren,
+  PProjectKeyTestsuitesRoute: PProjectKeyTestsuitesRouteWithChildren,
   PProjectKeyTraceRoute: PProjectKeyTraceRoute,
+  PProjectKeyVersionsRoute: PProjectKeyVersionsRouteWithChildren,
   PProjectKeyWorklogsRoute: PProjectKeyWorklogsRoute,
   PProjectKeyIndexRoute: PProjectKeyIndexRoute,
   PProjectKeyItemsItemKeyRoute: PProjectKeyItemsItemKeyRoute,

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -12,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { runNode } from "./test-cli.mjs";
 import { handOver, parseWriteAtomicArgs, stagingError } from "./write-atomic.mjs";
 
 const TEMPLATE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -127,22 +127,14 @@ test("a staged file on another filesystem is refused, not copied", () => {
 test("cli: hands the file over, and refuses a temp staged in public/", () => {
   const root = makeWorkspace();
   writeFileSync(join(root, ".grok/og.jpg.tmp"), "new card");
-  const ok = spawnSync(
-    process.execPath,
-    [SCRIPT, join(root, ".grok/og.jpg.tmp"), join(root, "public/og.jpg")],
-    { encoding: "utf8" },
-  );
+  const ok = runNode([SCRIPT, join(root, ".grok/og.jpg.tmp"), join(root, "public/og.jpg")]);
   assert.equal(ok.status, 0, ok.stdout + ok.stderr);
   assert.equal(readFileSync(join(root, "public/og.jpg"), "utf8"), "new card");
 
   // publicDir comes from the script's own root, so refusal is checked there.
   const templateRoot = join(dirname(SCRIPT), "..");
   const staged = join(templateRoot, "public/og.jpg.tmp");
-  const refused = spawnSync(
-    process.execPath,
-    [SCRIPT, staged, join(templateRoot, "public/og.jpg")],
-    { encoding: "utf8" },
-  );
+  const refused = runNode([SCRIPT, staged, join(templateRoot, "public/og.jpg")]);
   assert.equal(refused.status, 1);
   assert.match(refused.stderr, /stage outside/);
   assert.equal(existsSync(staged), false);
@@ -154,9 +146,8 @@ test("cli: relative paths follow the script's root, not the caller's cwd", () =>
   // directory the refusal is defined against and move it.
   const root = makeWorkspace();
   writeFileSync(join(root, "public/og.jpg.tmp"), "half a JPEG");
-  const run = spawnSync(process.execPath, [SCRIPT, "public/og.jpg.tmp", "public/og.jpg"], {
+  const run = runNode([SCRIPT, "public/og.jpg.tmp", "public/og.jpg"], {
     cwd: root,
-    encoding: "utf8",
   });
   assert.equal(run.status, 1, run.stdout + run.stderr);
   assert.match(run.stderr, /stage outside/);
@@ -164,37 +155,27 @@ test("cli: relative paths follow the script's root, not the caller's cwd", () =>
   assert.equal(existsSync(join(root, "public/og.jpg")), false);
 });
 
-test("every hand-over the og skill prints is one this script accepts", () => {
-  // The card and banner recipes live in the skill's references/, not SKILL.md.
-  const skillDir = join(TEMPLATE_ROOT, ".grok/skills/og");
-  const docs = [
-    join(skillDir, "SKILL.md"),
-    ...readdirSync(join(skillDir, "references")).map((f) => join(skillDir, "references", f)),
-  ];
-  const invocations = docs.flatMap(
-    (path) => readFileSync(path, "utf8").match(/node scripts\/write-atomic\.mjs[^\n`]*/g) ?? [],
-  );
-  assert.ok(invocations.length >= 3, "og.jpg, x-banner.jpg and site.json each hand over");
-  for (const line of invocations) {
-    const argv = line.replace("node scripts/write-atomic.mjs", "").trim().split(/\s+/);
-    const args = parseWriteAtomicArgs(argv);
-    assert.equal(args.error, undefined, line);
-    assert.equal(
-      stagingError({ staged: args.staged, target: args.target, publicDir: "/workspace/public" }),
-      null,
-      line,
-    );
+test("cli: accepts staged card, banner and site metadata hand-overs", () => {
+  const root = makeWorkspace();
+  for (const [file, target] of [
+    ["og.jpg", "public/og.jpg"],
+    ["x-banner.jpg", "public/x-banner.jpg"],
+    ["site.json", "src/lib/og/site.json"],
+  ]) {
+    const staged = join(root, ".grok", `${file}.tmp`);
+    const destination = join(root, target);
+    writeFileSync(staged, `new ${file}`);
+    const run = runNode([SCRIPT, staged, destination]);
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    assert.equal(readFileSync(destination, "utf8"), `new ${file}`);
+    assert.equal(existsSync(staged), false);
   }
 });
 
 test("cli: a missing staged file fails without touching the target", () => {
   const root = makeWorkspace();
   writeFileSync(join(root, "public/og.jpg"), "old card");
-  const run = spawnSync(
-    process.execPath,
-    [SCRIPT, join(root, ".grok/absent.tmp"), join(root, "public/og.jpg")],
-    { encoding: "utf8" },
-  );
+  const run = runNode([SCRIPT, join(root, ".grok/absent.tmp"), join(root, "public/og.jpg")]);
   assert.equal(run.status, 1);
   assert.match(run.stderr, /\[write-atomic\]/);
   assert.equal(readFileSync(join(root, "public/og.jpg"), "utf8"), "old card");

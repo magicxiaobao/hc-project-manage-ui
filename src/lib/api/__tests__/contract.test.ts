@@ -29,6 +29,82 @@
  * - GET /project/v1/enums，返回类型/状态/优先级选项
  * - POST /project/v1/updateProject，请求体 ProjectUpdatePayload
  *
+ * 缺陷契约（P2；来自后端 DefectController + 老前端 frontend/src/types/defect.ts）：
+ * - POST /defect/v1/createDefect，请求体 DefectCreatePayload，返回新建缺陷 id
+ * - POST /defect/v1/updateDefect，字段级更新；严重度与状态流转不在此入口
+ * - POST /defect/v1/{defectId}/severity，CAS 旧值校验 + reason 先裁空白，返回重定级结果
+ * - POST /defect/v1/updateStatus，请求体 { id, status, reason?, comment?, assigneeId?, testerId?, verifierId? }
+ * - GET /defect/v1/findById/{id}，返回缺陷详情
+ * - POST /defect/v1/findByPage，请求体 { page, pageSize, bean }
+ * - GET /defect/v1/statistics?projectId=（缺省时无参数），返回统计 + 三维分布
+ * - GET /defect/v1/board?projectId=，返回 defectsByStatus 分组 + columns 列配置
+ * - GET /defect/v1/statusOptions，返回十态枚举元数据（value=枚举名）
+ * - POST /defect/v1/advancedSearch，请求体 { page, pageSize, bean: DefectAdvancedQuery }
+ *   （batch/batchUpdateStatus/advancedSearchList/xlsx 导出为 P2 明确排除项）
+ *
+ * 用例/套件契约（P2；来自后端 TestCaseController/TestSuiteController + 老前端）：
+ * - POST /testCase/v1/createTestCase，请求体 TestCaseCreatePayload，返回新建用例 id
+ * - POST /testCase/v1/updateTestCase，载荷含 id 的字段级更新
+ * - POST /testCase/v1/valid/{id} 与 invalid/{id}，启用/归档，id 拼在路径上
+ * - GET /testCase/v1/findById/{id}，返回用例详情
+ * - POST /testCase/v1/findByPage，请求体 { page, pageSize, bean }，bean.projectId 必填
+ * - POST /testCase/v1/deleteTestCase/{id}（软删；老前端称为 archiveTestCase）
+ * - POST /testCase/v1/duplicateTestCase/{id}，返回新用例 id
+ * - POST /testCase/v1/advancedSearch，请求体 { page, pageSize, bean: TestCaseAdvancedQuery }
+ * - POST /testSuite/v1/createTestSuite，请求体 TestSuiteCreatePayload，返回新建套件 id
+ * - POST /testSuite/v1/updateTestSuite，载荷含 id 的字段级更新
+ * - POST /testSuite/v1/valid/{id} 与 invalid/{id}，启用/归档，id 拼在路径上
+ * - GET /testSuite/v1/findById/{id}，返回套件详情
+ * - POST /testSuite/v1/findByPage，请求体 { page, pageSize, bean }
+ *   （batchDeleteTestCase/advancedSearchExport 为 P2 明确排除项；
+ *    老前端遗留路径 /test-suite/* 在后端 testSuite/v1 无对应端点，不建模）
+ *
+ * 测试轮/执行契约（P2；来自后端 TestRunController/TestExecutionController + 老前端）：
+ * - POST /testRun/v1/full-regressions、ad-hoc-runs、targeted-retests，三种建轮，返回轮摘要
+ * - POST /testRun/v1/{testRunId}/start 与 complete，id 拼在路径上，无请求体
+ * - POST /testRun/v1/{testRunId}/cancel，请求体 { reason }（reason 先 trim）
+ * - GET /testRun/v1/{testRunId}，返回 run + cases 轮详情
+ * - POST /testRun/v1/findByPage，请求体 { page, pageSize, bean }（projectId/versionId 至少其一）
+ * - GET /testRun/v1/{testRunId}/report，返回 run + summary + resultCounts + cases + defects
+ *   （report/export 为导出能力，P2 明确排除，不建模）
+ * - POST /testExecution/v1/{executionId}/start（无请求体）、complete（字段级可选载荷）、
+ *   retry（请求体 { reason }，先 trim）、defects（执行中建缺陷）、defect-links（关联已有缺陷）
+ *   （老前端 frontend/src/api/testRun.ts 混入的五个执行能力拆分到 testExecutionApi）
+ *
+ * 版本契约（P2；来自后端 VersionController + 老前端 frontend/src/api/version.ts）：
+ * - POST /version/v1/createVersion，请求体 VersionCreatePayload，返回新建版本 id
+ * - POST /version/v1/updateVersion，id 必填、其余全可选的字段级更新（后端 BaseVersionUpdater 只更新非 null 字段）
+ * - POST /version/v1/{id}/transition，请求体 { event, expectedStatus, reason? }；
+ *   expectedStatus 为状态字段上的乐观并发预期（后端 CAS 比对 status，非数字版本号），
+ *   目标状态由服务端按事件解析
+ * - GET /version/v1/findById/{id}，返回版本详情
+ * - POST /version/v1/findByPage，请求体 { page, pageSize, bean }，bean.projectId 必填
+ *
+ * 发布契约（P2；来自后端 ReleaseController + 老前端 frontend/src/api/release.ts）：
+ * - POST /release/v1/create，请求体含 versionId/environmentId/idempotencyKey，返回发布响应
+ * - POST /release/v1/updateDraft，整包覆盖（省略即清空，forceUpdate 省略回退 false）+ 可选 adminReason
+ * - POST /release/v1/findByPage，请求体 { page, pageSize, bean }
+ *   （projectId/versionId 二选一必填）
+ * - GET /release/v1/findById/{id}，返回发布详情（范围/门禁/审批/产物证据）
+ * - GET /release/v1/{id}/previewGates，预览门禁裁决数组
+ * - POST /release/v1/{id}/waiveGate 与 /revokeWaiver，请求体 { gateType, reason }
+ * - POST /release/v1/{id}/submit，无请求体
+ * - POST /release/v1/{id}/approve 与 /reject 与 /cancel，请求体 { reason }
+ * - POST /release/v1/{id}/recordReleased，请求体 ReleaseSuccessPayload
+ *   （buildNumber/artifactLocation/fileHash 必填非空白）；/recordFailed 请求体
+ *   ReleaseFailurePayload（resultNotes 必填；三件套齐全（fileSize 可选，若传须 ≥0），
+ *   或四项全空，半套抛错）
+ * - POST /release/v1/{id}/copyAsDraft 与 /rollbackAsDraft，请求体 { idempotencyKey }，
+ *   返回新草稿响应
+ * - POST /release/v1/{id}/deleteDraft，body 可选（无 adminReason 时不带 body）
+ *
+ * 发布环境契约（P2；来自后端 ReleaseEnvironmentController + 老前端）：
+ * - POST /release-environment/v1/create，返回环境响应对象
+ * - POST /release-environment/v1/update，id/name/order 必填（name 非空≤100 字、order 非负）；
+ *   approvalRequired 随状态：ACTIVE 环境必填、INACTIVE 环境必须省略，返回环境响应对象
+ * - POST /release-environment/v1/{id}/disable，请求体 { reason } 必填
+ * - GET /release-environment/v1/project/{projectId}，返回项目环境数组
+ *
  * 运行：npm run test:contract（需先 npm install）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,6 +114,14 @@ import { authApi } from '../auth';
 import { projectApi } from '../project';
 import { requirementApi } from '../requirement';
 import { taskApi } from '../task';
+import { defectApi } from '../defect';
+import { testCaseApi } from '../testCase';
+import { testSuiteApi } from '../testSuite';
+import { testRunApi } from '../testRun';
+import { testExecutionApi } from '../testExecution';
+import { versionApi } from '../version';
+import { releaseApi } from '../release';
+import { releaseEnvironmentApi } from '../releaseEnvironment';
 import type { ProjectCreatePayload, ProjectUpdatePayload } from '../types';
 
 const memStore = new Map<string, string>();
@@ -1273,5 +1357,1419 @@ describe('任务契约（P1）', () => {
     expect(init1.method).toBe('POST');
     expect(JSON.parse(init1.body as string)).toEqual({ page: 1, pageSize: 20 });
     expect(fetchMock.mock.calls[2][0]).toBe('/api/comment/v1/invalid/601');
+  });
+});
+
+describe('缺陷契约（P2）', () => {
+  it('POST /defect/v1/createDefect，返回新建缺陷 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 301 } }]);
+    const payload = {
+      title: '登录按钮无响应',
+      description: '点击登录按钮后页面无反应',
+      defectType: '功能缺陷',
+      severity: 'MAJOR' as const,
+      priority: 'HIGH' as const,
+      projectId: 7,
+      reporterId: 3,
+      assigneeId: 5,
+      foundDate: '2026-10-04T09:30:00',
+      reproductionSteps: '1. 打开登录页；2. 点击登录',
+      affectedRequirementIds: [101],
+      foundInTaskIds: [201],
+    };
+    const id = await defectApi.createDefect(payload);
+
+    expect(id).toBe(301);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/createDefect');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it('POST /defect/v1/updateDefect，字段级更新；严重度与状态流转不在此入口', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await defectApi.updateDefect({
+      id: 301,
+      priority: 'MEDIUM',
+      environment: 'staging',
+      reproductionSteps: '1. 打开登录页；2. 点击登录；3. 无反应',
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/updateDefect');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 301,
+      priority: 'MEDIUM',
+      environment: 'staging',
+      reproductionSteps: '1. 打开登录页；2. 点击登录；3. 无反应',
+    });
+  });
+
+  it('POST /defect/v1/{defectId}/severity，CAS 旧值校验；reason 先裁空白', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { defectId: 301, previousSeverity: 'MAJOR', currentSeverity: 'CRITICAL' } } },
+    ]);
+    const result = await defectApi.changeSeverity(301, {
+      expectedSeverity: 'MAJOR',
+      targetSeverity: 'CRITICAL',
+      reason: '  阻塞主流程  ',
+    });
+
+    expect(result.defectId).toBe(301);
+    expect(result.previousSeverity).toBe('MAJOR');
+    expect(result.currentSeverity).toBe('CRITICAL');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/301/severity');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      expectedSeverity: 'MAJOR',
+      targetSeverity: 'CRITICAL',
+      reason: '阻塞主流程',
+    });
+  });
+
+  it('POST /defect/v1/updateStatus，流转上下文 id/status/reason/comment/三角色 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await defectApi.updateStatus({
+      id: 301,
+      status: 'ASSIGNED',
+      reason: '转交后端处理',
+      comment: '请优先处理',
+      assigneeId: 5,
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/updateStatus');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 301,
+      status: 'ASSIGNED',
+      reason: '转交后端处理',
+      comment: '请优先处理',
+      assigneeId: 5,
+    });
+  });
+
+  it('GET /defect/v1/findById/{id}，返回缺陷详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 301, title: '登录按钮无响应', status: 'NEW', severity: 'MAJOR', priority: 'HIGH' } } },
+    ]);
+    const detail = await defectApi.findById(301);
+
+    expect(detail.id).toBe(301);
+    expect(detail.title).toBe('登录按钮无响应');
+    expect(detail.status).toBe('NEW');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/findById/301');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /defect/v1/findByPage，请求体 { page, pageSize, bean }', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 301, title: '登录按钮无响应', status: 'NEW' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await defectApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'NEW', severity: 'MAJOR' },
+    });
+
+    expect(page.total).toBe(1);
+    expect(page.list[0].id).toBe(301);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'NEW', severity: 'MAJOR' },
+    });
+  });
+
+  it('getDefectList 默认第 1 页每页 100 条，空查询条件', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { list: [], total: 0, pageNumber: 1, pageSize: 100 } } },
+    ]);
+    await defectApi.getDefectList();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/findByPage');
+    expect(JSON.parse(init.body as string)).toEqual({ page: 1, pageSize: 100, bean: {} });
+  });
+
+  it('GET /defect/v1/statistics，projectId 拼查询参数；缺省时不带参数', async () => {
+    const fetchMock = mockFetchSequence([
+      // severityStats 的 key 是中文标签（severity.getName()），与英文 identity 不同
+      { body: { code: 1, msg: 'ok', result: { totalDefects: 5, openDefects: 3, severityStats: { 主要: 2 } } } },
+      { body: { code: 1, msg: 'ok', result: { totalDefects: 5, openDefects: 3 } } },
+    ]);
+    const stats = await defectApi.getDefectStatistics(7);
+    await defectApi.getDefectStatistics();
+
+    expect(stats.totalDefects).toBe(5);
+    expect(stats.openDefects).toBe(3);
+    expect(stats.severityStats['主要']).toBe(2);
+    const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url0).toBe('/api/defect/v1/statistics?projectId=7');
+    expect(init0.method).toBe('GET');
+    const [url1] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url1).toBe('/api/defect/v1/statistics');
+  });
+
+  it('GET /defect/v1/board，返回分组缺陷与看板列', async () => {
+    // 后端列配置忠实于 DefectBoardColumnCatalog：十列恒存在，按生命周期顺序排列，
+    // id 为 `status-${status}`；defectsByStatus 仅含出现过的状态键（空项目为空对象）
+    const columnsSpec = [
+      ['NEW', '新建', '#faad14'],
+      ['ASSIGNED', '已分配', '#13c2c2'],
+      ['IN_PROGRESS', '处理中', '#1890ff'],
+      ['PENDING_VERIFICATION', '待验证', '#faad14'],
+      ['TESTING', '测试中', '#722ed1'],
+      ['RESOLVED', '已解决', '#52c41a'],
+      ['VERIFIED', '已验证', '#52c41a'],
+      ['CLOSED', '已关闭', '#8c8c8c'],
+      ['REOPEN', '重新打开', '#fa8c16'],
+      ['REJECTED', '已拒绝', '#ff4d4f'],
+    ] as const;
+    const buildColumns = (counts: Record<string, number>) =>
+      columnsSpec.map(([s, name, color]) => ({ id: `status-${s}`, name, status: s, color, count: counts[s] ?? 0 }));
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            defectsByStatus: { NEW: [{ id: 301, title: '登录按钮无响应' }] },
+            columns: buildColumns({ NEW: 1 }),
+          },
+        },
+      },
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { defectsByStatus: {}, columns: buildColumns({}) },
+        },
+      },
+    ]);
+    const board = await defectApi.getDefectBoardData(7);
+    const emptyBoard = await defectApi.getDefectBoardData();
+
+    // 消费端按 Partial 处理：存在的键用 ?? []，缺席的键为 undefined
+    expect((board.defectsByStatus.NEW ?? [])[0].id).toBe(301);
+    expect(board.defectsByStatus.CLOSED).toBeUndefined();
+    expect(board.columns).toHaveLength(10);
+    expect(board.columns[0]).toEqual({ id: 'status-NEW', name: '新建', status: 'NEW', color: '#faad14', count: 1 });
+    expect(board.columns.map((c) => c.status)).toEqual(columnsSpec.map(([s]) => s));
+    expect(board.columns.find((c) => c.status === 'CLOSED')?.count).toBe(0);
+    // 空分组：defectsByStatus 为空对象，十列仍完整且计数全零
+    expect(emptyBoard.defectsByStatus).toEqual({});
+    expect(emptyBoard.columns).toHaveLength(10);
+    expect(emptyBoard.columns.every((c) => c.count === 0)).toBe(true);
+    const [url0, init0] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url0).toBe('/api/defect/v1/board?projectId=7');
+    expect(init0.method).toBe('GET');
+    const [url1] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url1).toBe('/api/defect/v1/board');
+  });
+
+  it('GET /defect/v1/statusOptions，返回十态元数据（value=枚举名）', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: [
+            { value: 'NEW', label: '新建' },
+            { value: 'ASSIGNED', label: '已分配' },
+            { value: 'IN_PROGRESS', label: '处理中' },
+            { value: 'PENDING_VERIFICATION', label: '待验证' },
+            { value: 'RESOLVED', label: '已解决' },
+            { value: 'CLOSED', label: '已关闭' },
+            { value: 'REOPEN', label: '重新打开' },
+            { value: 'REJECTED', label: '已拒绝' },
+            { value: 'VERIFIED', label: '已验证' },
+            { value: 'TESTING', label: '测试中' },
+          ],
+        },
+      },
+    ]);
+    const options = await defectApi.getStatusOptions();
+
+    expect(options).toHaveLength(10);
+    expect(options[0]).toEqual({ value: 'NEW', label: '新建' });
+    expect(options.map((o) => o.value)).toContain('REOPEN');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/statusOptions');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /defect/v1/advancedSearch，高级查询条件拼在 bean 内', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 301, title: '登录按钮无响应' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await defectApi.advancedSearch({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        projectId: 7,
+        keyword: '登录',
+        status: ['NEW', 'ASSIGNED'],
+        severity: ['MAJOR', 'CRITICAL'],
+        priority: ['HIGH'],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/defect/v1/advancedSearch');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        projectId: 7,
+        keyword: '登录',
+        status: ['NEW', 'ASSIGNED'],
+        severity: ['MAJOR', 'CRITICAL'],
+        priority: ['HIGH'],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
+  });
+});
+
+describe('测试用例契约（P2）', () => {
+  it('POST /testCase/v1/createTestCase，返回新建用例 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 401 } }]);
+    const payload = {
+      title: '登录接口返回异常',
+      description: 'POST /auth/v1/login 返回 500',
+      caseNumber: 'TC-2026-0001',
+      testType: '功能测试' as const,
+      priority: '高' as const,
+      status: 'DRAFT' as const,
+      projectId: 7,
+      preconditions: '系统处于可登录状态',
+      testSteps: '1. 输入账号密码；2. 点击登录',
+      expectedResult: '返回 token 并跳转首页',
+      verifiesRequirementIds: [101, 102],
+    };
+    const id = await testCaseApi.createTestCase(payload);
+
+    expect(id).toBe(401);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/createTestCase');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it('POST /testCase/v1/updateTestCase，字段级更新：仅传 id + 变更字段', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await testCaseApi.updateTestCase({
+      id: 401,
+      priority: '中',
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/updateTestCase');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 401,
+      priority: '中',
+    });
+  });
+
+  it('POST /testCase/v1/valid/{id} 与 invalid/{id}，id 拼在路径上', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await testCaseApi.validTestCase(401);
+    await testCaseApi.invalidTestCase(401);
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/testCase/v1/valid/401');
+    expect(init1.method).toBe('POST');
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/testCase/v1/invalid/401');
+    expect(init2.method).toBe('POST');
+  });
+
+  it('GET /testCase/v1/findById/{id}，返回用例详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 401, title: '登录接口返回异常', projectId: 7 } } },
+    ]);
+    const res = await testCaseApi.findById(401);
+
+    expect(res.id).toBe(401);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/findById/401');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /testCase/v1/findByPage，请求体 { page, pageSize, bean }；bean.projectId 必填', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 401, title: '登录接口返回异常' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testCaseApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE', priority: '高' },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE', priority: '高' },
+    });
+  });
+
+  it('POST /testCase/v1/deleteTestCase/{id}（软删；老前端称为 archiveTestCase）', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await testCaseApi.deleteTestCase(401);
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/deleteTestCase/401');
+    expect(init.method).toBe('POST');
+  });
+
+  it('POST /testCase/v1/duplicateTestCase/{id}，返回新用例 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 402 } }]);
+    const id = await testCaseApi.duplicateTestCase(401);
+
+    expect(id).toBe(402);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/duplicateTestCase/401');
+    expect(init.method).toBe('POST');
+  });
+
+  it('POST /testCase/v1/advancedSearch，高级查询条件拼在 bean 内', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 401, title: '登录接口返回异常' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testCaseApi.advancedSearch({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        keyword: '登录',
+        statusList: ['ACTIVE', 'REVIEW'],
+        priorityList: ['高', '中'],
+        testTypeList: ['功能测试'],
+        projectIds: [7],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testCase/v1/advancedSearch');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: {
+        keyword: '登录',
+        statusList: ['ACTIVE', 'REVIEW'],
+        priorityList: ['高', '中'],
+        testTypeList: ['功能测试'],
+        projectIds: [7],
+        orderBy: 'updateTime',
+        orderDirection: 'DESC',
+      },
+    });
+  });
+});
+
+describe('测试套件契约（P2）', () => {
+  it('POST /testSuite/v1/createTestSuite，返回新建套件 id', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 501 } }]);
+    const payload = {
+      suiteName: '登录模块回归套件',
+      projectId: 7,
+      description: '登录/鉴权相关回归用例集合',
+      suiteType: '回归测试' as const,
+      status: 'DRAFT' as const,
+    };
+    const id = await testSuiteApi.createTestSuite(payload);
+
+    expect(id).toBe(501);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/createTestSuite');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual(payload);
+  });
+
+  it('POST /testSuite/v1/updateTestSuite，字段级更新：仅传 id + 变更字段', async () => {
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result: 'success' } }]);
+    const res = await testSuiteApi.updateTestSuite({
+      id: 501,
+      status: 'PAUSED',
+    });
+
+    expect(res).toBe('success');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/updateTestSuite');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 501,
+      status: 'PAUSED',
+    });
+  });
+
+  it('POST /testSuite/v1/valid/{id} 与 invalid/{id}，id 拼在路径上', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await testSuiteApi.validTestSuite(501);
+    await testSuiteApi.invalidTestSuite(501);
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/testSuite/v1/valid/501');
+    expect(init1.method).toBe('POST');
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/testSuite/v1/invalid/501');
+    expect(init2.method).toBe('POST');
+  });
+
+  it('GET /testSuite/v1/findById/{id}，返回套件详情', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 501, suiteName: '登录模块回归套件', projectId: 7 } } },
+    ]);
+    const res = await testSuiteApi.findById(501);
+
+    expect(res.id).toBe(501);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/findById/501');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /testSuite/v1/findByPage，请求体 { page, pageSize, bean }', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 501, suiteName: '登录模块回归套件' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testSuiteApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE' },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testSuite/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'ACTIVE' },
+    });
+  });
+});
+
+describe('测试轮/执行 API 契约', () => {
+  it('POST /testRun/v1/full-regressions，按版本建轮，返回轮摘要', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 901, runName: 'v2.1 全量回归', runType: 'FULL_REGRESSION', status: 'CREATED' } } },
+    ]);
+    const run = await testRunApi.createFullRegression({
+      versionId: 21,
+      runName: 'v2.1 全量回归',
+      environment: 'staging',
+    });
+
+    expect(run.id).toBe(901);
+    expect(run.runType).toBe('FULL_REGRESSION');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/full-regressions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      versionId: 21,
+      runName: 'v2.1 全量回归',
+      environment: 'staging',
+    });
+  });
+
+  it('POST /testRun/v1/ad-hoc-runs，即席建轮带选择项', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 902, runName: '登录冒烟', runType: 'AD_HOC', status: 'CREATED' } } },
+    ]);
+    const run = await testRunApi.createAdHocRun({
+      projectId: 7,
+      runName: '登录冒烟',
+      selections: [
+        { selectionType: 'TEST_SUITE', id: 501 },
+        { selectionType: 'TEST_CASE', id: 611 },
+      ],
+    });
+
+    expect(run.id).toBe(902);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/ad-hoc-runs');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      projectId: 7,
+      runName: '登录冒烟',
+      selections: [
+        { selectionType: 'TEST_SUITE', id: 501 },
+        { selectionType: 'TEST_CASE', id: 611 },
+      ],
+    });
+  });
+
+  it('POST /testRun/v1/targeted-retests，基于旧轮+用例选择建轮', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 903, runName: '复测#901', runType: 'TARGETED_RETEST', status: 'CREATED' } } },
+    ]);
+    const run = await testRunApi.createTargetedRetest({
+      sourceRunId: 901,
+      sourceRunCaseIds: [3101, 3102],
+      runName: '复测#901',
+    });
+
+    expect(run.id).toBe(903);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/targeted-retests');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      sourceRunId: 901,
+      sourceRunCaseIds: [3101, 3102],
+      runName: '复测#901',
+    });
+  });
+
+  it('POST /testRun/v1/{id}/start 与 /complete，id 拼路径，无请求体', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 901, status: 'RUNNING' } } },
+      { body: { code: 1, msg: 'ok', result: { id: 901, status: 'COMPLETED' } } },
+    ]);
+    await testRunApi.startRun(901);
+    await testRunApi.completeRun(901);
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/testRun/v1/901/start');
+    expect(init1.method).toBe('POST');
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/testRun/v1/901/complete');
+    expect(init2.method).toBe('POST');
+  });
+
+  it('POST /testRun/v1/{id}/cancel，reason 先 trim 再发送', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 901, status: 'CANCELLED', cancellationReason: '环境被占用' } } },
+    ]);
+    const run = await testRunApi.cancelRun(901, { reason: '  环境被占用  ' });
+
+    expect(run.status).toBe('CANCELLED');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/901/cancel');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ reason: '环境被占用' });
+  });
+
+  it('GET /testRun/v1/{id}，返回 run + cases 轮详情', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            run: { id: 901, runName: 'v2.1 全量回归', status: 'RUNNING' },
+            cases: [
+              {
+                runCaseId: 3101,
+                testCaseId: 611,
+                snapshot: { title: '登录成功用例' },
+                attempts: [],
+                defects: [],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    const detail = await testRunApi.getDetail(901);
+
+    expect(detail.run.id).toBe(901);
+    expect(detail.cases).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/901');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /testRun/v1/findByPage，请求体 { page, pageSize, bean }', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: { list: [{ id: 901, runName: 'v2.1 全量回归' }], total: 1, pageNumber: 1, pageSize: 20 },
+        },
+      },
+    ]);
+    const page = await testRunApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'RUNNING' },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'RUNNING' },
+    });
+  });
+
+  it('GET /testRun/v1/{id}/report，返回 summary + resultCounts + cases + defects', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            run: { id: 901, runName: 'v2.1 全量回归', status: 'COMPLETED' },
+            summary: { runCaseCount: 4, executedCaseCount: 4, passRate: 0.75, versionEvidenceState: 'OFFICIAL' },
+            resultCounts: { passed: 3, failed: 1, blocked: 0, skipped: 0 },
+            cases: [],
+            defects: [{ defectId: 801, title: '登录 500', liveStatus: '已分配', severity: '严重' }],
+            generatedAt: '2026-10-04T05:00:00Z',
+          },
+        },
+      },
+    ]);
+    const report = await testRunApi.getReport(901);
+
+    expect(report.resultCounts.passed).toBe(3);
+    expect(report.summary.passRate).toBe(0.75);
+    expect(report.defects).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testRun/v1/901/report');
+    expect(init.method).toBe('GET');
+  });
+});
+
+describe('执行记录 API 契约', () => {
+  it('POST /testExecution/v1/{id}/start，无请求体', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 5101, runCaseId: 3101, attemptNo: 1, status: 'RUNNING' } } },
+    ]);
+    const exec = await testExecutionApi.startExecution(5101);
+
+    expect(exec.status).toBe('RUNNING');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/start');
+    expect(init.method).toBe('POST');
+  });
+
+  it('POST /testExecution/v1/{id}/complete，result 必填（后端 CompleteExecutionRequest.record 分量）', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 5101, status: 'COMPLETED', result: 'FAILED' } } },
+    ]);
+    const exec = await testExecutionApi.completeExecution(5101, {
+      result: 'FAILED',
+      actualResult: '登录报 500',
+      failureMessage: 'NullPointerException at LoginService:42',
+      executionNotes: 'staging 环境复现',
+    });
+
+    expect(exec.result).toBe('FAILED');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/complete');
+    expect(init.method).toBe('POST');
+    // result 必填：后端 record 分量，服务在为空时直接拒绝（codex 本地评审 finding 1）
+    expect(JSON.parse(init.body as string)).toEqual({
+      result: 'FAILED',
+      actualResult: '登录报 500',
+      failureMessage: 'NullPointerException at LoginService:42',
+      executionNotes: 'staging 环境复现',
+    });
+  });
+
+  it('POST /testExecution/v1/{id}/retry，reason 先 trim 再发送', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { id: 5102, runCaseId: 3101, attemptNo: 2, status: 'NOT_STARTED' } } },
+    ]);
+    const exec = await testExecutionApi.retryExecution(5101, { reason: ' 环境抖动重跑 ' });
+
+    expect(exec.attemptNo).toBe(2);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/retry');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ reason: '环境抖动重跑' });
+  });
+
+  it('POST /testExecution/v1/{id}/defects，执行中建缺陷，返回 operation 三态', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            executionId: 5101,
+            operation: 'CREATED',
+            defect: { id: 801, title: '登录 500', status: 'NEW', severity: '严重', assigneeId: null },
+            relation: null,
+            occurredAt: '2026-10-04T05:00:00Z',
+          },
+        },
+      },
+    ]);
+    const res = await testExecutionApi.createDefectFromExecution(5101, {
+      title: '登录 500',
+      severity: '严重',
+      priority: '高',
+      reproductionSteps: '输入账号密码点登录',
+      expectedResult: '进入首页',
+      actualResult: '报 500',
+      environment: 'staging',
+    });
+
+    expect(res.operation).toBe('CREATED');
+    expect(res.defect.id).toBe(801);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/defects');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    expect(body.title).toBe('登录 500');
+    expect(body.severity).toBe('严重');
+    // 项目/报告人由服务端可信事实填充，前端不传
+    expect(body).not.toHaveProperty('projectId');
+    expect(body).not.toHaveProperty('reporterId');
+  });
+
+  it('POST /testExecution/v1/{id}/defect-links，关联已有缺陷', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            executionId: 5101,
+            operation: 'LINKED',
+            defect: { id: 802, title: '已知的登录缺陷', status: 'ASSIGNED', severity: '一般', assigneeId: 3 },
+            relation: { relationType: 'EXECUTION_DEFECT' },
+            occurredAt: '2026-10-04T05:10:00Z',
+          },
+        },
+      },
+    ]);
+    const res = await testExecutionApi.linkExistingDefect(5101, { defectId: 802 });
+
+    expect(res.operation).toBe('LINKED');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/testExecution/v1/5101/defect-links');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ defectId: 802 });
+  });
+});
+
+describe('版本 API 契约', () => {
+  it('POST /version/v1/createVersion，请求体 VersionCreatePayload，返回新建版本 id', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 3101 } },
+    ]);
+    const id = await versionApi.createVersion({
+      projectId: 7,
+      name: 'v2.2',
+      versionNumber: '2.2.0',
+      description: '迭代版本',
+      versionType: '次版本',
+      plannedReleaseDate: '2026-10-31T10:00:00',
+      tags: '迭代',
+    });
+
+    expect(id).toBe(3101);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/createVersion');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      projectId: 7,
+      name: 'v2.2',
+      versionNumber: '2.2.0',
+      description: '迭代版本',
+      versionType: '次版本',
+      plannedReleaseDate: '2026-10-31T10:00:00',
+      tags: '迭代',
+    });
+  });
+
+  it('POST /version/v1/updateVersion，多字段更新', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await versionApi.updateVersion({
+      id: 3101,
+      name: 'v2.2',
+      versionNumber: '2.2.0',
+      description: '调整了范围',
+      versionType: '次版本',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/updateVersion');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 3101,
+      name: 'v2.2',
+      versionNumber: '2.2.0',
+      description: '调整了范围',
+      versionType: '次版本',
+    });
+  });
+
+  it('POST /version/v1/updateVersion，单字段更新（仅 id + description；后端只更新非 null 字段）', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await versionApi.updateVersion({
+      id: 3101,
+      description: '调整范围',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/updateVersion');
+    expect(init.method).toBe('POST');
+    // 局部更新：只送变化字段，后端 BaseVersionUpdater 对其余字段保持原值
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 3101,
+      description: '调整范围',
+    });
+  });
+
+  it('POST /version/v1/{id}/transition，expectedStatus 为状态乐观并发预期（非数字版本号）', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await versionApi.transitionVersion(3101, {
+      event: 'START_TESTING',
+      expectedStatus: 'DEVELOPMENT',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/3101/transition');
+    expect(init.method).toBe('POST');
+    // expectedStatus 原样透传调用方读到的当前状态；目标状态由服务端按事件解析
+    expect(JSON.parse(init.body as string)).toEqual({
+      event: 'START_TESTING',
+      expectedStatus: 'DEVELOPMENT',
+    });
+  });
+
+  it('POST /version/v1/{id}/transition，需原因事件携带 reason', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await versionApi.transitionVersion(3101, {
+      event: 'REOPEN_TESTING',
+      expectedStatus: 'FROZEN',
+      reason: '发现阻塞缺陷，退回测试',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/3101/transition');
+    expect(JSON.parse(init.body as string)).toEqual({
+      event: 'REOPEN_TESTING',
+      expectedStatus: 'FROZEN',
+      reason: '发现阻塞缺陷，退回测试',
+    });
+  });
+
+  it('GET /version/v1/findById/{id}，返回版本详情', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            id: 3101,
+            createdAt: 1728012345000,
+            updatedAt: 1728012345000,
+            name: 'v2.2',
+            versionNumber: '2.2.0',
+            description: '迭代版本',
+            versionType: '次版本',
+            status: 'DEVELOPMENT',
+            projectId: 7,
+            assigneeId: 42,
+            plannedStartDate: '2026-10-01T09:00:00',
+            plannedEndDate: '2026-10-20T18:00:00',
+            actualStartDate: null,
+            actualEndDate: null,
+            plannedReleaseDate: '2026-10-31T10:00:00',
+            tags: '迭代',
+          },
+        },
+      },
+    ]);
+    const version = await versionApi.findById(3101);
+
+    expect(version.status).toBe('DEVELOPMENT');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/findById/3101');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /version/v1/findByPage，bean.projectId 必填', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { list: [], total: 0, pageNumber: 1, pageSize: 20 } } },
+    ]);
+    const page = await versionApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'DEVELOPMENT' },
+    });
+
+    expect(page.total).toBe(0);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/version/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, status: 'DEVELOPMENT' },
+    });
+  });
+});
+
+describe('发布 API 契约', () => {
+  const releaseSummary = {
+    id: 7101,
+    projectId: 7,
+    versionId: 3101,
+    environmentId: 510,
+    releaseType: 'STANDARD',
+    rollbackOfReleaseId: null,
+    copySourceReleaseId: null,
+    sequenceNo: 3,
+    status: 'DRAFT',
+    releaseNotes: '本次发布说明',
+    changelog: '变更日志',
+    rollbackPlan: '回滚方案',
+    knownIssues: null,
+    forceUpdate: false,
+    compatibility: null,
+    dependencies: null,
+    environmentCategory: 'STAGING',
+    environmentApprovalRequired: false,
+    draftOwnerId: 42,
+    proposerId: null,
+    testEvidenceState: 'AVAILABLE',
+    evidenceRunId: 901,
+    scopeFingerprint: 'fp-1',
+    requiredCaseCount: 20,
+    executedCaseCount: 20,
+    passedCaseCount: 18,
+    failedCaseCount: 2,
+    blockedCaseCount: 0,
+    skippedCaseCount: 0,
+    snapshotCalculatedAt: '2026-10-04T10:00:00Z',
+    submittedAt: null,
+    approvedAt: null,
+    releasedAt: null,
+    failedAt: null,
+    cancelledAt: null,
+  };
+
+  it('POST /release/v1/create，创建发布草稿，返回发布响应', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: releaseSummary } },
+    ]);
+    const release = await releaseApi.createRelease({
+      versionId: 3101,
+      environmentId: 510,
+      idempotencyKey: 'idem-001',
+      releaseNotes: '本次发布说明',
+    });
+
+    expect(release.id).toBe(7101);
+    expect(release.status).toBe('DRAFT');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release/v1/create');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      versionId: 3101,
+      environmentId: 510,
+      idempotencyKey: 'idem-001',
+      releaseNotes: '本次发布说明',
+    });
+  });
+
+  it('POST /release/v1/updateDraft，整包覆盖：发送完整草稿载荷 + 可选 adminReason', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    // 整包覆盖语义（后端 ReleaseRepository.updateDraft 无条件全量 SET）：
+    // 想保留的字段必须把现值一起送出，想清空的字段显式省略（后端写 null），
+    // forceUpdate 省略会回退为 false（后端 Boolean.TRUE.equals）。
+    await releaseApi.updateDraft({
+      id: 7101,
+      releaseNotes: '更新后的发布说明',
+      changelog: '修复已知缺陷',
+      rollbackPlan: '回滚至上一稳定版本',
+      knownIssues: '已知：大文件上传较慢',
+      forceUpdate: true,
+      compatibility: '兼容 v2.1 客户端',
+      dependencies: '依赖服务 X v1.4',
+      adminReason: '补充门禁材料',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release/v1/updateDraft');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 7101,
+      releaseNotes: '更新后的发布说明',
+      changelog: '修复已知缺陷',
+      rollbackPlan: '回滚至上一稳定版本',
+      knownIssues: '已知：大文件上传较慢',
+      forceUpdate: true,
+      compatibility: '兼容 v2.1 客户端',
+      dependencies: '依赖服务 X v1.4',
+      adminReason: '补充门禁材料',
+    });
+  });
+
+  it('POST /release/v1/findByPage，projectId/versionId 二选一', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { list: [releaseSummary], total: 1, pageNumber: 1, pageSize: 20 } } },
+    ]);
+    const page = await releaseApi.findByPage({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, versionId: 3101 },
+    });
+
+    expect(page.total).toBe(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release/v1/findByPage');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      page: 1,
+      pageSize: 20,
+      bean: { projectId: 7, versionId: 3101 },
+    });
+  });
+
+  it('GET /release/v1/findById/{id}，返回发布详情（范围/门禁/审批/产物证据）', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: {
+            release: releaseSummary,
+            scopeNodes: [],
+            scopeRelations: [],
+            testAttempts: [],
+            defects: [],
+            gateResults: [
+              {
+                gateType: 'REQUIRED_CASES_PASSED',
+                passed: false,
+                waived: true,
+                waiverActorId: 42,
+                waiverReason: '复测通过',
+                waivedAt: '2026-10-04T09:00:00Z',
+              },
+            ],
+            waivers: [],
+            approval: null,
+            artifact: null,
+          },
+        },
+      },
+    ]);
+    const detail = await releaseApi.findById(7101);
+
+    expect(detail.release.id).toBe(7101);
+    expect(detail.gateResults).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release/v1/findById/7101');
+    expect(init.method).toBe('GET');
+  });
+
+  it('GET /release/v1/{id}/previewGates，预览门禁裁决数组', async () => {
+    const fetchMock = mockFetchSequence([
+      {
+        body: {
+          code: 1,
+          msg: 'ok',
+          result: [
+            {
+              gateType: 'NO_BLOCKING_DEFECT',
+              passed: true,
+              waived: false,
+              waiverActorId: null,
+              waiverReason: null,
+              evaluatedAt: '2026-10-04T10:00:00Z',
+            },
+          ],
+        },
+      },
+    ]);
+    const gates = await releaseApi.previewGates(7101);
+
+    expect(gates).toHaveLength(1);
+    expect(gates[0].gateType).toBe('NO_BLOCKING_DEFECT');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release/v1/7101/previewGates');
+    expect(init.method).toBe('GET');
+  });
+
+  it('POST /release/v1/{id}/waiveGate 与 /revokeWaiver，请求体 { gateType, reason }', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await releaseApi.waiveGate(7101, 'REQUIRED_CASES_PASSED', '复测通过');
+    await releaseApi.revokeWaiver(7101, 'REQUIRED_CASES_PASSED', '误豁免');
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/release/v1/7101/waiveGate');
+    expect(init1.method).toBe('POST');
+    expect(JSON.parse(init1.body as string)).toEqual({
+      gateType: 'REQUIRED_CASES_PASSED',
+      reason: '复测通过',
+    });
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/release/v1/7101/revokeWaiver');
+    expect(init2.method).toBe('POST');
+    expect(JSON.parse(init2.body as string)).toEqual({
+      gateType: 'REQUIRED_CASES_PASSED',
+      reason: '误豁免',
+    });
+  });
+
+  it('POST /release/v1/{id}/submit，无请求体', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await releaseApi.submitRelease(7101);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release/v1/7101/submit');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('POST /release/v1/{id}/approve、/reject、/cancel，请求体 { reason }', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await releaseApi.approveRelease(7101, '门禁已齐');
+    await releaseApi.rejectRelease(7101, '回滚方案缺失');
+    await releaseApi.cancelRelease(7101, '版本策略调整');
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/release/v1/7101/approve');
+    expect(JSON.parse(init1.body as string)).toEqual({ reason: '门禁已齐' });
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/release/v1/7101/reject');
+    expect(JSON.parse(init2.body as string)).toEqual({ reason: '回滚方案缺失' });
+    const [url3, init3] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect(url3).toBe('/api/release/v1/7101/cancel');
+    expect(JSON.parse(init3.body as string)).toEqual({ reason: '版本策略调整' });
+  });
+
+  it('POST /release/v1/{id}/recordReleased（制品三件套必填）与 /recordFailed（resultNotes 必填、无制品证据）', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await releaseApi.recordReleased(7101, {
+      buildNumber: 'build-20261004',
+      artifactLocation: 's3://artifacts/app-2.2.0.zip',
+      fileSize: 123456789,
+      fileHash: 'sha256:abc',
+      resultNotes: '灰度发布完成',
+    });
+    await releaseApi.recordFailed(7101, { resultNotes: '探针失败' });
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/release/v1/7101/recordReleased');
+    expect(init1.method).toBe('POST');
+    expect(JSON.parse(init1.body as string)).toEqual({
+      buildNumber: 'build-20261004',
+      artifactLocation: 's3://artifacts/app-2.2.0.zip',
+      fileSize: 123456789,
+      fileHash: 'sha256:abc',
+      resultNotes: '灰度发布完成',
+    });
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/release/v1/7101/recordFailed');
+    expect(JSON.parse(init2.body as string)).toEqual({ resultNotes: '探针失败' });
+  });
+
+  it('POST /release/v1/{id}/copyAsDraft 与 /rollbackAsDraft，请求体 { idempotencyKey }，返回新草稿', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { ...releaseSummary, id: 7102 } } },
+      { body: { code: 1, msg: 'ok', result: { ...releaseSummary, id: 7103, releaseType: 'ROLLBACK' } } },
+    ]);
+    const copied = await releaseApi.copyAsDraft(7101, { idempotencyKey: 'copy-001' });
+    const rolledBack = await releaseApi.rollbackAsDraft(7101, { idempotencyKey: 'rollback-001' });
+
+    expect(copied.id).toBe(7102);
+    expect(rolledBack.releaseType).toBe('ROLLBACK');
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/release/v1/7101/copyAsDraft');
+    expect(init1.method).toBe('POST');
+    expect(JSON.parse(init1.body as string)).toEqual({ idempotencyKey: 'copy-001' });
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/release/v1/7101/rollbackAsDraft');
+    expect(init2.method).toBe('POST');
+    expect(JSON.parse(init2.body as string)).toEqual({ idempotencyKey: 'rollback-001' });
+  });
+
+  it('POST /release/v1/{id}/deleteDraft，有 adminReason 时带 body，无 adminReason 时不带 body', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await releaseApi.deleteDraft(7101, '草稿误建');
+    await releaseApi.deleteDraft(7101);
+
+    const [url1, init1] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url1).toBe('/api/release/v1/7101/deleteDraft');
+    expect(init1.method).toBe('POST');
+    expect(JSON.parse(init1.body as string)).toEqual({ adminReason: '草稿误建' });
+    const [url2, init2] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url2).toBe('/api/release/v1/7101/deleteDraft');
+    expect(init2.body).toBeUndefined();
+  });
+});
+
+describe('发布环境 API 契约', () => {
+  const envResponse = {
+    id: 510,
+    projectId: 7,
+    name: '预发布环境',
+    category: 'STAGING',
+    order: 3,
+    approvalRequired: true,
+    status: 'ACTIVE',
+  };
+
+  it('POST /release-environment/v1/create，返回环境响应对象', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: envResponse } },
+    ]);
+    const env = await releaseEnvironmentApi.createEnvironment({
+      projectId: 7,
+      name: '预发布环境',
+      category: 'STAGING',
+      order: 3,
+      approvalRequired: true,
+    });
+
+    expect(env.id).toBe(510);
+    expect(env.status).toBe('ACTIVE');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release-environment/v1/create');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      projectId: 7,
+      name: '预发布环境',
+      category: 'STAGING',
+      order: 3,
+      approvalRequired: true,
+    });
+  });
+
+  it('POST /release-environment/v1/update，id/name/order 必填 + ACTIVE 环境 approvalRequired 必填', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { ...envResponse, name: '预发布环境（新）' } } },
+    ]);
+    // ACTIVE 环境：name/order 必填（order 非负），approvalRequired 必填（后端强制校验）
+    const env = await releaseEnvironmentApi.updateEnvironment({
+      id: 510,
+      name: '预发布环境（新）',
+      order: 3,
+      approvalRequired: false,
+    });
+
+    expect(env.name).toBe('预发布环境（新）');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release-environment/v1/update');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      id: 510,
+      name: '预发布环境（新）',
+      order: 3,
+      approvalRequired: false,
+    });
+  });
+
+  it('POST /release-environment/v1/{id}/disable，请求体 { reason } 必填', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: 'success' } },
+    ]);
+    await releaseEnvironmentApi.disableEnvironment(510, { reason: '环境下线' });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release-environment/v1/510/disable');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ reason: '环境下线' });
+  });
+
+  it('GET /release-environment/v1/project/{projectId}，返回项目环境数组', async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: [envResponse] } },
+    ]);
+    const envs = await releaseEnvironmentApi.listByProject(7);
+
+    expect(envs).toHaveLength(1);
+    expect(envs[0].order).toBe(3);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/release-environment/v1/project/7');
+    expect(init.method).toBe('GET');
   });
 });
