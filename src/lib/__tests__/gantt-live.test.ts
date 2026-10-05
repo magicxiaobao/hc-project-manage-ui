@@ -12,6 +12,8 @@ import {
   buildBatchUpdateItems,
   buildGanttRows,
   chartWidth,
+  clampBarWidth,
+  closeSelectedIfCurrent,
   createKeyedSerialQueue,
   dateOnlyToInstant,
   dayNumber,
@@ -26,6 +28,8 @@ import {
   normalizeCriticalPath,
   normalizeGanttData,
   normalizeTaskDependencies,
+  overlayCommittedBaseline,
+  shouldReleaseCommittedDraft,
   sortMilestones,
   tickLabel,
   ticksFor,
@@ -487,5 +491,77 @@ describe("milestoneToFormValues / sortMilestones", () => {
     expect(
       sorted.map((item) => item.endDate ?? item.startDate ?? null),
     ).toEqual(["2026-09-01T00:00:00Z", "2026-10-10T00:00:00Z", null]);
+  });
+});
+
+describe("r25-1 overlayCommittedBaseline / shouldReleaseCommittedDraft", () => {
+  it("已提交值叠加到权威基线：窗口内 diff 按已提交值判定", () => {
+    const originals = new Map<number, GanttTask>([
+      [1, makeTask({ id: 1, startDate: "2026-10-01", endDate: "2026-10-05" })],
+    ]);
+    const baseline = overlayCommittedBaseline(originals, {
+      1: { startDate: "2026-10-02", endDate: "2026-10-06" },
+    });
+    const task = baseline.get(1);
+    expect(task?.startDate).toBe("2026-10-02");
+    expect(task?.endDate).toBe("2026-10-06");
+    // 原 Map 不被改动
+    expect(originals.get(1)?.startDate).toBe("2026-10-01");
+  });
+
+  it("无已提交值时直接返回原 Map（同一引用）", () => {
+    const originals = new Map<number, GanttTask>([[1, makeTask({ id: 1 })]]);
+    expect(overlayCommittedBaseline(originals, {})).toBe(originals);
+  });
+
+  it("未知任务 id 的已提交值被忽略", () => {
+    const originals = new Map<number, GanttTask>([[1, makeTask({ id: 1 })]]);
+    const baseline = overlayCommittedBaseline(originals, { 999: { progress: 80 } });
+    expect(baseline.has(999)).toBe(false);
+    expect(baseline.get(1)?.progress).toBe(50);
+  });
+
+  it("草稿释放：仅数据版本推进后释放", () => {
+    expect(shouldReleaseCommittedDraft(null, 100)).toBe(false);
+    expect(shouldReleaseCommittedDraft(100, 100)).toBe(false);
+    expect(shouldReleaseCommittedDraft(100, 99)).toBe(false);
+    expect(shouldReleaseCommittedDraft(100, 101)).toBe(true);
+  });
+});
+
+describe("r25-3 clampBarWidth", () => {
+  it("正常条宽不受影响", () => {
+    expect(clampBarWidth(10, 20)).toBe(10);
+  });
+
+  it("过窄条宽拉到最小 1.5%", () => {
+    expect(clampBarWidth(0.5, 50)).toBe(1.5);
+  });
+
+  it("末端任务右端不超过 100%（100 天范围末日单日任务）", () => {
+    // 起点 99%、自然宽度 1%：旧逻辑得 1.5% → 右端 100.5% 越界
+    const width = clampBarWidth(1, 99);
+    expect(width).toBe(1);
+    expect(99 + width).toBeLessThanOrEqual(100);
+  });
+
+  it("极端贴边时宽度可被压缩到接近 0 也不越界", () => {
+    const width = clampBarWidth(1.5, 99.9);
+    expect(99.9 + width).toBeLessThanOrEqual(100);
+    expect(width).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("r25-4 closeSelectedIfCurrent", () => {
+  it("当前选中的就是保存任务 → 关闭", () => {
+    expect(closeSelectedIfCurrent(7, 7)).toBeNull();
+  });
+
+  it("已选中新任务 → 保留新面板", () => {
+    expect(closeSelectedIfCurrent(9, 7)).toBe(9);
+  });
+
+  it("当前无选中 → 保持 null", () => {
+    expect(closeSelectedIfCurrent(null, 7)).toBeNull();
   });
 });

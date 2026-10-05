@@ -432,6 +432,63 @@ export function buildBatchUpdateItems(
   return items;
 }
 
+/**
+ * r25-1：已提交值叠加到权威基线。
+ *
+ * 拖拽提交成功后、权威重取到达前，旧缓存仍是提交前的值。窗口内再次拖拽
+ * 时 buildBatchUpdateItems 必须相对"已提交值"判定 changed，否则按陈旧
+ * 缓存比较会漏掉回滚类改动、或按旧几何基线提交覆盖已保存的新日期。
+ * 草稿（draft）本身保持应用直到权威数据到达（组件侧 effect），这里只
+ * 解决 diff 基线问题：返回 originals 叠加 committed 的新 Map。
+ */
+export function overlayCommittedBaseline(
+  originals: Map<number, GanttTask>,
+  committed: Record<number, TaskDraft>,
+): Map<number, GanttTask> {
+  const entries = Object.entries(committed);
+  if (entries.length === 0) return originals;
+  const merged = new Map(originals);
+  for (const [idKey, change] of entries) {
+    const id = Number(idKey);
+    const original = merged.get(id);
+    if (original) merged.set(id, { ...original, ...change });
+  }
+  return merged;
+}
+
+/**
+ * r25-1：提交后草稿释放判定（纯逻辑）。
+ * 仅当记录了提交版本、且查询数据版本已推进（权威重取到达）时才释放草稿；
+ * 其它情况保持草稿应用，保证"成功后无永久草稿残留"与"窗口内不覆盖"兼得。
+ */
+export function shouldReleaseCommittedDraft(
+  committedVersion: number | null,
+  dataUpdatedAt: number,
+): boolean {
+  return committedVersion !== null && dataUpdatedAt > committedVersion;
+}
+
+/**
+ * r25-3：甘特条宽钳制——保留至少 1.5% 的最小视觉宽度，但右端不得超过
+ * 100%。长时间轴末端任务（如 100 天范围末日单日任务：起点 99%、自然
+ * 宽度 1%）按旧逻辑会被拉到 100.5% 越界，与依赖连线端点（100%）错位。
+ */
+export function clampBarWidth(naturalWidth: number, left: number): number {
+  return Math.min(Math.max(naturalWidth, 1.5), Math.max(100 - left, 0));
+}
+
+/**
+ * r25-4：选中任务面板的条件关闭。
+ * 旧面板的保存成功回调是闭包旧值，不能无条件关闭——若期间已选中新任务，
+ * 必须保留新面板（否则新面板的未保存修改被静默丢弃，还绕过 dirty 守卫）。
+ */
+export function closeSelectedIfCurrent(
+  current: number | null,
+  taskId: number,
+): number | null {
+  return current === taskId ? null : current;
+}
+
 // ------------------------------------------------------------- 按键串行队列
 
 /**

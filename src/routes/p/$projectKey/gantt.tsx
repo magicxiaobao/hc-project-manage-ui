@@ -13,7 +13,7 @@ import { EmptyHint } from "@/components/biz";
 import { GanttLive } from "@/components/pm/gantt-live";
 import { GanttView } from "@/components/pm/gantt-view";
 import { useAuthStore } from "@/lib/api/auth-store";
-import { toUserMessage, useProjectIdByKey } from "@/lib/query";
+import { toUserMessage, useProjectIdByKey, nextLastGoodProject } from "@/lib/query";
 
 export const Route = createFileRoute("/p/$projectKey/gantt")({
   component: Page,
@@ -35,10 +35,10 @@ function LiveGantt({ projectKey }: { projectKey: string }) {
   // 上次解析成功的项目 id：后台重取失败（isError）时保留已挂载的
   // 图表与其弹窗子树，脏表单不被卸载（沿用 backlog 路由的 P3 经验）。
   // ref 按 projectKey 归属：切换项目后旧 key 的 lastGood 不再复用。
+  // r25-2：解析成功但返回 null（项目不存在）是权威结论，必须清除该 key
+  // 的 lastGood——否则之后重取失败会回退到旧项目 id，显示错项目。
   const lastGood = useRef<{ key: string; id: number } | null>(null);
-  if (typeof resolution.data === "number") {
-    lastGood.current = { key: projectKey, id: resolution.data };
-  }
+  lastGood.current = nextLastGoodProject(lastGood.current, projectKey, resolution);
   const projectId =
     typeof resolution.data === "number"
       ? resolution.data

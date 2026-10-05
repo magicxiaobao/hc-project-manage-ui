@@ -34,6 +34,8 @@ import {
   buildBatchUpdateItems,
   buildGanttRows,
   chartWidth,
+  clampBarWidth,
+  closeSelectedIfCurrent,
   dayNumber,
   findUnscheduledTasks,
   instantToDateOnly,
@@ -44,6 +46,8 @@ import {
   normalizeCriticalPath,
   normalizeGanttData,
   normalizeTaskDependencies,
+  overlayCommittedBaseline,
+  shouldReleaseCommittedDraft,
   sortMilestones,
   tickLabel,
   ticksFor,
@@ -109,9 +113,17 @@ function GanttLiveInner({
   // 必须经过这里的 dirty guard，否则面板自己的守卫随卸载一起消失，
   // 形同虚设
   const [panelDirty, setPanelDirty] = useState(false);
+  const [panelSavePending, setPanelSavePending] = useState(false);
   const selectionGuard = useUnsavedChangesGuard(panelDirty);
   const reportPanelDirty = useCallback((dirty: boolean) => setPanelDirty(dirty), []);
+  const reportPanelSavePending = useCallback((pending: boolean) => setPanelSavePending(pending), []);
   const requestSelectTask = (taskId: number) => {
+    // r25-4：面板保存请求在途时禁止切换任务——旧面板的 onSuccess 闭包
+    // 会无条件关闭新面板，丢弃其未保存修改并绕过 dirty 守卫
+    if (panelSavePending) {
+      toast("正在保存任务调整，请稍候再切换。");
+      return;
+    }
     selectionGuard.guard(() =>
       setSelectedId((current) => (current === taskId ? null : taskId)),
     );
@@ -120,13 +132,29 @@ function GanttLiveInner({
   // 拖拽草稿：id → 差量。state 驱动渲染，ref 供 pointerup 闭包读最新值。
   const [draft, setDraftState] = useState<Record<number, TaskDraft>>({});
   const draftRef = useRef<Record<number, TaskDraft>>({});
-  const setDraft = (
-    updater: (current: Record<number, TaskDraft>) => Record<number, TaskDraft>,
-  ) => {
-    const next = updater(draftRef.current);
-    draftRef.current = next;
-    setDraftState(next);
-  };
+  const setDraft = useCallback(
+    (updater: (current: Record<number, TaskDraft>) => Record<number, TaskDraft>) => {
+      const next = updater(draftRef.current);
+      draftRef.current = next;
+      setDraftState(next);
+    },
+    [],
+  );
+
+  // r25-1：已提交但权威重取尚未到达的值（id → 已提交差量），以及提交时
+  // 的查询数据版本。提交成功后草稿保持应用（与服务端数据合并渲染），
+  // 直到 dataUpdatedAt 推进（权威重取到达）才释放——窗口内的再次拖拽按
+  // 含草稿的合并值计算基线，不会用旧缓存基线覆盖已保存的新日期；
+  // 权威数据一到即清，保证"成功后无永久草稿残留"。
+  const committedRef = useRef<Record<number, TaskDraft>>({});
+  const commitVersionRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (shouldReleaseCommittedDraft(commitVersionRef.current, ganttQuery.dataUpdatedAt)) {
+      commitVersionRef.current = null;
+      committedRef.current = {};
+      setDraft(() => ({}));
+    }
+  }, [ganttQuery.dataUpdatedAt, setDraft]);
 
   const chartRef = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -239,19 +267,26 @@ function GanttLiveInner({
   // ---------------- 拖拽：改期（move/start/end）与拖进度（progress）
 
   const commitDraft = () => {
-    const items = buildBatchUpdateItems(draftRef.current, originalsById);
+    // r25-1：diff 基线 = 权威缓存叠加已提交值。提交成功后、权威重取到达前
+    // 旧缓存仍是提交前的值，直接相对它比较会误判（窗口内再次拖拽按旧几何
+    // 基线提交，覆盖已保存的新日期）。
+    const baseline = overlayCommittedBaseline(originalsById, committedRef.current);
+    const items = buildBatchUpdateItems(draftRef.current, baseline);
     if (items.length === 0) {
       setDraft(() => ({}));
       return;
     }
-    // 成功前保留草稿（与服务端数据合并渲染）；成功后清空草稿并以失效重取的
-    // 服务端权威数据为准——草稿残留会导致旧值被后续拖拽载荷再次写回；
-    // 失败回滚清空
+    // 本次提交的草稿快照：onSuccess 时记入已提交基线（不能读闭包外的
+    // draftRef.current——窗口内可能已有新的未提交拖拽）。
+    const committedSnapshot = { ...draftRef.current };
+    // 成功前保留草稿（与服务端数据合并渲染）；成功后继续保持应用直到
+    // 权威重取到达（上方 effect 释放），失败回滚清空
     batchMutation.mutate(
       { projectId, payload: { tasks: items } },
       {
         onSuccess: () => {
-          setDraft(() => ({}));
+          committedRef.current = { ...committedRef.current, ...committedSnapshot };
+          commitVersionRef.current = ganttQuery.dataUpdatedAt;
           toast.success(`已保存 ${items.length} 个任务的计划调整`);
         },
         onError: (error) => {
@@ -520,7 +555,8 @@ function GanttLiveInner({
               ) : null}
               {visibleRows.map((row) => {
                 const left = xPercent(dayNumber(row.start), origin, span);
-                const width = Math.max(xPercent(dayNumber(row.end) + 1, origin, span) - left, 1.5);
+                // r25-3：最小视觉宽度 1.5%，但右端钳制在 100% 以内
+                const width = clampBarWidth(xPercent(dayNumber(row.end) + 1, origin, span) - left, left);
                 const progress = Math.min(Math.max(row.task.progress ?? 0, 0), 100);
                 const isCritical = showCritical && criticalIds.has(row.task.id);
                 const isSelected = selectedId === row.task.id;
@@ -658,8 +694,12 @@ function GanttLiveInner({
             task={selectedTask}
             guard={selectionGuard.guard}
             markClean={selectionGuard.markClean}
+            cancelConfirm={selectionGuard.cancelConfirm}
             onDirtyChange={reportPanelDirty}
-            onClose={() => setSelectedId(null)}
+            onSavePendingChange={reportPanelSavePending}
+            // r25-4：按 id 条件关闭——旧面板保存成功回调的闭包 onClose 不能
+            // 无条件关闭：期间若已选中新任务，必须保留新面板
+            onClose={() => setSelectedId((current) => closeSelectedIfCurrent(current, selectedTask.id))}
           />
         </>
       ) : null}
@@ -694,7 +734,9 @@ function SelectedTaskPanel({
   task,
   guard,
   markClean,
+  cancelConfirm,
   onDirtyChange,
+  onSavePendingChange,
   onClose,
 }: {
   projectId: number;
@@ -702,7 +744,9 @@ function SelectedTaskPanel({
   task: GanttTask;
   guard: (action: () => void) => void;
   markClean: () => void;
+  cancelConfirm: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSavePendingChange?: (pending: boolean) => void;
   onClose: () => void;
 }) {
   const depsQuery = useTaskGanttDependencies({ taskId: task.id });
@@ -738,6 +782,13 @@ function SelectedTaskPanel({
     onDirtyChange?.(isDirty);
     return () => onDirtyChange?.(false);
   }, [isDirty, onDirtyChange]);
+
+  // r25-4：保存请求在途状态上报父级——在途时父级禁止切换任务/关闭面板；
+  // 卸载时清零
+  useEffect(() => {
+    onSavePendingChange?.(batchPending);
+    return () => onSavePendingChange?.(false);
+  }, [batchPending, onSavePendingChange]);
 
   const close = () => guard(onClose);
 
@@ -795,12 +846,20 @@ function SelectedTaskPanel({
       { projectId, payload: { tasks: [item] } },
       {
         onSuccess: () => {
+          // r25-4：编辑会话结束——先复位可能残留的确认框（confirming/
+          // pendingRef），否则下次选中新任务会弹出过期确认框执行陈旧动作；
+          // 再清脏关闭（父级 onClose 按 id 条件关闭，旧面板回调不会关新面板）
+          cancelConfirm();
           markClean();
           toast.success("已保存计划调整");
           onClose();
         },
         onError: (error) => {
-          setSubmitError(toUserMessage(error));
+          // r25-5：失败必须全局可见——内联错误 + toast。面板若在请求在途
+          // 时已卸载，内联错误随之消失，只有 toast 能让用户看到失败
+          const message = toUserMessage(error);
+          setSubmitError(message);
+          toast.error(`保存失败：${message}`);
         },
       },
     );
@@ -823,7 +882,13 @@ function SelectedTaskPanel({
           >
             查看详情
           </Link>
-          <button type="button" className="type-caption text-default-500 hover:underline" onClick={close}>
+          <button
+            type="button"
+            className="type-caption text-default-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={close}
+            disabled={batchPending}
+            title={batchPending ? "正在保存，请稍候" : undefined}
+          >
             关闭面板
           </button>
         </div>

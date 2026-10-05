@@ -3,7 +3,7 @@
  *
  * 设计：
  * - `useUnsavedChangesGuard(dirty)`：给一个表单接未保存拦截，返回
- *   `{ guard, dialog, blocker, markClean }`。
+ *   `{ guard, dialog, blocker, markClean, cancelConfirm }`。
  *   - `blocker`：渲染在整页表单里，拦截 TanStack Router 的路由跳转，
  *     并通过 enableBeforeUnload 拦截浏览器刷新/关闭标签页。
  *   - `guard(action)`：包裹用户主动的离开动作（取消按钮、弹窗的 X/遮罩/Esc）。
@@ -11,6 +11,8 @@
  *   - `dialog`：确认框元素，表单内渲染一次即可。
  *   - `markClean()`：提交成功后、程序化跳转前调用，避免守卫拦截自己的
  *     成功跳转（此时 state 还没来得及回落到干净，ref 级别放行）。
+ *   - `cancelConfirm()`：保存成功结束编辑会话时调用，关闭可能正开着的
+ *     确认框并丢弃其陈旧的待执行动作（r25-4）。
  * - `RequiredMark`：必填字段标签后的红色星号（读屏器读作"必填"）。
  * - `FieldError`：字段下方的红色错误文案（role="alert"）。
  *
@@ -140,6 +142,18 @@ export function useUnsavedChangesGuard(dirty: boolean) {
     [shouldBlock],
   );
 
+  /**
+   * r25-4：显式关闭确认框并丢弃待执行的离开动作。
+   * 编辑会话因保存成功而结束（面板随之关闭）时调用：此时若确认框正开着，
+   * 其 pendingRef 是陈旧动作（如下次选中新任务会直接弹出过期确认框并
+   * 执行旧动作）。与 markClean 语义不同——markClean 只管"放行"，不管
+   * 正在展示的确认框。
+   */
+  const cancelConfirm = useCallback(() => {
+    setConfirming(false);
+    pendingRef.current = null;
+  }, []);
+
   /** 提交成功后调用：放行随后的程序化跳转（state 回落前的 ref 级别放行） */
   const markClean = useCallback(() => {
     // P2：必须按当前 dirty 置位，不能无条件 true。干净表单直接保存时 dirty
@@ -169,5 +183,5 @@ export function useUnsavedChangesGuard(dirty: boolean) {
 
   const blocker = <RouteBlocker shouldBlockFn={shouldBlock} />;
 
-  return { guard, dialog, blocker, markClean };
+  return { guard, dialog, blocker, markClean, cancelConfirm };
 }
