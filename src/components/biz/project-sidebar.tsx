@@ -62,6 +62,7 @@ export function ProjectSidebar({
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/requirements" active={liveCurrent === "requirements"} icon={<ListTree className="size-4" />} label="需求" onClose={onClose} />
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/issues" active={liveCurrent === "issues"} icon={<SquareCheckBig className="size-4" />} label="任务" onClose={onClose} />
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/trace" active={liveCurrent === "trace"} icon={<Waypoints className="size-4" />} label="追溯" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/traceability" active={liveCurrent === "traceability"} icon={<Waypoints className="size-4" />} label="需求追溯矩阵" onClose={onClose} />
               </div>
             </nav>
           </>
@@ -82,6 +83,7 @@ export function ProjectSidebar({
               <ProjectLink projectKey={project.key} to="/p/$projectKey/issues" active={current === "issues"} icon={<SquareCheckBig className="size-4" />} label="事项" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/requirements" active={current === "requirements"} icon={<ListTree className="size-4" />} label="需求" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/trace" active={current === "trace"} icon={<Waypoints className="size-4" />} label="追溯" onClose={onClose} />
+              <ProjectLink projectKey={project.key} to="/p/$projectKey/traceability" active={current === "traceability"} icon={<Waypoints className="size-4" />} label="需求追溯矩阵" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/gantt" active={current === "gantt"} icon={<ChartGantt className="size-4" />} label="甘特图" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/dependencies" active={current === "dependencies"} icon={<GitBranch className="size-4" />} label="依赖" onClose={onClose} />
               </div>
@@ -226,7 +228,7 @@ function ProjectLink({
   onClose,
 }: {
   projectKey: string;
-  to: "/p/$projectKey" | "/p/$projectKey/dashboard" | "/p/$projectKey/backlog" | "/p/$projectKey/sprints" | "/p/$projectKey/issues" | "/p/$projectKey/defects" | "/p/$projectKey/assignment" | "/p/$projectKey/requirements" | "/p/$projectKey/trace" | "/p/$projectKey/gantt" | "/p/$projectKey/dependencies" | "/p/$projectKey/tests" | "/p/$projectKey/worklogs" | "/p/$projectKey/releases" | "/p/$projectKey/stats" | "/p/$projectKey/settings";
+  to: "/p/$projectKey" | "/p/$projectKey/dashboard" | "/p/$projectKey/backlog" | "/p/$projectKey/sprints" | "/p/$projectKey/issues" | "/p/$projectKey/defects" | "/p/$projectKey/assignment" | "/p/$projectKey/requirements" | "/p/$projectKey/trace" | "/p/$projectKey/traceability" | "/p/$projectKey/gantt" | "/p/$projectKey/dependencies" | "/p/$projectKey/tests" | "/p/$projectKey/worklogs" | "/p/$projectKey/releases" | "/p/$projectKey/stats" | "/p/$projectKey/settings";
   active: boolean;
   activeOptions?: { exact: true };
   icon: ReactNode;

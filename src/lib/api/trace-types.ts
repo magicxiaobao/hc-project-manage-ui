@@ -17,7 +17,7 @@
  *   （executionNode 当且仅当 runId+runType 非空）
  * - RequirementMatrixQuery：{ projectId, requirementId?, requirementStatus?,
  *   taskStatus?, testCaseStatus?, defectStatus?, versionStatus? }
- *   （versionStatus 为 VersionStatus 枚举，P3 查询面不建模，用 string 透传）
+ *   （versionStatus 保留后端枚举类型，矩阵 UI 不传此筛选）
  * - LinkRelationRequest（record）：{ sourceType, sourceId, relationType,
  *   targetType, targetId }——项目、Actor、source/status 由服务端确定，前端不传
  * - UnlinkRelationRequest = link + reason（必填，页面需收集）
@@ -70,13 +70,35 @@ export interface TraceNodeSummary {
   status?: string | null;
   assigneeId?: number | null;
   runId?: number | null;
-  runType?: string | null;
+  runType?: 'FULL_REGRESSION' | 'TARGETED_RETEST' | 'AD_HOC' | null;
   direct: boolean;
   path: AlmObjectKey[];
 }
 
 /** 版本证据桶（后端 VersionEvidenceBucket；实现拼装，P3 只做只读渲染） */
-export type VersionEvidenceBucket = Record<string, unknown>;
+export interface LatestExecutionSummary {
+  runCaseId: number;
+  testCaseId: number;
+  executionId: number;
+  attemptNo: number;
+  status: 'NOT_STARTED' | 'RUNNING' | 'COMPLETED' | 'CANCELLED';
+  result: 'PASSED' | 'FAILED' | 'BLOCKED' | 'SKIPPED';
+}
+
+export interface VersionEvidenceSummary {
+  versionId: number;
+  versionName: string | null;
+  versionStatus: string | null;
+  testEvidenceState: 'AVAILABLE' | 'NO_REQUIRED_CASE' | 'NO_FULL_REGRESSION' | 'STALE_SCOPE';
+  evidenceRunId: number | null;
+  latestExecutionSummaries: LatestExecutionSummary[];
+}
+
+export interface VersionEvidenceBucket {
+  total: number;
+  truncated: boolean;
+  items: VersionEvidenceSummary[];
+}
 
 /** 追溯矩阵行（忠实于后端 RequirementMatrixRow record） */
 export interface RequirementMatrixRow {
@@ -95,7 +117,7 @@ export interface RequirementMatrixQuery {
   taskStatus?: string;
   testCaseStatus?: string;
   defectStatus?: string;
-  versionStatus?: string;
+  versionStatus?: 'PLANNING' | 'DEVELOPMENT' | 'TESTING' | 'FROZEN' | 'RELEASED' | 'DEPRECATED';
 }
 
 /** 人工关系创建载荷（忠实于后端 LinkRelationRequest record） */

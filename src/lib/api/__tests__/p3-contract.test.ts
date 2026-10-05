@@ -32,6 +32,7 @@
  *   POST /traceability/v1/relations/link//unlink//batch-query
  *   （unlink 的 reason 必填；export 导出为 P3 明确排除项）
  */
+import { matrixFixture } from '../../__tests__/fixtures/trace-matrix';
 import { describe, expect, it, vi } from 'vitest';
 import { boardApi, boardColumnApi } from '../board';
 import { sprintApi } from '../sprint';
@@ -497,5 +498,42 @@ describe('追溯契约（P3）', () => {
     expect(unlinkBody.reason).toBe('误关联');
     expect(calls[2][0]).toBe('/api/traceability/v1/relations/batch-query');
     expect(JSON.parse(calls[2][1].body as string).activeOnly).toBe(true);
+  });
+});
+
+
+describe('需求矩阵契约边界', () => {
+  it('四类状态、精确requirementId、token、单次/api前缀和信封解包', async () => {
+    memStore.set('token', 'matrix-token');
+    const result = { list: [matrixFixture()], total: 1, pageNumber: 1, pageSize: 20 };
+    const fetchMock = mockFetchSequence([{ body: { code: 1, msg: 'ok', result } }]);
+    const params = { page: 1, pageSize: 20, bean: { projectId: 7, requirementId: 1, requirementStatus: 'DRAFT', taskStatus: 'COMPLETED', testCaseStatus: 'ACTIVE', defectStatus: 'RESOLVED' } };
+    expect(await requirementTraceApi.findMatrix(params)).toEqual(result);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/requirement/v1/trace/matrix/findByPage');
+    expect(new Headers(init.headers).get('token')).toBe('matrix-token');
+    expect(JSON.parse(init.body)).toEqual(params); memStore.delete('token');
+  });
+  it.each(['requirementStatus', 'taskStatus', 'testCaseStatus', 'defectStatus'])('%s命中/成功无命中保留后端行与摘要', async (field) => {
+    const row = matrixFixture();
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { list: [row], total: 1, pageNumber: 1, pageSize: 20 } } },
+      { body: { code: 1, msg: 'ok', result: { list: [], total: 0, pageNumber: 1, pageSize: 20 } } },
+    ]);
+    const statuses: Record<string, string> = { requirementStatus: 'DRAFT', taskStatus: 'COMPLETED', testCaseStatus: 'ACTIVE', defectStatus: 'RESOLVED' };
+    const request = { page: 1, pageSize: 20, bean: { projectId: 7, [field]: statuses[field] } };
+    expect((await requirementTraceApi.findMatrix(request)).list[0]).toEqual(row);
+    expect((await requirementTraceApi.findMatrix({ ...request, bean: { projectId: 7, [field]: 'REVIEW' } })).total).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it.each(['权限不足', 'ARCHIVED 用例已失效', '分页数据不完整'])('业务失败%s不转空页', async (message) => {
+    mockFetchSequence([{ body: { code: 40001, msg: message, result: null } }]);
+    await expect(requirementTraceApi.findMatrix({ page: 1, pageSize: 20, bean: { projectId: 7 } })).rejects.toThrow(message);
+  });
+  it('网络失败与非法成功响应不转未覆盖', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('网络断开')));
+    await expect(requirementTraceApi.findMatrix({ page: 1, pageSize: 20, bean: { projectId: 7 } })).rejects.toThrow('网络断开');
+    mockFetchSequence([{ body: { code: 1, msg: 'ok', result: { list: [{ ...matrixFixture(), taskSummaries: null }], total: 1, pageNumber: 1, pageSize: 20 } } }]);
+    await expect(requirementTraceApi.findMatrix({ page: 1, pageSize: 20, bean: { projectId: 7 } })).rejects.toThrow('响应契约错误');
   });
 });

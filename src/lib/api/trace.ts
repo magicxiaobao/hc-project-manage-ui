@@ -9,6 +9,7 @@
  *   P3 明确排除，不建模
  */
 import { api } from './client';
+import { assertMatrixPage } from '../trace-matrix';
 import type { PageRequest, PageResult } from './types';
 import type {
   AlmRelation,
@@ -32,11 +33,13 @@ export const requirementTraceApi = {
     api.get<RequirementImpact>(`/requirement/v1/trace/${requirementId}/impact`),
 
   /** 追溯矩阵分页：POST，请求体 { page, pageSize, bean }（bean.projectId 必填） */
-  findMatrix: (params: PageRequest<RequirementMatrixQuery>) =>
-    api.post<PageResult<RequirementMatrixRow>>(
-      '/requirement/v1/trace/matrix/findByPage',
-      params,
-    ),
+  findMatrix: async (params: PageRequest<RequirementMatrixQuery>): Promise<PageResult<RequirementMatrixRow>> => {
+    const result = await api.post<PageResult<RequirementMatrixRow>>(
+      '/requirement/v1/trace/matrix/findByPage', params,
+    );
+    assertMatrixPage(result);
+    return result;
+  },
 };
 
 export const traceabilityRelationApi = {

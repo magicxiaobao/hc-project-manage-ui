@@ -10,6 +10,9 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requirementApi } from '../../api/requirement';
+import { requirementTraceApi } from '../../api/trace';
+import { normalizeMatrixParams } from '../../trace-matrix';
+import { isPositiveSafeId } from '../../task-dependencies-live';
 import type {
   CommentCreatePayload,
   RequirementImpact,
@@ -217,7 +220,7 @@ export function useRequirementImpact(requirementId: number | null | undefined) {
 export interface TraceMatrixParams {
   page?: number;
   pageSize?: number;
-  bean?: RequirementMatrixQuery;
+  bean?: Partial<RequirementMatrixQuery>;
   /** 所属项目 id；null/undefined 时不发起请求（调用方等待 projectKey→id 解析） */
   projectId?: number | null;
 }
@@ -227,18 +230,12 @@ export interface TraceMatrixParams {
  * bean 默认带 projectId（矩阵始终按项目过滤）；projectId 无效时 disabled。
  */
 export function useTraceMatrix(params: TraceMatrixParams = {}) {
-  const { projectId, page = 1, pageSize = 20, bean } = params;
-  // 不加显式类型注解：让 normalized 保持对象字面量推断类型，
-  // 才能获得隐式索引签名，满足 queryKeys.requirement.matrix 的 Record<string, unknown> 参数。
-  const normalized = {
-    page,
-    pageSize,
-    bean: { ...bean, projectId: projectId ?? 0 },
-  };
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const normalized = normalizeMatrixParams(params);
   return useQuery({
     queryKey: queryKeys.requirement.matrix(normalized),
-    queryFn: () => requirementApi.findMatrixByPage(normalized),
-    enabled: typeof projectId === 'number' && Number.isFinite(projectId),
+    queryFn: () => requirementTraceApi.findMatrix(normalized),
+    enabled: isAuthenticated && isPositiveSafeId(params.projectId),
   });
 }
 

@@ -36,6 +36,7 @@ import { Route as PProjectKeyTestsRouteImport } from './routes/p/$projectKey/tes
 import { Route as PProjectKeyTestsuitesRouteImport } from './routes/p/$projectKey/testsuites'
 import { Route as PProjectKeyTraceRouteImport } from './routes/p/$projectKey/trace'
 import { Route as PProjectKeyVersionsRouteImport } from './routes/p/$projectKey/versions'
+import { Route as PProjectKeyTraceabilityRouteImport } from './routes/p/$projectKey/traceability'
 import { Route as PProjectKeyWorklogsRouteImport } from './routes/p/$projectKey/worklogs'
 import { Route as PProjectKeyDefectsIndexRouteImport } from './routes/p/$projectKey/defects/index'
 import { Route as PProjectKeyDefectsDefectIdRouteImport } from './routes/p/$projectKey/defects/$defectId'
@@ -196,6 +197,9 @@ const PProjectKeyTraceRoute = PProjectKeyTraceRouteImport.update({
 const PProjectKeyVersionsRoute = PProjectKeyVersionsRouteImport.update({
   id: '/versions',
   path: '/versions',
+const PProjectKeyTraceabilityRoute = PProjectKeyTraceabilityRouteImport.update({
+  id: '/traceability',
+  path: '/traceability',
   getParentRoute: () => PProjectKeyRoute,
 } as any)
 const PProjectKeyWorklogsRoute = PProjectKeyWorklogsRouteImport.update({
@@ -364,6 +368,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/testsuites': typeof PProjectKeyTestsuitesRouteWithChildren
   '/p/$projectKey/trace': typeof PProjectKeyTraceRoute
   '/p/$projectKey/versions': typeof PProjectKeyVersionsRouteWithChildren
+  '/p/$projectKey/traceability': typeof PProjectKeyTraceabilityRoute
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
   '/p/$projectKey/': typeof PProjectKeyIndexRoute
   '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
@@ -398,6 +403,9 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
   '/projects/new': typeof ProjectsNewRoute
+  '/p/$projectKey/defects': typeof PProjectKeyDefectsRoute
+  '/p/$projectKey/releases': typeof PProjectKeyReleasesRoute
+  '/p/$projectKey/tests': typeof PProjectKeyTestsRoute
   '/p/$projectKey': typeof PProjectKeyIndexRoute
   '/p/$projectKey/defects': typeof PProjectKeyDefectsIndexRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsIndexRoute
@@ -449,6 +457,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/testsuites'
     | '/p/$projectKey/trace'
     | '/p/$projectKey/versions'
+    | '/p/$projectKey/traceability'
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey/'
     | '/p/$projectKey/defects/$defectId'
@@ -491,6 +500,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/settings'
     | '/p/$projectKey/stats'
     | '/p/$projectKey/trace'
+    | '/p/$projectKey/traceability'
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey'
     | '/p/$projectKey/defects/$defectId'
@@ -545,6 +555,7 @@ export interface FileRouteTypes {
     | '/p/$projectKey/testsuites'
     | '/p/$projectKey/trace'
     | '/p/$projectKey/versions'
+    | '/p/$projectKey/traceability'
     | '/p/$projectKey/worklogs'
     | '/p/$projectKey/'
     | '/p/$projectKey/defects/$defectId'
@@ -772,6 +783,11 @@ declare module '@tanstack/react-router' {
       path: '/versions'
       fullPath: '/p/$projectKey/versions'
       preLoaderRoute: typeof PProjectKeyVersionsRouteImport
+    '/p/$projectKey/traceability': {
+      id: '/p/$projectKey/traceability'
+      path: '/traceability'
+      fullPath: '/p/$projectKey/traceability'
+      preLoaderRoute: typeof PProjectKeyTraceabilityRouteImport
       parentRoute: typeof PProjectKeyRoute
     }
     '/p/$projectKey/worklogs': {
@@ -1123,6 +1139,7 @@ interface PProjectKeyRouteChildren {
   PProjectKeyTestsuitesRoute: typeof PProjectKeyTestsuitesRouteWithChildren
   PProjectKeyTraceRoute: typeof PProjectKeyTraceRoute
   PProjectKeyVersionsRoute: typeof PProjectKeyVersionsRouteWithChildren
+  PProjectKeyTraceabilityRoute: typeof PProjectKeyTraceabilityRoute
   PProjectKeyWorklogsRoute: typeof PProjectKeyWorklogsRoute
   PProjectKeyIndexRoute: typeof PProjectKeyIndexRoute
   PProjectKeyItemsItemKeyRoute: typeof PProjectKeyItemsItemKeyRoute
@@ -1149,6 +1166,7 @@ const PProjectKeyRouteChildren: PProjectKeyRouteChildren = {
   PProjectKeyTestsuitesRoute: PProjectKeyTestsuitesRouteWithChildren,
   PProjectKeyTraceRoute: PProjectKeyTraceRoute,
   PProjectKeyVersionsRoute: PProjectKeyVersionsRouteWithChildren,
+  PProjectKeyTraceabilityRoute: PProjectKeyTraceabilityRoute,
   PProjectKeyWorklogsRoute: PProjectKeyWorklogsRoute,
   PProjectKeyIndexRoute: PProjectKeyIndexRoute,
   PProjectKeyItemsItemKeyRoute: PProjectKeyItemsItemKeyRoute,

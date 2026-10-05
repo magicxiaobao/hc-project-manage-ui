@@ -2,12 +2,12 @@ import { isItemPath, readItemOrigin } from "./navigation.ts";
 
 export type SidebarModule =
   | "dashboard" | "stats" | "board" | "backlog" | "sprints" | "issues"
-  | "requirements" | "trace" | "gantt" | "dependencies" | "defects"
+  | "requirements" | "trace" | "traceability" | "gantt" | "dependencies" | "defects"
   | "tests" | "releases" | "assignment" | "worklogs" | "settings";
 
 const SEGMENTS: Record<string, SidebarModule> = {
   dashboard: "dashboard", stats: "stats", backlog: "backlog", sprints: "sprints",
-  issues: "issues", requirements: "requirements", trace: "trace", gantt: "gantt",
+  issues: "issues", requirements: "requirements", trace: "trace", traceability: "traceability", gantt: "gantt",
   dependencies: "dependencies", defects: "defects", tests: "tests", releases: "releases",
   assignment: "assignment", worklogs: "worklogs", settings: "settings",
 };
