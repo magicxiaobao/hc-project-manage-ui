@@ -456,19 +456,13 @@ export function overlayCommittedBaseline(
   return merged;
 }
 
-/**
- * r27-1：值确认（纯逻辑）——判定权威数据是否已实际包含该批的写入。
- *
- * dataUpdatedAt 只是取数完成计数器，不是服务端状态标记：在某次写入
- * POST 完成前发起的重取，其响应不含该写入，却会把计数器推过提交时
- * 记录的版本。旧规则"提交版本 < 当前数据版本"会把这种过期重取当作
- * 确认，提前释放后提交的在途批次（复现：A=11 成功后触发重取#1 返回
- * 11 日，B=12 在途；effect 见版本推进把 A、B 两批一起确认，B 的草稿
- * 被删、图表回退到 11 日）。
- *
- * 新边界：只有当权威数据中该批每个 item 的发送字段值都已落地，才算
- * 确认。权威数据中已不存在的任务视为确认（无可遮蔽的内容）。
- */
+/** 客户端读取发起与写入成功共用单调序号，避免毫秒碰撞与过期响应误确认。 */
+let ganttEventVersion = 0;
+export function nextGanttEventVersion(): number {
+  return ++ganttEventVersion;
+}
+
+/** 权威数据中的发送字段已全部落地（任务消失也无需继续遮蔽）。 */
 export function batchValuesConfirmed(
   batch: CommittedBatch,
   authoritative: Map<number, GanttTask>,
@@ -489,32 +483,48 @@ export function batchValuesConfirmed(
   return true;
 }
 
-/**
- * r26-2/r27-1：一次提交的已提交快照。提交成功后记入提交日志（commitLog）。
- * r27-1 起确认依据改为值确认（batchValuesConfirmed）；version 只保留做
- * 诊断，不再参与释放判定（提交时捕获的缓存版本不足以证明包含该次写入）。
- */
+/** 一次成功提交：保留发送值、草稿快照及提交前的有效基线。 */
 export interface CommittedBatch {
-  /** 提交成功瞬间的 ganttQuery.dataUpdatedAt（诊断用，不做确认依据） */
+  /** POST 成功时的客户端序号；不是 dataUpdatedAt 或服务端版本。 */
   version: number;
-  /** 该批实际发送的 batchUpdate items（id + 变化字段），用于值确认 */
   items: GanttBatchUpdateItem[];
-  /** 该批提交时的草稿快照（id → 已提交差量） */
   snapshot: Record<number, TaskDraft>;
+  baseline?: Record<number, TaskDraft>;
 }
 
 /**
- * r26-2/r27-1：把提交日志拆成"已被权威数据确认"与"仍需保留"两部分（纯逻辑）。
- * r27-1 起确认规则改为值确认：提交版本 < 当前数据版本不再作为释放条件。
+ * 值确认，或成功之后发起的读取证明发送字段已被其他权威值覆盖。
+ * 过期读取即使晚到也不能按“值已变化”释放后提交批次；每个任务至少有
+ * 一个发送字段偏离提交前值才算推进（也允许其他字段被并发恢复原值）。
  */
+function batchAuthorityAdvanced(
+  batch: CommittedBatch,
+  authoritative: Map<number, GanttTask>,
+  readVersion: number,
+): boolean {
+  if (readVersion <= batch.version || !batch.baseline) return false;
+  return batch.items.every((item) => {
+    const task = authoritative.get(item.id);
+    if (!task) return true;
+    const before = batch.baseline?.[item.id];
+    if (!before) return false;
+    return (
+      (item.start_date !== undefined && task.startDate !== before.startDate) ||
+      (item.end_date !== undefined && task.endDate !== before.endDate) ||
+      (item.progress !== undefined && task.progress !== before.progress)
+    );
+  });
+}
+
 export function partitionConfirmedBatches(
   log: CommittedBatch[],
   authoritative: Map<number, GanttTask>,
+  readVersion = 0,
 ): { confirmed: CommittedBatch[]; remaining: CommittedBatch[] } {
   const confirmed: CommittedBatch[] = [];
   const remaining: CommittedBatch[] = [];
   for (const batch of log) {
-    if (batchValuesConfirmed(batch, authoritative)) {
+    if (batchValuesConfirmed(batch, authoritative) || batchAuthorityAdvanced(batch, authoritative, readVersion)) {
       confirmed.push(batch);
     } else {
       remaining.push(batch);
@@ -561,7 +571,7 @@ export function isSameTaskDraft(a: TaskDraft, b: TaskDraft): boolean {
  * 其中不在任何未确认批次快照中的条目，是历史无差量写入留下的污染——它们
  * 永远不会被确认释放，会永久遮蔽权威数据。r26-1 要求保留的"已提交未释放"
  * 的值必在快照中，不受影响。函数内对每条目再做一次差量防御：有差量但暂无
- * 日志支撑的条目（如失败恢复的值）必须保留。
+ * 日志支撑的条目（如正在拖动的值）必须保留。
  */
 export function dropUnsupportedDraftEntries(
   draft: Record<number, TaskDraft>,
@@ -589,24 +599,36 @@ export function dropUnsupportedDraftEntries(
 }
 
 /**
- * r27-3：提交失败后的草稿恢复（纯逻辑）。
- * 不能无条件恢复整份提交前快照：在途期间已被确认释放的条目（其批次已从
- * 提交日志中移除），若恢复会永久复活旧值——后续重取无法再清除，且下次
- * 提交会把旧值重新带入载荷、静默覆盖服务端的新值。
- * 规则：快照中"当前 draft 已不存在、且不属于本次失败批次"的条目视为
- * 已释放→丢弃；其余保留（失败批次自身的值、提交后新增的条目）。
+ * 失败或取消只回滚本次字段：仍等于本次快照的字段从剩余成功日志恢复，
+ * 没有日志支撑则删除并露出权威值。已释放值不复活，后来的修改不覆盖。
  */
 export function restoreDraftAfterFailure(
   snapshot: Record<number, TaskDraft>,
   currentDraft: Record<number, TaskDraft>,
-  failedIds: Set<number>,
+  failedItems: GanttBatchUpdateItem[],
+  log: CommittedBatch[],
 ): Record<number, TaskDraft> {
-  const restored: Record<number, TaskDraft> = { ...currentDraft };
-  for (const [idKey, change] of Object.entries(snapshot)) {
-    const id = Number(idKey);
-    if (!(id in restored) && failedIds.has(id)) {
-      restored[id] = change;
+  const committed: Record<number, TaskDraft> = {};
+  for (const batch of log) Object.assign(committed, batch.snapshot);
+  const restored = { ...currentDraft };
+  for (const item of failedItems) {
+    const current = restored[item.id];
+    const failed = snapshot[item.id];
+    if (!current || !failed) continue;
+    const next = { ...current };
+    const fields: (keyof TaskDraft)[] = [];
+    if (item.start_date !== undefined) fields.push("startDate");
+    if (item.end_date !== undefined) fields.push("endDate");
+    if (item.progress !== undefined) fields.push("progress");
+    for (const field of fields) {
+      if (current[field] !== failed[field]) continue;
+      const saved = committed[item.id];
+      // 删除无支撑字段，使渲染露出最新权威值。
+      delete next[field];
+      if (saved?.[field] !== undefined) Object.assign(next, { [field]: saved[field] });
     }
+    if (Object.keys(next).length === 0) delete restored[item.id];
+    else restored[item.id] = next;
   }
   return restored;
 }

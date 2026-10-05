@@ -383,6 +383,61 @@ describe("partitionConfirmedBatches（r26-2 按批确认 / r27-1 值确认）", 
   });
 });
 
+describe("r28 草稿/提交回归", () => {
+  it("新读取释放被 D2 覆盖的 A，后续只改右缘不会回写 D1；过期读取不释放 B", () => {
+    const baseline = { 1: { startDate: "2026-10-01", endDate: "2026-10-05" } };
+    const batchA: CommittedBatch = {
+      version: 10, baseline,
+      items: [{ id: 1, start_date: "2026-10-02", end_date: "2026-10-06" }],
+      snapshot: { 1: { startDate: "2026-10-02", endDate: "2026-10-06" } },
+    };
+    const d2 = new Map([[1, makeTask({ startDate: "2026-10-03", endDate: "2026-10-07" })]]);
+    // 开始于 A 成功前的响应，即使字段变了也不构成覆盖确认。
+    expect(partitionConfirmedBatches([batchA], d2, 9).remaining).toEqual([batchA]);
+    // 新读取仍是 D0，也不能证明发送字段已推进。
+    expect(partitionConfirmedBatches([batchA], new Map([[1, makeTask()]]), 11).remaining).toEqual([batchA]);
+    const { confirmed, remaining } = partitionConfirmedBatches([batchA], d2, 11);
+    expect(confirmed).toEqual([batchA]);
+    // 面板只改 start：end 回到提交前值，仍应服从本次新读取的权威结果。
+    const panelD2 = new Map([[1, makeTask({ startDate: "2026-10-03" })]]);
+    expect(partitionConfirmedBatches([batchA], panelD2, 11).confirmed).toEqual([batchA]);
+    const draft = { ...batchA.snapshot };
+    for (const batch of confirmed) {
+      for (const [id, change] of Object.entries(batch.snapshot)) {
+        if (isSameTaskDraft(draft[Number(id)], change)) delete draft[Number(id)];
+      }
+    }
+    const log = pruneDeadBatches(remaining, draft);
+    expect(draft).toEqual({});
+    expect(log).toEqual([]);
+    expect(buildBatchUpdateItems({ 1: { endDate: "2026-10-08" } }, overlayCommittedBaseline(d2, {}))).toEqual([
+      { id: 1, start_date: "2026-10-03", end_date: "2026-10-08" },
+    ]);
+    const batchB: CommittedBatch = { ...batchA, version: 12, snapshot: { 1: { startDate: "2026-10-04" } }, items: [{ id: 1, start_date: "2026-10-04" }] };
+    // 读取于 B 成功前发起，且值不同于 B 基线：仍然不可释放 B（r27-1）。
+    expect(partitionConfirmedBatches([batchB], d2, 11).remaining).toEqual([batchB]);
+  });
+
+  it("中断拖动/提交失败删除无支撑字段，保留成功值；下一次提交不静默重放", () => {
+    const saved: CommittedBatch = {
+      version: 10, items: [{ id: 1, progress: 80 }], snapshot: { 1: { progress: 80 } },
+    };
+    const interrupted = { 1: { startDate: "2026-10-03", endDate: "2026-10-07", progress: 80 } };
+    const dates = [{ id: 1, start_date: "2026-10-03", end_date: "2026-10-07" }];
+    // 取消与失败共用回滚：日期条目是本次新建，成功进度仍需覆盖旧缓存。
+    const canceled = restoreDraftAfterFailure(interrupted, interrupted, dates, [saved]);
+    expect(canceled).toEqual(saved.snapshot);
+    expect(restoreDraftAfterFailure(interrupted, interrupted, dates, [])).toEqual({ 1: { progress: 80 } });
+    const failed = { 1: { startDate: "2026-10-03", endDate: "2026-10-07" } };
+    expect(restoreDraftAfterFailure(failed, failed, dates, [])).toEqual({});
+    const originals = new Map([[1, makeTask()], [2, makeTask({ id: 2 })]]);
+    const nextDraft = { ...restoreDraftAfterFailure(failed, failed, dates, []), 2: { progress: 90 } };
+    expect(buildBatchUpdateItems(nextDraft, originals)).toEqual([{ id: 2, progress: 90 }]);
+    const committedBaseline = overlayCommittedBaseline(originals, saved.snapshot);
+    expect(buildBatchUpdateItems({ ...canceled, 2: { progress: 90 } }, committedBaseline)).toEqual([{ id: 2, progress: 90 }]);
+  });
+});
+
 describe("batchValuesConfirmed（r27-1：值确认）", () => {
   const batchOf = (items: CommittedBatch["items"]): CommittedBatch => ({
     version: 100,
@@ -513,53 +568,33 @@ describe("dropUnsupportedDraftEntries（r27-2：无差量污染清理）", () =>
   });
 });
 
-describe("restoreDraftAfterFailure（r27-3：失败恢复不过度复活）", () => {
+describe("restoreDraftAfterFailure（r28：失败字段回滚）", () => {
+  const failedItems = [{ id: 2, start_date: "2026-10-12" }];
   it("r27-3 回归：在途期间已释放的条目不被复活", () => {
-    // A=11 先成功；B 提交时快照含 A=11、B=12；B 在途期间 A 被确认释放
-    // （当前 draft 已无 A）；B 失败 → 只恢复 B=12，A=11 不复活。
-    const snapshot: Record<number, TaskDraft> = {
-      1: { startDate: "2026-10-11" },
-      2: { startDate: "2026-10-12" },
-    };
-    const currentDraft: Record<number, TaskDraft> = {
-      2: { startDate: "2026-10-12" },
-    };
-    const restored = restoreDraftAfterFailure(snapshot, currentDraft, new Set([2]));
-    expect(restored).toEqual({ 2: { startDate: "2026-10-12" } });
+    const snapshot = { 1: { startDate: "2026-10-11" }, 2: { startDate: "2026-10-12" } };
+    const restored = restoreDraftAfterFailure(snapshot, { 2: snapshot[2] }, failedItems, []);
+    expect(restored).toEqual({});
   });
 
-  it("失败批次自身缺失的条目会被补回", () => {
-    const snapshot: Record<number, TaskDraft> = {
-      2: { startDate: "2026-10-12" },
-    };
-    const restored = restoreDraftAfterFailure(snapshot, {}, new Set([2]));
-    expect(restored).toEqual({ 2: { startDate: "2026-10-12" } });
+  it("失败批次自身缺失的条目不补回", () => {
+    expect(restoreDraftAfterFailure({ 2: { startDate: "2026-10-12" } }, {}, failedItems, [])).toEqual({});
   });
 
-  it("提交后新增的条目保留", () => {
-    const snapshot: Record<number, TaskDraft> = {
-      2: { startDate: "2026-10-12" },
-    };
-    const currentDraft: Record<number, TaskDraft> = {
-      2: { startDate: "2026-10-12" },
-      3: { progress: 90 },
-    };
-    const restored = restoreDraftAfterFailure(snapshot, currentDraft, new Set([2]));
-    expect(restored).toEqual(currentDraft);
+  it("提交后新增的条目与同任务新字段值保留", () => {
+    const snapshot = { 2: { startDate: "2026-10-12" } };
+    const currentDraft = { 2: { startDate: "2026-10-13" }, 3: { progress: 90 } };
+    expect(restoreDraftAfterFailure(snapshot, currentDraft, failedItems, [])).toEqual(currentDraft);
   });
 
-  it("未释放的旧条目（仍在 draft 中）保留", () => {
-    // A 的批次仍在日志中、未被确认：draft 里还有 A=11，恢复后仍在
-    const snapshot: Record<number, TaskDraft> = {
-      1: { startDate: "2026-10-11" },
-      2: { startDate: "2026-10-12" },
-    };
-    const currentDraft: Record<number, TaskDraft> = {
-      1: { startDate: "2026-10-11" },
-      2: { startDate: "2026-10-12" },
-    };
-    const restored = restoreDraftAfterFailure(snapshot, currentDraft, new Set([2]));
-    expect(restored).toEqual(currentDraft);
+  it("未释放的成功条目保留，失败任务恢复剩余成功快照", () => {
+    const snapshot = { 1: { startDate: "2026-10-11" }, 2: { startDate: "2026-10-12", progress: 80 } };
+    const log: CommittedBatch[] = [{
+      version: 100, items: [{ id: 2, start_date: "2026-10-10" }],
+      snapshot: { 2: { startDate: "2026-10-10" } },
+    }];
+    expect(restoreDraftAfterFailure(snapshot, snapshot, failedItems, log)).toEqual({
+      1: snapshot[1], 2: { startDate: "2026-10-10", progress: 80 },
+    });
   });
 });
 

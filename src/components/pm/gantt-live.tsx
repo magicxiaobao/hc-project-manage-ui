@@ -146,28 +146,16 @@ function GanttLiveInner({
     [],
   );
 
-  // r25-1/r26-2/r27-1：已提交但尚未被权威重取确认的批次日志。
-  // 提交成功后草稿保持应用（与服务端数据合并渲染）；每次权威数据到达时，
-  // 只释放"值确认"的批次——即权威数据实际已包含该批写入的批次。
-  // r27-1：确认边界不能是 dataUpdatedAt 计数器（提交前发起、提交成功后
-  // 返回的重取不含该写入，却会推进计数器；旧的"提交版本 < 当前版本"规则
-  // 会提前释放后提交的在途批次）。释放时只从 draft 移除仍等于已确认快照
-  // 的条目：窗口内新增的未提交拖拽（值已不同）必须保留；已无可释放条目
-  // 的死批次顺带裁剪，避免日志无限增长。
+  // 成功提交继续覆盖旧缓存；值落地或更新的权威读取证明已被覆盖后释放。
   const commitLogRef = useRef<CommittedBatch[]>([]);
-  // r27-1：dataUpdatedAt 的 ref 镜像——onSuccess 闭包捕获的是 mutate 调用
-  // 时的值（串行队列等待期间可能已过期），成功瞬间的值才有诊断意义。
-  const dataUpdatedAtRef = useRef(ganttQuery.dataUpdatedAt);
-  useEffect(() => {
-    dataUpdatedAtRef.current = ganttQuery.dataUpdatedAt;
-  }, [ganttQuery.dataUpdatedAt]);
+  const dragCancelRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const log = commitLogRef.current;
     if (log.length === 0) return;
     const authoritative = new Map(
       normalizeGanttData(ganttQuery.data).tasks.map((task) => [task.id, task]),
     );
-    const { confirmed, remaining } = partitionConfirmedBatches(log, authoritative);
+    const { confirmed, remaining } = partitionConfirmedBatches(log, authoritative, ganttQuery.readVersion);
     const released: Record<number, TaskDraft> = {};
     for (const batch of confirmed) Object.assign(released, batch.snapshot);
     // 先纯算出释放后的 draft，再据此裁剪死批次，最后一次性落盘
@@ -181,12 +169,16 @@ function GanttLiveInner({
         delete next[id];
       }
     }
-    commitLogRef.current = pruneDeadBatches(remaining, next);
+    // 正在拖动/提交时，旧快照仍是取消或失败回滚的基线，不能提前裁掉。
+    commitLogRef.current = batchMutation.isPending || dragCancelRef.current
+      ? remaining
+      : pruneDeadBatches(remaining, next);
     if (next !== current) setDraft(() => next);
-  }, [ganttQuery.dataUpdatedAt, ganttQuery.data, setDraft]);
+  }, [ganttQuery.dataUpdatedAt, ganttQuery.data, ganttQuery.readVersion, batchMutation.isPending, setDraft]);
 
   const chartRef = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => () => dragCancelRef.current?.(), []);
 
   const normalized = useMemo(() => normalizeGanttData(ganttQuery.data), [ganttQuery.data]);
   const originalsById = useMemo(
@@ -194,7 +186,7 @@ function GanttLiveInner({
     [normalized],
   );
   // 草稿合并到任务上渲染：提交成功后保持应用，直到某次权威重取确认
-  // 该批（上方 effect 按批释放）；提交失败恢复提交前快照（r26-3）
+  // 该批（上方 effect 按批释放）；提交失败回滚本次字段
   const mergedTasks = useMemo(
     () =>
       normalized.tasks.map((task) => {
@@ -317,42 +309,33 @@ function GanttLiveInner({
       if (cleaned !== draftRef.current) setDraft(() => cleaned);
       return;
     }
-    // 提交前快照：一份记入提交日志（onSuccess），同一份用于 onError 恢复
-    // （不能读闭包外的 draftRef.current——窗口内可能已有新的未提交拖拽）。
     const snapshot = { ...draftRef.current };
-    // 成功前保留草稿（与服务端数据合并渲染）；成功后继续保持应用直到
-    // 某次权威重取确认该批（上方 effect 按批释放）；失败恢复提交前快照
-    // （r26-3：只回滚到提交前，不清空——已提交未释放的值必须保留）
+    const submittedBaseline = Object.fromEntries(items.map((item) => {
+      const task = baseline.get(item.id)!;
+      return [item.id, { startDate: task.startDate, endDate: task.endDate, progress: task.progress }];
+    }));
     batchMutation.mutate(
       { projectId, payload: { tasks: items } },
       {
-        onSuccess: () => {
+        onSuccess: ({ version }) => {
           commitLogRef.current = [
             ...commitLogRef.current,
             {
-              version: dataUpdatedAtRef.current,
+              version,
               items,
               snapshot,
+              baseline: submittedBaseline,
             },
           ];
           toast.success(`已保存 ${items.length} 个任务的计划调整`);
         },
         onError: () => {
-          // r26-3：恢复提交前快照。失败提示由 useBatchUpdateGanttTasks 的
-          // hook 级 onError 统一发出（r26-4：跨卸载可见），这里不再 toast，
-          // 避免挂载时双重提示；旧文案"已回滚到服务端数据"也不再准确
-          // （恢复的是提交前快照，不是服务端数据）。
-          // r27-3：恢复提交前快照，但剔除"提交后已被确认释放"的条目。
-          // 可达：A=11 先成功（batch A 在 log，draft 保留 A=11）；拖 B 提交
-          // 时快照含 A=11；B 在途期间 A 被权威重取确认（draft/log 移除 A）；
-          // B 失败后若无条件恢复整份快照，A=11 复活但 batch A 已不在 log——
-          // 后续重取再也清不掉，且下次提交会把 A=11 重新带入载荷、静默覆盖
-          // 服务端的新值。restoreDraftAfterFailure 只丢弃已释放的条目，失败
-          // 批次自身的值与提交后新增的条目保留（r26-3 意图）。
+          // 错误提示由 hook 发出；回滚失败字段，保留剩余成功批次与后来的修改。
           const restored = restoreDraftAfterFailure(
             snapshot,
             draftRef.current,
-            new Set(items.map((item) => item.id)),
+            items,
+            commitLogRef.current,
           );
           setDraft(() => restored);
         },
@@ -368,8 +351,11 @@ function GanttLiveInner({
     if (row.summary || row.task.readonly || batchMutation.isPending) return;
     // 终态任务进度只读（后端 COMPLETED/CANCELLED 口径）：禁止拖进度，改期仍允许
     if (edge === "progress" && isProgressLocked(row.task.status)) return;
+    dragCancelRef.current?.();
     event.preventDefault();
     event.stopPropagation();
+    const pointerId = event.pointerId;
+    const captureTarget = event.currentTarget;
     const taskId = row.task.id;
     const start0 = dayNumber(row.start);
     const end0 = dayNumber(row.end);
@@ -418,15 +404,41 @@ function GanttLiveInner({
       }
       return Math.round(((clientX - originX) / Math.max(timelineWidth, 1)) * span);
     };
-    const move = (ev: PointerEvent) => applyDelta(deltaOf(ev.clientX));
-    const up = (ev: PointerEvent) => {
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) applyDelta(deltaOf(ev.clientX));
+    };
+    const cleanup = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancelPointer);
+      window.removeEventListener("blur", cancel);
+      captureTarget.removeEventListener("lostpointercapture", cancelPointer);
+      dragCancelRef.current = null;
+      if (captureTarget.hasPointerCapture(pointerId)) captureTarget.releasePointerCapture(pointerId);
+    };
+    const cancel = () => {
+      cleanup();
+      // 中断不提交；只回滚本次拖动字段，保留其他字段与待确认成功值。
+      setDraft((current) => restoreDraftAfterFailure(
+        current,
+        current,
+        [{
+          id: taskId,
+          ...(edge === "progress"
+            ? { progress: current[taskId]?.progress ?? progress0 }
+            : { start_date: isoFromDay(start0), end_date: isoFromDay(end0) }),
+        }],
+        commitLogRef.current,
+      ));
+    };
+    const cancelPointer = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) cancel();
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      cleanup();
       const delta = deltaOf(ev.clientX);
       if (delta === 0 && !hadDraftEntry) {
-        // r27-2：无变化的单击/原地拖拽：若本次写入了与基线同值的条目则
-        // 丢弃，不提交。否则残留条目永久遮蔽权威数据——它没有提交日志支撑，
-        // 永远不会被确认释放；后续任务面板保存+权威重取成功也清不掉它。
         setDraft((current) => {
           if (!(taskId in current)) return current;
           const next = { ...current };
@@ -438,8 +450,13 @@ function GanttLiveInner({
       applyDelta(delta);
       commitDraft();
     };
+    dragCancelRef.current = cancel;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancelPointer);
+    window.addEventListener("blur", cancel);
+    captureTarget.addEventListener("lostpointercapture", cancelPointer);
+    captureTarget.setPointerCapture(pointerId);
   };
 
   const scrollToday = () => {
@@ -695,7 +712,7 @@ function GanttLiveInner({
                         className={cn(
                           "absolute top-1/2 h-6 -translate-y-1/2",
                           row.summary ? "h-3 opacity-80" : "",
-                          draggable ? "cursor-grab" : "",
+                          draggable ? "cursor-grab touch-none" : "",
                           row.task.readonly ? "opacity-40" : "",
                           isCritical ? "ring-2 ring-danger ring-inset" : "",
                         )}

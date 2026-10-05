@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ganttApi, milestoneApi } from '../../api/gantt';
 import type { GanttBatchUpdatePayload } from '../../api/gantt-types';
-import { createKeyedSerialQueue } from '../../gantt-live';
+import { createKeyedSerialQueue, nextGanttEventVersion } from '../../gantt-live';
 import { toUserMessage } from '../error';
 import { queryKeys } from '../keys';
 
@@ -25,11 +25,17 @@ function enabledId(id: number | null | undefined): id is number {
 /** 甘特图数据：GET /task/v1/gantt/{projectId}（tasks + links） */
 export function useGanttData(params: { projectId?: number | null }) {
   const { projectId } = params;
-  return useQuery({
+  const query = useQuery({
     queryKey: [...queryKeys.gantt.all, 'data', projectId ?? 0] as const,
-    queryFn: () => ganttApi.getGanttData(projectId as number),
+    queryFn: async () => {
+      const readVersion = nextGanttEventVersion();
+      const response = await ganttApi.getGanttData(projectId as number);
+      // 包装元数据，结构共享后仍能识别本次读取；调用方 data 仍是原响应。
+      return { response, readVersion };
+    },
     enabled: enabledId(projectId),
   });
+  return { ...query, data: query.data?.response, readVersion: query.data?.readVersion ?? 0 };
 }
 
 /**
@@ -105,9 +111,11 @@ export function useBatchUpdateGanttTasks() {
       projectId: number;
       payload: GanttBatchUpdatePayload;
     }) =>
-      queueFor(input.projectId).run(input.projectId, () =>
-        ganttApi.batchUpdateTasks(input.payload),
-      ),
+      queueFor(input.projectId).run(input.projectId, async () => {
+        const result = await ganttApi.batchUpdateTasks(input.payload);
+        // 必须早于 onSettled 触发的重取，不能在组件回调中才记录边界。
+        return { result, version: nextGanttEventVersion() };
+      }),
     onError: (error) => {
       // r26-4：失败通知必须跨组件卸载可见。mutate() 第二参数的单次回调
       // 仅在观察者仍有订阅者时执行——面板在请求在途时卸载（如点"查看
