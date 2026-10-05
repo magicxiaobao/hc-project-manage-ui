@@ -102,7 +102,8 @@ function queueFor(projectId: number) {
 /**
  * 甘特批量更新（拖拽改期/拖进度）：POST /task/v1/batchUpdate。
  * 同一 projectId 的并发调用按键串行执行，避免旧请求后到覆盖新值；
- * 成功后失效 task 域（含任务列表/看板缓存）与 gantt 域。
+ * 结束后失效 task 域、gantt 域与 board 域（看板卡片展示 estimatedEndDate，
+ * 看板缓存是独立的 board 根键，不在 task 域下）。
  */
 export function useBatchUpdateGanttTasks() {
   const queryClient = useQueryClient();
@@ -127,6 +128,7 @@ export function useBatchUpdateGanttTasks() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
       void queryClient.invalidateQueries({ queryKey: queryKeys.gantt.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board.all });
     },
   });
 }

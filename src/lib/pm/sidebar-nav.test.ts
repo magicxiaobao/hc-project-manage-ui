@@ -61,3 +61,13 @@ it("highlights the parent module on nested live routes (Codex review 4175510489)
   assert.equal(highlightedModule("/p/OPS2/issues/123?x=1#y", "OPS2", undefined), "issues");
   assert.equal(highlightedModule("/p/OPS2/nope/123", "OPS2", undefined), undefined);
 });
+
+it("highlights the live P2/P3 list modules (Codex review 4183398151)", () => {
+  assert.equal(highlightedModule("/p/OPS2/boards", "OPS2", undefined), "boards");
+  assert.equal(highlightedModule("/p/OPS2/boards/7", "OPS2", undefined), "boards");
+  assert.equal(highlightedModule("/p/OPS2/sprints/3", "OPS2", undefined), "sprints");
+  assert.equal(highlightedModule("/p/OPS2/testcases/9", "OPS2", undefined), "testcases");
+  assert.equal(highlightedModule("/p/OPS2/testsuites", "OPS2", undefined), "testsuites");
+  assert.equal(highlightedModule("/p/OPS2/versions/2", "OPS2", undefined), "versions");
+  assert.equal(highlightedModule("/p/OPS2/release-environments", "OPS2", undefined), "release-environments");
+});

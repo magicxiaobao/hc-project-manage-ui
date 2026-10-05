@@ -49,6 +49,7 @@ import {
   summarizeBurndown,
   type RetroEditorSyncState,
 } from "@/lib/sprint-detail";
+import { ProjectOwnershipGate } from "@/components/pm/project-ownership-gate";
 import type { SprintResponse } from "@/lib/api/sprint-types";
 import {
   queryKeys,
@@ -253,7 +254,17 @@ function BurndownPanel({
 
 type DetailTab = "burndown" | "retrospective";
 
-export function SprintDetailLive({
+/** 冲刺须属于路由项目（ProjectOwnershipGate）才渲染详情及回顾编辑 */
+export function SprintDetailLive({ sprintId, projectKey }: { sprintId: number; projectKey: string }) {
+  const detail = useSprintDetail(sprintId);
+  return (
+    <ProjectOwnershipGate projectKey={projectKey} objectLabel={`冲刺 #${sprintId}`} owner={detail}>
+      <SprintDetailContent sprintId={sprintId} projectKey={projectKey} />
+    </ProjectOwnershipGate>
+  );
+}
+
+function SprintDetailContent({
   sprintId,
   projectKey,
 }: {

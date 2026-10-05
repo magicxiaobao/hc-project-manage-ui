@@ -195,6 +195,11 @@ function GanttLiveInner({
       }),
     [normalized, draft],
   );
+  // 编辑面板从合并后的任务取值：拖拽保存在途/权威重取前，面板与时间条显示一致
+  const mergedById = useMemo(
+    () => new Map(mergedTasks.map((task) => [task.id, task])),
+    [mergedTasks],
+  );
   const rows = useMemo(() => buildGanttRows(mergedTasks), [mergedTasks]);
   const unscheduled = useMemo(() => findUnscheduledTasks(mergedTasks), [mergedTasks]);
 
@@ -493,7 +498,7 @@ function GanttLiveInner({
     );
   }
 
-  const selectedTask = selectedId !== null ? originalsById.get(selectedId) ?? null : null;
+  const selectedTask = selectedId !== null ? mergedById.get(selectedId) ?? null : null;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-4 md:p-6">

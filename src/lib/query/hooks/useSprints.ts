@@ -193,7 +193,8 @@ export function useStartSprint() {
  * r14 F4：后端 SprintServiceImpl.completeSprint → taskRepository
  * .moveUnfinishedTasksToSprint 会改写未完成任务的 sprint_id（BACKLOG 与
  * TARGET_SPRINT 都走），因此同步失效任务域缓存，避免 30s staleTime 内
- * 返回任务页仍显示旧所属冲刺。
+ * 返回任务页仍显示旧所属冲刺。冲刺看板的 columnsWithTasks 按 sprint_id
+ * 取卡片，看板域同样失效（同 useUpdateTaskSprint）。
  */
 export function useCompleteSprint() {
   const queryClient = useQueryClient();
@@ -203,6 +204,7 @@ export function useCompleteSprint() {
     onSuccess: () => {
       invalidateSprintDomain(queryClient);
       void queryClient.invalidateQueries({ queryKey: queryKeys.task.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board.all });
     },
   });
 }

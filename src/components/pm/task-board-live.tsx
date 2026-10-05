@@ -82,6 +82,7 @@ import {
 import { useAuthStore } from "@/lib/api/auth-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { BoardColumnFormDialog } from "@/components/pm/board-column-form-dialog";
+import { ProjectOwnershipGate } from "@/components/pm/project-ownership-gate";
 import {
   TaskTransitionReasonDialog,
   type TransitionConfirmResult,
@@ -126,7 +127,17 @@ interface PendingCardMove {
   needsAssignee: boolean;
 }
 
-export function TaskBoardLive({
+/** 看板须属于路由项目（ProjectOwnershipGate）才渲染看板及其写操作 */
+export function TaskBoardLive({ boardId, projectKey }: { boardId: number; projectKey: string }) {
+  const boardDetail = useBoardDetail(boardId);
+  return (
+    <ProjectOwnershipGate projectKey={projectKey} objectLabel={`看板 #${boardId}`} owner={boardDetail}>
+      <TaskBoardContent boardId={boardId} projectKey={projectKey} />
+    </ProjectOwnershipGate>
+  );
+}
+
+function TaskBoardContent({
   boardId,
   projectKey,
 }: {
