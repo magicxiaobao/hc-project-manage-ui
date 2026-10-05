@@ -516,6 +516,26 @@ function batchAuthorityAdvanced(
   });
 }
 
+/** r29-1：权威完全回落到提交前基线，批次已不可能再被确认，释放以解除 draft 永久遮蔽。 */
+function batchAuthorityRevertedToBaseline(
+  batch: CommittedBatch,
+  authoritative: Map<number, GanttTask>,
+  readVersion: number,
+): boolean {
+  if (readVersion <= batch.version || !batch.baseline) return false;
+  return batch.items.every((item) => {
+    const task = authoritative.get(item.id);
+    if (!task) return true;
+    const before = batch.baseline?.[item.id];
+    if (!before) return false;
+    return (
+      (item.start_date === undefined || task.startDate === before.startDate) &&
+      (item.end_date === undefined || task.endDate === before.endDate) &&
+      (item.progress === undefined || task.progress === before.progress)
+    );
+  });
+}
+
 export function partitionConfirmedBatches(
   log: CommittedBatch[],
   authoritative: Map<number, GanttTask>,
@@ -524,7 +544,11 @@ export function partitionConfirmedBatches(
   const confirmed: CommittedBatch[] = [];
   const remaining: CommittedBatch[] = [];
   for (const batch of log) {
-    if (batchValuesConfirmed(batch, authoritative) || batchAuthorityAdvanced(batch, authoritative, readVersion)) {
+    if (
+      batchValuesConfirmed(batch, authoritative) ||
+      batchAuthorityAdvanced(batch, authoritative, readVersion) ||
+      batchAuthorityRevertedToBaseline(batch, authoritative, readVersion)
+    ) {
       confirmed.push(batch);
     } else {
       remaining.push(batch);

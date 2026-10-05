@@ -381,6 +381,51 @@ describe("partitionConfirmedBatches（r26-2 按批确认 / r27-1 值确认）", 
       remaining: [],
     });
   });
+
+  it.each([
+    { startDate: "2026-10-01", progress: 50 },
+    { startDate: null, progress: null },
+  ])("r29-1：新读取中发送字段完全回落到基线 $startDate / $progress 时释放", (before) => {
+    const batchA: CommittedBatch = {
+      version: 10,
+      baseline: { 1: before },
+      items: [{ id: 1, start_date: "2026-10-02", progress: 80 }],
+      snapshot: { 1: { startDate: "2026-10-02", progress: 80 } },
+    };
+    expect(partitionConfirmedBatches([batchA], new Map([[1, makeTask(before)]]), 11)).toEqual({
+      confirmed: [batchA],
+      remaining: [],
+    });
+  });
+
+  it.each([9, 10])("r29-1：过期读取 %i 中完全回落到基线仍不释放", (readVersion) => {
+    const before = { startDate: "2026-10-01", progress: 50 };
+    const batchA: CommittedBatch = {
+      version: 10,
+      baseline: { 1: before },
+      items: [{ id: 1, start_date: "2026-10-02", progress: 80 }],
+      snapshot: { 1: { startDate: "2026-10-02", progress: 80 } },
+    };
+    expect(partitionConfirmedBatches([batchA], new Map([[1, makeTask(before)]]), readVersion)).toEqual({
+      confirmed: [],
+      remaining: [batchA],
+    });
+  });
+
+  it.each([9, 10])("r29-1：过期读取 %i 中仅 startDate 回落、progress 仍为发送值时保留批次", (readVersion) => {
+    const batchA: CommittedBatch = {
+      version: 10,
+      baseline: { 1: { startDate: "2026-10-01", progress: 50 } },
+      items: [{ id: 1, start_date: "2026-10-02", progress: 80 }],
+      snapshot: { 1: { startDate: "2026-10-02", progress: 80 } },
+    };
+    const partial = new Map([[1, makeTask({ startDate: "2026-10-01", progress: 80 })]]);
+    // 新读取可由既有 advanced 分支释放；过期读取两个分支均不可释放。
+    expect(partitionConfirmedBatches([batchA], partial, readVersion)).toEqual({
+      confirmed: [],
+      remaining: [batchA],
+    });
+  });
 });
 
 describe("r28 草稿/提交回归", () => {
@@ -394,8 +439,8 @@ describe("r28 草稿/提交回归", () => {
     const d2 = new Map([[1, makeTask({ startDate: "2026-10-03", endDate: "2026-10-07" })]]);
     // 开始于 A 成功前的响应，即使字段变了也不构成覆盖确认。
     expect(partitionConfirmedBatches([batchA], d2, 9).remaining).toEqual([batchA]);
-    // 新读取仍是 D0，也不能证明发送字段已推进。
-    expect(partitionConfirmedBatches([batchA], new Map([[1, makeTask()]]), 11).remaining).toEqual([batchA]);
+    // r29-1：新读取回到 D0 时释放，避免草稿永久遮蔽权威基线。
+    expect(partitionConfirmedBatches([batchA], new Map([[1, makeTask()]]), 11).confirmed).toEqual([batchA]);
     const { confirmed, remaining } = partitionConfirmedBatches([batchA], d2, 11);
     expect(confirmed).toEqual([batchA]);
     // 面板只改 start：end 回到提交前值，仍应服从本次新读取的权威结果。
