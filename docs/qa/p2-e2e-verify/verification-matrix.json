@@ -1,0 +1,1502 @@
+[
+  {
+    "id": "A01",
+    "operation": "从 `/login` 登录 U1，打开真实项目 A 的所有 P2 列表和详情深链，刷新",
+    "expected": "网络使用真实 token/projectId；展示夹具 ID 与服务端一致；演示数据、无范围请求或登录后刷新丢业务会话均失败",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "U1 真实登录并核对 token/projectId",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "真实项目全部 P2 列表与详情深链",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "夹具 ID 与后端一致且无演示数据",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "刷新保持业务会话",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "A02",
+    "operation": "项目 A→B→A 切换；用 A 路由访问 B 的详情；退出 U1 登录另一账号",
+    "expected": "当前列表无旧项目残留，错项目不能写；账号不能继承前账号的私有查询结果；迟到响应不可污染新上下文",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "A→B→A 切换与列表隔离",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "A 路由访问 B 详情并禁止写入",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "退出 U1 并真实登录另一账号",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "私有缓存隔离与迟到响应不污染",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "A03",
+    "operation": "每域至少一页加载/空/失败重试；打开表单后令详情重取失败再恢复",
+    "expected": "页面有明确状态；无数据时不显示假记录；已有缓存的刷新失败保留草稿；恢复能重试，不能误标写成功",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "每域加载状态",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "每域空数据无假记录",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "每域加载失败与重试",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "表单打开后详情重取失败保留缓存和草稿",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "恢复后可重试且不误标成功",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "D01",
+    "operation": "缺陷列表按标题、状态、严重度、优先级组合查询，翻页后换筛选/清空",
+    "expected": "请求 bean 正确，筛选重置页码；分页数量/total 与后端一致，不漏项/重复项",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "标题/十态/六档严重度/三档优先级组合筛选",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "20 条分页及 total/无漏项重复",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "翻页后筛选重置页码",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "清空筛选及项目 bean",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "D02",
+    "operation": "新建缺陷并关联同项目需求/任务，查详情、列表、看板；用非法/跨项目关联再试",
+    "expected": "合法返回正 ID、NEW，内容/归属/关系可读回；失败不留下半建对象、不关闭草稿；不发送界面无关操作人字段",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "创建 NEW 正 ID 并关联同项目需求/任务",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "详情/列表/看板及关系真实读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非法关联拒绝且无半建对象",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "跨项目关联拒绝且草稿保留",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "不传无关操作人字段",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "D03",
+    "operation": "编辑缺陷业务字段、保存日期；清空有值文本；重定严重度并以旧值重放 CAS",
+    "expected": "编辑不改状态/严重度；null-skip 字段真实保留且不能声称已清空；重定成功更新严重度，旧值冲突明确拒绝；UX 缺口按第 5 节记录",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "编辑业务字段与日期不改状态或严重度",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "有值文本清空的 null-skip 真实语义",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "严重度 CAS 成功并同步",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "旧严重度重放冲突拒绝且输入保留",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "严重度弹窗 UX 实测",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "D04",
+    "operation": "用主链与独立样本执行第 3 节每条合法缺陷边，切换符合 guard 的操作用户；遗漏人/原因再试",
+    "expected": "主链及各分支状态真实持久化，必要上下文正确；NEW→CLOSED 等非法跳转不写；未满足 guard 时返回可理解错误且状态不变",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "NEW→ASSIGNED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "ASSIGNED→IN_PROGRESS",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "IN_PROGRESS→TESTING",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "TESTING→RESOLVED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RESOLVED→VERIFIED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "VERIFIED→CLOSED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "IN_PROGRESS→PENDING_VERIFICATION",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "PENDING_VERIFICATION→RESOLVED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "TESTING→IN_PROGRESS",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "NEW→REJECTED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "PENDING_VERIFICATION→REJECTED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "TESTING→REJECTED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RESOLVED→REOPEN",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "VERIFIED→REOPEN",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "CLOSED→REOPEN",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "REJECTED→REOPEN",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "REOPEN→IN_PROGRESS",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "REJECTED→NEW",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "遗漏处理人/测试人/验证人拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "遗漏各边必需原因及原因长度拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "guard 不满足状态不变并显示实际文案",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "NEW→CLOSED 等非法边不写",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "切换符合 guard 的活动成员验证真实操作身份",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "D05",
+    "operation": "看板十列/缺组/空列核对；拖入合法空列后取消再确认；非法/同列拖动；按钮流转",
+    "expected": "后端列元数据/实际卡片计数一致；取消不移卡；确认才写；成功看板/统计/列表/详情同步；空列落点不能被吞掉",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "十列/缺组/空列与卡片计数/统计一致",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "合法空列拖动打开表单",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "取消不移动或写状态",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "确认后写并同步看板/统计/列表/详情",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非法拖动不写",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "同列拖动不写",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "键盘可达按钮流转",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T01",
+    "operation": "新建用例（验证需求、步骤、期望），筛选/分页/详情，编辑允许文本清空和日期/耗时",
+    "expected": "新建、查询、编辑闭环；状态身份与响应一致；已有负责人/耗时不可清空时字段明确拒绝，不能静默成功",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "创建验证需求/步骤/期望并真实读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "查询筛选分页及详情状态身份",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "编辑文本清空",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "日期/耗时回读",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "已有负责人/耗时不可清空时字段明确拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T02",
+    "operation": "用例合法普通状态流转，复制 ACTIVE/DRAFT 用例；另件归档，直接访问归档详情",
+    "expected": "新 ID 副本内容及关系按服务端真实结果核对；ARCHIVED 普通编辑/复制限制有效；REVIEW 归档入口不可误放行。副本具体编号/默认状态 **待联调确认**，不先假定",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "DRAFT→REVIEW",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "DRAFT→ACTIVE",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "ACTIVE→REVIEW",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "REVIEW→DRAFT",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "REVIEW→ACTIVE",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "复制 ACTIVE",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "复制 DRAFT",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "副本新 ID/内容/关系/编号/默认状态（待联调确认）",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立样本归档并访问 ARCHIVED 详情",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "ARCHIVED 普通编辑拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "ARCHIVED 复制限制",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "REVIEW 归档拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T03",
+    "operation": "新建/编辑套件；启用；按项目/名称/类型/状态查询，读详情统计；专用样本归档",
+    "expected": "启用 IN_PROGRESS，归档 DEPRECATED；可选文本空串真实写入；时长约束与统计展示正确；不调用 `/test-suite/*`",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "套件创建与编辑及文本空串",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "专用 valid 启用 IN_PROGRESS",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "项目/名称/类型/状态查询",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "详情统计与耗时约束",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "专用 invalid 归档 DEPRECATED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "不调用旧 /test-suite/*",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T04",
+    "operation": "套件详情搜索/翻页选择同项目用例添加；把其他套件用例转入；执行部分失败场景",
+    "expected": "请求逐例 `{id,testSuiteId}`，当前列表和原套件查询体现单归属迁移；有转移提示；部分成功/失败准确反馈，不伪称整批原子；无“移除”假功能",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "候选搜索与分页选择同项目用例",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "逐例 id/testSuiteId 添加",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "其他套件迁移及转移提示",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "当前/原套件单归属读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "部分成功/失败准确反馈并保留选择",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "无虚构移除操作",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T05",
+    "operation": "AD_HOC 选择套件＋重复用例建轮；查快照；修改原用例后重读轮",
+    "expected": "CREATED，展开去重/requiredCaseCount 与实际 cases 一致；snapshot 的步骤/期望不随原用例编辑漂移；空选择/跨项目/非活动对象拒绝",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "AD_HOC 套件加重复用例展开去重",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "CREATED/requiredCaseCount/cases 一致",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "修改原用例后步骤/期望 snapshot 固定",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "空选择拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "跨项目拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非活动对象拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T06",
+    "operation": "用已准备 Scope 创建 FULL_REGRESSION；另件在启动前改变 Scope，尝试启动",
+    "expected": "创建 Scope/指纹与夹具一致；正常件启动 RUNNING 并生成 NOT_STARTED attempt；过期件启动拒绝，无半启动记录",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "有效 Scope 创建 FULL_REGRESSION 并核对指纹",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "正常启动 RUNNING 且生成 NOT_STARTED attempt",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立样本启动前变更 Scope",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "过期启动拒绝且无半启动记录",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T07",
+    "operation": "启动轮/执行，独立用例完成 PASSED、FAILED、BLOCKED、SKIPPED；缺必要结果字段再试",
+    "expected": "四结果规则见契约；executedBy/completedBy、时间、duration 可信；无未开始直接完成；他人执行覆盖无权限/无原因拒绝，合法管理员覆盖记录两身份",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "启动轮与执行",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立 PASSED 完成且无非空 failureMessage",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立 FAILED 完成并必填 failureMessage",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立 BLOCKED 完成并必填 failureMessage",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立 SKIPPED 完成并必填 executionNotes",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "各结果遗漏字段拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "未开始直接完成拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "本人完成不传 overrideReason",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "他人覆盖无权限拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "他人覆盖无原因拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "合法管理员覆盖记录 executedBy/completedBy",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "时间及 duration 读回",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T08",
+    "operation": "对最新 FAILED/BLOCKED attempt 重试再完成；重试旧 attempt/PASSED/终态轮",
+    "expected": "新 ID 且 attemptNo 递增，历史保持，latestAttempt 指向新件；非法重试不增加 attempt",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "最新 FAILED 重试并完成",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "最新 BLOCKED 重试并完成",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "新 ID/递增 attemptNo/历史保留/latestAttempt 更新",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "旧 attempt 重试拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "PASSED 重试拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "终态轮重试拒绝且不增加 attempt",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T09",
+    "operation": "从 FAILED/BLOCKED 执行建缺陷、关联已有同项目缺陷、重复关联；试 PASSED 和跨项目缺陷",
+    "expected": "CREATED/LINKED/ALREADY_LINKED 正确；关系/缺陷出现在工作台并可深链，项目/报告人来自后端；重复不新建关系；非法关联无副作用",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "FAILED/BLOCKED 执行创建缺陷 CREATED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "同项目关联 LINKED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "重复关联 ALREADY_LINKED 且不增关系",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "项目/报告人后端事实及工作台深链读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "PASSED 关联拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "跨项目缺陷拒绝且无副作用",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T10",
+    "operation": "仍有未完成最新 attempt 时尝试完成轮；全部完成后完成并展开报告；另件仅 BLOCKED/SKIPPED 完成后读报告",
+    "expected": "前者禁止/拒绝；后者 COMPLETED，报告包含全部 case/attempt；四结果计数按最新 attempt，executedCaseCount/coverage/passRate 按契约分母，null 比率不伪装 0%；比例展示乘 100 一次，耗时按秒汇总历史 attempt；未完成/取消轮无报告请求或被后端拒绝",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "未完成最新 attempt 时完成轮拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "全部完成后 COMPLETED 及按需展开报告",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "四结果按最新 attempt 计数",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "executedCaseCount=PASSED+FAILED 及 coverage 分母",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "passRate 分母且百分比只乘 100 一次",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立仅 BLOCKED/SKIPPED 样本 passRate=null",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "全部历史 attempt 秒耗时",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "报告全部 case/attempt/缺陷链接",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "未完成轮不请求报告或明确拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "取消轮不请求报告或明确拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T11",
+    "operation": "从完成轮最新 FAILED/BLOCKED 的 runCaseId 建 TARGETED_RETEST，启动/执行/完成",
+    "expected": "来源/用例 ID 对应正确，新轮含当前用例快照并保持来源；传 testCaseId、成功项或未完成来源拒绝；不把定向轮冒充完整回归发布证据",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "完成来源最新 FAILED/BLOCKED 的 runCaseId 建 TARGETED_RETEST",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "启动/执行/完成及当前快照/来源读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "错误传 testCaseId 拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "成功项拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "未完成来源拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "定向轮不计作完整回归发布证据",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "T12",
+    "operation": "分别取消 CREATED、含 NOT_STARTED/RUNNING/COMPLETED attempt 的 RUNNING 轮",
+    "expected": "CANCELLED，未完成 attempt 取消，已完成记录保留；原因/取消人时间一致；不能再 start/complete/retry；取消不导致不可读历史",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "独立 CREATED 轮取消",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RUNNING 轮含 NOT_STARTED attempt 取消",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RUNNING 轮含 RUNNING attempt 取消",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RUNNING 轮含 COMPLETED attempt 取消",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "未完成 attempt 取消且已完成保留",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "原因/取消人/时间及历史读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "取消后 start 拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "取消后 complete 拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "取消后 retry 拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "V01",
+    "operation": "版本新建/编辑、名称/号/类型/状态筛选分页、详情及日期回读",
+    "expected": "新建 PLANNING，planned 日期发送 `YYYY-MM-DDTHH:mm:ss`，日期/审计时间展示正确；不改 projectId；非法日期/起止拒绝",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "新建 PLANNING 与编辑不改 projectId",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "名称/版本号/类型/状态筛选分页详情",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "planned ISO LocalDateTime 发送及日期/审计展示",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非法日期拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非法起止拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "V02",
+    "operation": "完成主链和三组回退再前进；第二会话改变状态后提交旧 expectedStatus",
+    "expected": "事件准确映射；回退原因非空；旧 expectedStatus 冲突有错误并保留输入、不假成功；无手工设 RELEASED",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "PLANNING→DEVELOPMENT→TESTING→FROZEN 主链事件映射",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RETURN_TO_PLANNING 回退后再前进",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RETURN_TO_DEVELOPMENT 回退后再前进",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "REOPEN_TESTING 回退后再前进",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "回退缺原因拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "第二会话变更后旧 expectedStatus CAS 拒绝且输入保留",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "不能手工设 RELEASED",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "V03",
+    "operation": "FROZEN 版本有在途发布时重开/废弃；清除在途后重开；另件管理员废弃",
+    "expected": "有 DRAFT/PENDING_APPROVAL/APPROVED 时拒绝，DEPRECATED 禁止更新流转；非管理员废弃拒绝；其他版本不受误影响",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "DRAFT 在途阻止重开/废弃",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "PENDING_APPROVAL 在途阻止重开/废弃",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "APPROVED 在途阻止重开/废弃",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "清除在途后重开",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立管理员废弃 DEPRECATED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "DEPRECATED 拒绝更新/流转",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非管理员废弃拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "其他版本不受影响",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R01",
+    "operation": "发布列表先按项目、再选版本，切环境/状态/页码；跨 100 条取页；大于 100 个版本的下拉",
+    "expected": "bean 走项目或版本正确；本地状态/环境过滤基于完整数据，页码钳制合理；无 status 伪端点参数、不丢后页对象",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "项目范围列表 bean",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "切版本范围 bean",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "环境/状态本地完整数据过滤",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "页码切换与钳制",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "超过 100 发布全量取页",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "超过 100 版本下拉",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "不传伪 status DTO 字段且不丢后页",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R02",
+    "operation": "选 FROZEN 版本和 ACTIVE 环境建草稿；同 key/同体脚本重放，再改体重放；连续点击",
+    "expected": "单草稿/同 ID，同 key 不同体拒绝；UI 只提交一次；非可发布版本、停用/跨项目环境拒绝；新详情路径使用真实 ID",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "FROZEN/ACTIVE 同项目创建 DRAFT 并用真实 ID 深链",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "同 key/同体重放同 ID",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "同 key/不同体冲突",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "连续点击 UI 单请求",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非可发布版本拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "INACTIVE 环境拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "跨项目环境拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R03",
+    "operation": "owner 全包编辑含清空文本和 forceUpdate；另管理员代改/删除有无 adminReason；专用草稿删除",
+    "expected": "省略/空文本按全包规则清空，forceUpdate 回退准确；非 owner 权限及原因有效；删除返回列表，读回不可再当活动草稿；非 owner 不能 submit",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "owner 全包编辑及清空文本",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "forceUpdate 回退 false",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非 owner 管理员有 adminReason 代改",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非 owner 管理员缺 adminReason 拒绝代改",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非 owner 非管理员拒绝代改/删除",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "管理员有/无 adminReason 删除分支",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立草稿删除后返回列表且查询不可当活动草稿",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非 owner submit 拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R04",
+    "operation": "DRAFT 实时门禁预览；制造失败门禁，管理员豁免、撤销；试不可豁免直接需求门禁",
+    "expected": "五门禁裁决与真实 Scope/回归/缺陷/文本一致；四个可豁免失败门禁按样本验证；通过项不豁免；无可选项时入口禁用；写后预览更新",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "DRAFT 五门禁实时裁决及 Scope/回归/缺陷/文本事实",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "四类可豁免失败门禁分别管理员豁免及撤销",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "DIRECT_REQUIREMENT_SCOPE 不可豁免",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "已通过项不豁免",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "无可选项禁用入口",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "无权限/缺原因拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "写后预览真实更新",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R05",
+    "operation": "未通过门禁先提交；修齐正常条件后 owner 提交；修改实时用例/缺陷后再读已提交详情",
+    "expected": "阻断件保留 DRAFT；成功冻结 Scope/test/defect/gates 和环境政策快照；已提交快照不被实时事实替换；正常主链不得以全豁免代替全通过证据",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "门禁未通过 submit 阻断且仍 DRAFT",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "正常条件全通过由 owner submit",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "Scope/test/defect/gates/环境政策快照冻结",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "提交后修改实时用例/缺陷仍保留快照",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "正常主链不能用全部豁免替代",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R06",
+    "operation": "非生产无需审批件 submit；需审批件由 U2 approve；同提交人审批及生产豁免人审批负例",
+    "expected": "无需审批直接 APPROVED；需审批 PENDING_APPROVAL→APPROVED 且 approval 记录齐全；角色分离违规拒绝，状态不变",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "非生产无需审批 submit 直接 APPROVED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "需审批 submit 至 PENDING_APPROVAL",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "U2 approve 至 APPROVED 及 approval 记录",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "同提交人 approve 拒绝状态不变",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "生产快照豁免人 approve 拒绝状态不变",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R07",
+    "operation": "独立待审批件 reject；另待审批件和已批准件各 cancel",
+    "expected": "分别 REJECTED/CANCELLED，原因及对应时间/记录正确；终态禁止编辑/提交/审批/结果重复写，仍能读快照",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "独立待审批件 reject 至 REJECTED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "另独立待审批件 cancel 至 CANCELLED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立已批准件 cancel 至 CANCELLED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "各原因/时间/记录读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "终态禁止编辑/提交/审批/重复结果写",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "终态快照仍可读",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R08",
+    "operation": "非审批人对 APPROVED 非生产件及生产件 recordReleased；缺三件套/负 size/审批人录入负例",
+    "expected": "制品及 MANUAL_REFERENCE 可信等级/录入人时间可读；非生产不把版本变 RELEASED，生产将 FROZEN→RELEASED；原已缓存版本页面自动更新也必须通过，刷后正确但缓存旧仍记失败",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "非审批人录入非生产成功且版本仍 FROZEN",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非审批人录入生产成功且 FROZEN→RELEASED",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "制品三件套/MANUAL_REFERENCE/录入人时间读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "缺三件套拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "负 size 拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "审批人录入拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "原缓存版本列表/详情自动更新",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "刷新后版本仍正确",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R09",
+    "operation": "独立 APPROVED 件 recordFailed（仅说明、完整制品两分支）；试半套制品/空说明",
+    "expected": "FAILED，合法证据/说明保留；非法结果不产生证据或改变状态；审批人录入依旧拒绝",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "独立 APPROVED 件仅说明 recordFailed",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "独立 APPROVED 件完整制品加说明 recordFailed（size 可选）",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "FAILED 证据/说明读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "半套制品拒绝且不产生证据",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "空说明拒绝状态不变",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "审批人录入失败拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "R10",
+    "operation": "分别复制 REJECTED/FAILED/CANCELLED/RELEASED；RELEASED 建回滚草稿并完成一次提交及结果流程",
+    "expected": "新 DRAFT ID/序号、STANDARD 或 ROLLBACK、来源字段正确，审批/结果证据不继承；重复 key 幂等；非 RELEASED 回滚拒绝；回滚是新发布流程，不自动执行部署",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "REJECTED 复制",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "FAILED 复制",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "CANCELLED 复制",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RELEASED 复制",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "RELEASED rollbackAsDraft",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "新 DRAFT ID/序号/STANDARD或ROLLBACK/来源字段且无继承审批结果",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "重复 key 幂等",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非 RELEASED 回滚拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "回滚新流程真实提交并录入结果",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "E01",
+    "operation": "新建非生产及生产环境，名称/排序编辑，尝试传修改类别及关闭生产审批",
+    "expected": "环境对象真实读回、排序正确，生产审批始终 true；编辑 DTO 不改类别；重名/非法排序行为与实际服务核对，异常明确",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "创建非生产环境",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "创建生产环境审批强制 true",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "名称/排序编辑及对象读回",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "尝试改 category 无效",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "尝试关生产审批无效",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "重名行为与实际服务核对",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "非法排序明确拒绝",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "E02",
+    "operation": "有在途发布环境停用负例；无在途环境停用，编辑停用环境并重新打开草稿创建",
+    "expected": "有在途拒绝；无在途 INACTIVE，停用原因实际必填；停用后可改名称/排序但省略 approvalRequired，不再可选创建新草稿；历史发布详情仍可读，无恢复启用操作",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "有在途发布停用拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "无在途发布停用至 INACTIVE",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "停用缺原因/原因长度校验",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "INACTIVE 编辑名称/排序且省略 approvalRequired",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "重新打开建草稿无停用环境",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "历史发布详情仍可读",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "无恢复启用操作",
+        "status": "BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "X01",
+    "operation": "每域关键写操作用只读/无权限账号再试，记录服务端实际权限拒绝；每组表单执行第 5 节公共 UX",
+    "expected": "不因 UI 显示按钮而绕过后端授权；权限/数据范围异常均记录，不臆造后端保障。特别标明套件普通 Controller 未逐方法标注 PermissionCheck，实际授权行为 **待联调确认**；若无权限可写则失败，不修后端掩盖",
+    "status": "BLOCKED",
+    "actual": "前置环境/登录不可用，全部业务分支未执行；无业务响应、读回、页面或刷新证据；对象 ID 未产生。",
+    "evidence": [
+      "04-config-sanitized.log",
+      "05-environment.log"
+    ],
+    "branches": [
+      {
+        "label": "缺陷关键写操作只读/无项目权限拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "用例关键写操作只读/无项目权限拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "套件关键写操作实际授权（待联调确认）",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "轮/执行关键写操作只读/无项目权限拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "版本关键写操作只读/无项目权限拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "发布关键写操作只读/无项目权限拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "发布环境关键写操作只读/无项目权限拒绝",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "各表单 RequiredMark/读屏必填",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "各字段 FieldError/role=alert",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "spec §5 各表单特定约束",
+        "status": "BLOCKED"
+      },
+      {
+        "label": "公共 dirty/失败/在途导航场景",
+        "status": "BLOCKED"
+      }
+    ]
+  }
+]

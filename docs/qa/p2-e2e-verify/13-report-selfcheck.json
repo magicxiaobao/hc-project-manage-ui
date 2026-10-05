@@ -1,0 +1,27 @@
+{
+  "utc": "2026-10-05T04:56:38.318818+00:00",
+  "frontend_head_unchanged": true,
+  "backend_head_unchanged": true,
+  "all_commands_same_frontend_head": true,
+  "frontend_tracked_diff_empty": true,
+  "backend_status_clean": true,
+  "matrix_ids_exactly_spec": true,
+  "verification_id_count": 36,
+  "status_counts": {
+    "PASS": 0,
+    "FAIL": 0,
+    "BLOCKED": 36
+  },
+  "registered_branch_count": 258,
+  "all_registered_branches_blocked": true,
+  "missing_report_links": [],
+  "typecheck_error_count": 22,
+  "required_gate_exit_codes": [
+    2,
+    1,
+    0
+  ],
+  "conclusion": "未达标；不建议勾选 checklist",
+  "business_code_changed": false,
+  "backend_modified": false
+}

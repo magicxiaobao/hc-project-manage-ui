@@ -1,0 +1,7 @@
+{
+  "command": "pnpm exec node --test --test-reporter=tap scripts/brand-check.test.mjs scripts/check-auth-invariant.test.mjs scripts/with-app-env.test.mjs scripts/write-atomic.test.mjs",
+  "started_at": "2026-10-05T04:48:48.132029+00:00",
+  "ended_at": "2026-10-05T04:48:51.258229+00:00",
+  "exit_code": 1,
+  "head_after": "f48411cb1ca05be1c9e904ad5c5471c5727e663c"
+}
