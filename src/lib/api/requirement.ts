@@ -10,6 +10,7 @@
  *   findById/{id}、updateComment、invalid/{id}（需求评论的 targetType = REQUIREMENT）
  */
 import { api } from './client';
+import { requirementTraceApi } from './trace';
 import type { PageRequest, PageResult } from './types';
 import type {
   CommentCreatePayload,
@@ -17,8 +18,6 @@ import type {
   CommentView,
   RequirementCreatePayload,
   RequirementImpact,
-  RequirementMatrixQuery,
-  RequirementMatrixRow,
   RequirementOption,
   RequirementQueryRequest,
   RequirementResponse,
@@ -110,8 +109,7 @@ export const requirementApi = {
     api.get<RequirementImpact>(`/requirement/v1/trace/${requirementId}/impact`),
 
   /** 追溯矩阵分页查询 */
-  findMatrixByPage: (params: PageRequest<RequirementMatrixQuery>) =>
-    api.post<PageResult<RequirementMatrixRow>>('/requirement/v1/trace/matrix/findByPage', params),
+  findMatrixByPage: requirementTraceApi.findMatrix,
 
   /** 需求追溯历史分页查询 */
   findTraceHistoryByPage: (requirementId: number, params: PageRequest<TraceHistoryQuery>) =>

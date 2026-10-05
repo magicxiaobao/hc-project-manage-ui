@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { AppModal } from "@/components/biz/app-modal";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { BarChart3, Bug, CalendarRange, ChartGantt, Clock3, FlaskConical, GitBranch, Kanban, Layers, LayoutDashboard, ListTree, Package, Settings, SquareCheckBig, Users, Waypoints } from "lucide-react";
+import { BarChart3, Bug, CalendarRange, ChartGantt, ClipboardList, Clock3, FlaskConical, FolderTree, GitBranch, Kanban, Layers, LayoutDashboard, ListTree, Package, Server, Settings, SquareCheckBig, SquareKanban, Tag, Users, Waypoints } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Project } from "@/lib/pm/domain";
 import { chosenProjectKey, highlightedModule, moduleDestination, type SidebarModule } from "@/lib/pm/sidebar-nav";
@@ -40,8 +40,9 @@ export function ProjectSidebar({
     return () => media.removeEventListener("change", update);
   }, [onClose]);
   const current = project ? highlightedModule(pathname, project.key, itemOrigin) : undefined;
-  // 真实后端项目：只展示 P1 已接入的模块（项目详情/需求/任务/追溯），其余模块
-  // （仪表盘/缺陷/测试/版本/甘特等）仍是演示数据范围，不在分支里露出来。
+  // 真实后端项目：只展示已接入真实后端的模块（P1 需求/任务/追溯、P2 缺陷/测试/
+  // 版本发布、P3 看板/冲刺/待办/甘特/依赖）；仪表盘/统计/分配/工时/设置仍是
+  // 演示数据范围，不在分支里露出来。
   const liveCurrent = liveProjectKey ? highlightedModule(pathname, liveProjectKey, itemOrigin) : undefined;
   // Codex review 4175510487：登录态下 live 分支优先于演示项目分支——
   // 后端项目的 key 撞上演示 seed key 时也走真实后端分支，不渲染演示侧栏。
@@ -62,6 +63,25 @@ export function ProjectSidebar({
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/requirements" active={liveCurrent === "requirements"} icon={<ListTree className="size-4" />} label="需求" onClose={onClose} />
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/issues" active={liveCurrent === "issues"} icon={<SquareCheckBig className="size-4" />} label="任务" onClose={onClose} />
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/trace" active={liveCurrent === "trace"} icon={<Waypoints className="size-4" />} label="追溯" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/traceability" active={liveCurrent === "traceability"} icon={<Waypoints className="size-4" />} label="需求追溯矩阵" onClose={onClose} />
+              </div>
+              <div role="group" aria-label="计划与交付" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">计划与交付</h2>
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/boards" active={liveCurrent === "boards"} icon={<SquareKanban className="size-4" />} label="看板" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/backlog" active={liveCurrent === "backlog"} icon={<Layers className="size-4" />} label="待办" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/sprints" active={liveCurrent === "sprints"} icon={<CalendarRange className="size-4" />} label="冲刺" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/gantt" active={liveCurrent === "gantt"} icon={<ChartGantt className="size-4" />} label="甘特图" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/dependencies" active={liveCurrent === "dependencies"} icon={<GitBranch className="size-4" />} label="依赖" onClose={onClose} />
+              </div>
+              <div role="group" aria-label="质量与发布" className="flex shrink-0 flex-col gap-1">
+                <h2 className="type-label px-3">质量与发布</h2>
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/defects" active={liveCurrent === "defects"} icon={<Bug className="size-4" />} label="缺陷" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/testcases" active={liveCurrent === "testcases"} icon={<ClipboardList className="size-4" />} label="测试用例" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/testsuites" active={liveCurrent === "testsuites"} icon={<FolderTree className="size-4" />} label="测试套件" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/tests" active={liveCurrent === "tests"} icon={<FlaskConical className="size-4" />} label="测试轮" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/versions" active={liveCurrent === "versions"} icon={<Tag className="size-4" />} label="版本" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/releases" active={liveCurrent === "releases"} icon={<Package className="size-4" />} label="发布" onClose={onClose} />
+                <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey/release-environments" active={liveCurrent === "release-environments"} icon={<Server className="size-4" />} label="发布环境" onClose={onClose} />
               </div>
             </nav>
           </>
@@ -82,6 +102,7 @@ export function ProjectSidebar({
               <ProjectLink projectKey={project.key} to="/p/$projectKey/issues" active={current === "issues"} icon={<SquareCheckBig className="size-4" />} label="事项" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/requirements" active={current === "requirements"} icon={<ListTree className="size-4" />} label="需求" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/trace" active={current === "trace"} icon={<Waypoints className="size-4" />} label="追溯" onClose={onClose} />
+              <ProjectLink projectKey={project.key} to="/p/$projectKey/traceability" active={current === "traceability"} icon={<Waypoints className="size-4" />} label="需求追溯矩阵" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/gantt" active={current === "gantt"} icon={<ChartGantt className="size-4" />} label="甘特图" onClose={onClose} />
               <ProjectLink projectKey={project.key} to="/p/$projectKey/dependencies" active={current === "dependencies"} icon={<GitBranch className="size-4" />} label="依赖" onClose={onClose} />
               </div>
@@ -110,7 +131,7 @@ export function ProjectSidebar({
             </nav>
           </>
         )}
-        <div className="type-caption mt-auto px-1 pt-4">{liveProjectKey ? "真实后端数据（需求/任务/追溯已接入）" : project ? project.summary : "把事项拖到允许的状态列。"}</div>
+        <div className="type-caption mt-auto px-1 pt-4">{liveProjectKey ? "真实后端数据" : project ? project.summary : "把事项拖到允许的状态列。"}</div>
     </>
   );
   return (
@@ -226,7 +247,7 @@ function ProjectLink({
   onClose,
 }: {
   projectKey: string;
-  to: "/p/$projectKey" | "/p/$projectKey/dashboard" | "/p/$projectKey/backlog" | "/p/$projectKey/sprints" | "/p/$projectKey/issues" | "/p/$projectKey/defects" | "/p/$projectKey/assignment" | "/p/$projectKey/requirements" | "/p/$projectKey/trace" | "/p/$projectKey/gantt" | "/p/$projectKey/dependencies" | "/p/$projectKey/tests" | "/p/$projectKey/worklogs" | "/p/$projectKey/releases" | "/p/$projectKey/stats" | "/p/$projectKey/settings";
+  to: "/p/$projectKey" | "/p/$projectKey/dashboard" | "/p/$projectKey/backlog" | "/p/$projectKey/sprints" | "/p/$projectKey/issues" | "/p/$projectKey/defects" | "/p/$projectKey/assignment" | "/p/$projectKey/requirements" | "/p/$projectKey/trace" | "/p/$projectKey/traceability" | "/p/$projectKey/gantt" | "/p/$projectKey/dependencies" | "/p/$projectKey/tests" | "/p/$projectKey/worklogs" | "/p/$projectKey/releases" | "/p/$projectKey/stats" | "/p/$projectKey/settings" | "/p/$projectKey/boards" | "/p/$projectKey/testcases" | "/p/$projectKey/testsuites" | "/p/$projectKey/versions" | "/p/$projectKey/release-environments";
   active: boolean;
   activeOptions?: { exact: true };
   icon: ReactNode;

@@ -4,7 +4,7 @@
  * 登录态纯展示组件，不再引用 usePm 演示 store：
  * - 追溯图：GET /requirement/v1/trace/{id} → 六个追溯分桶（任务/用例/执行轮/执行/缺陷/版本）+ 追溯边
  * - 影响范围：GET /requirement/v1/trace/{id}/impact → root/nodes/edges 影响图
- * - 追溯矩阵：POST /requirement/v1/trace/matrix/findByPage → 分页矩阵表（筛选=标题/类型/状态）
+ * - 追溯矩阵：POST /requirement/v1/trace/matrix/findByPage → 只读四列矩阵（筛选=需求/任务/用例/缺陷状态）
  * - 子需求层级：GET /requirement/v1/hierarchy?projectId= 建树骨架（parentId 链接），
  *   展开节点时用 GET /requirement/v1/{id}/children 拉取权威直属子需求
  *
@@ -21,17 +21,15 @@ import {
   useRequirementHierarchy,
   useRequirementImpact,
   useRequirementList,
-  useRequirementOptions,
   useRequirementTrace,
-  useTraceMatrix,
 } from "@/lib/query";
 import type {
-  RequirementMatrixQuery,
   RequirementResponse,
   TraceBucket,
   TraceEdgeResponse,
   TraceNodeSummary,
 } from "@/lib/api/requirement-types";
+import { TraceMatrixLive } from "./trace-matrix-live";
 import { cn } from "@/lib/utils";
 
 type TraceTab = "graph" | "impact" | "matrix" | "hierarchy";
@@ -42,8 +40,6 @@ const TABS: Array<{ id: TraceTab; label: string }> = [
   { id: "matrix", label: "追溯矩阵" },
   { id: "hierarchy", label: "子需求层级" },
 ];
-
-const MATRIX_PAGE_SIZE = 20;
 
 const SELECTOR_PAGE_SIZE = 20;
 
@@ -146,7 +142,7 @@ export function TraceViewLive({ projectId, projectKey }: { projectId: number; pr
           {...selectorProps}
         />
       ) : null}
-      {tab === "matrix" ? <TraceMatrixTab projectId={projectId} projectKey={projectKey} /> : null}
+      {tab === "matrix" ? <TraceMatrixLive key={`${projectKey}:${projectId}`} projectId={projectId} /> : null}
       {tab === "hierarchy" ? <HierarchyTab projectId={projectId} projectKey={projectKey} /> : null}
     </div>
   );
@@ -459,178 +455,6 @@ function ImpactTab({ projectKey, ...selector }: SelectorProps) {
           <p className="type-caption text-default-500">生成于 {formatIsoDateTime(impactQuery.data.generatedAt)}</p>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function toSelectOptions(options: Array<{ value: string; label: string }>) {
-  return [{ id: "", label: "全部" }, ...options.map((option) => ({ id: option.value, label: option.label }))];
-}
-
-function TraceMatrixTab({ projectId, projectKey }: { projectId: number; projectKey: string }) {
-  const [titleInput, setTitleInput] = useState("");
-  const [appliedTitle, setAppliedTitle] = useState("");
-  const [requirementType, setRequirementType] = useState("");
-  const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
-
-  const optionsQuery = useRequirementOptions();
-  const options = optionsQuery.data;
-
-  const bean = useMemo<RequirementMatrixQuery>(() => {
-    const value: RequirementMatrixQuery = { projectId };
-    const title = appliedTitle.trim();
-    if (title) value.title = title;
-    if (requirementType) value.requirementType = requirementType as RequirementMatrixQuery["requirementType"];
-    if (status) value.status = status as RequirementMatrixQuery["status"];
-    return value;
-  }, [projectId, appliedTitle, requirementType, status]);
-
-  const matrixQuery = useTraceMatrix({ page, pageSize: MATRIX_PAGE_SIZE, bean, projectId });
-  const rows = matrixQuery.data?.list ?? [];
-  const total = matrixQuery.data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / MATRIX_PAGE_SIZE));
-  // Codex review 4175549755：页码越界（删除/权限变化导致当前页变空）时自动回到
-  // 最后一页；空的越界页仍渲染分页器，避免用户被困在无处可回的空页。
-  useEffect(() => {
-    if (!matrixQuery.isPending && total > 0 && page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [matrixQuery.isPending, total, totalPages, page]);
-
-  const matrixPager = (
-    <div className="flex items-center justify-between">
-      <span className="type-caption text-default-500">
-        共 {total} 条 · 第 {page}/{totalPages} 页
-      </span>
-      <div className="flex gap-2">
-        <Button size="sm" variant="ghost" isDisabled={page <= 1} onPress={() => setPage(page - 1)}>
-          上一页
-        </Button>
-        <Button size="sm" variant="ghost" isDisabled={page >= totalPages} onPress={() => setPage(page + 1)}>
-          下一页
-        </Button>
-      </div>
-    </div>
-  );
-
-  const applyFilters = () => {
-    setAppliedTitle(titleInput);
-    setPage(1);
-  };
-  const resetFilters = () => {
-    setTitleInput("");
-    setAppliedTitle("");
-    setRequirementType("");
-    setStatus("");
-    setPage(1);
-  };
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="type-caption text-default-500">标题</span>
-          <input
-            className="rounded-sm border border-border bg-surface px-2 py-1.5 text-sm"
-            value={titleInput}
-            placeholder="回车搜索"
-            onChange={(event) => setTitleInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") applyFilters();
-            }}
-          />
-        </label>
-        <OptionSelect
-          label="类型"
-          value={requirementType}
-          options={toSelectOptions(options?.types ?? [])}
-          onChange={(id) => {
-            setRequirementType(id);
-            setPage(1);
-          }}
-        />
-        <OptionSelect
-          label="状态"
-          value={status}
-          options={toSelectOptions(options?.statuses ?? [])}
-          onChange={(id) => {
-            setStatus(id);
-            setPage(1);
-          }}
-        />
-        <Button size="sm" onPress={applyFilters}>
-          搜索
-        </Button>
-        <Button size="sm" variant="ghost" onPress={resetFilters}>
-          重置
-        </Button>
-      </div>
-      {matrixQuery.isPending ? (
-        <div className="flex items-center gap-2 text-sm text-default-500">
-          <Spinner size="sm" />
-          正在加载追溯矩阵…
-        </div>
-      ) : matrixQuery.isError ? (
-        <div className="flex flex-col items-start gap-3">
-          <p className="type-body text-danger">追溯矩阵加载失败：{toUserMessage(matrixQuery.error)}</p>
-          <Button variant="ghost" onPress={() => void matrixQuery.refetch()}>
-            重试
-          </Button>
-        </div>
-      ) : rows.length === 0 ? (
-        // total === 0 才是真空；total > 0 但当前页无数据 = 越界空页（极短瞬态，
-        // 上方 useEffect 会把 page 钳回最后一页），仍渲染分页器让用户可回。
-        total === 0 ? (
-          <EmptyHint>没有符合条件的需求。</EmptyHint>
-        ) : (
-          <>
-            <EmptyHint>当前页没有数据，正在回到最后一页…</EmptyHint>
-            {matrixPager}
-          </>
-        )
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-sm border border-border bg-surface">
-            {rows.map((row) => (
-              <div key={row.requirement.objectId} className="flex flex-col gap-1 border-b border-border px-3 py-3 last:border-b-0">
-                <div className="flex items-center gap-2">
-                  <Link
-                    to="/p/$projectKey/requirements/$requirementId"
-                    params={{ projectKey, requirementId: String(row.requirement.objectId) }}
-                    className="type-body min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline"
-                  >
-                    {row.requirement.displayName}
-                  </Link>
-                  {row.requirement.status ? <StatusChip kind="requirement" status={row.requirement.status} /> : null}
-                </div>
-                <div className="type-caption flex flex-wrap gap-x-4 gap-y-1 text-default-500">
-                  <span>任务 {row.taskSummaries.length}</span>
-                  <span>用例 {row.testCaseSummaries.length}</span>
-                  <span>缺陷 {row.defectSummaries.length}</span>
-                  <span>
-                    版本证据 {row.versionEvidence.total} 条
-                    {row.versionEvidence.items.length > 0
-                      ? `（${row.versionEvidence.items.map((item) => item.versionName).join("、")}${
-                          row.versionEvidence.truncated ? "…" : ""
-                        }）`
-                      : ""}
-                  </span>
-                  {row.taskSummaries.length === 0 &&
-                  row.testCaseSummaries.length === 0 &&
-                  row.defectSummaries.length === 0 &&
-                  // Codex review 4175472565：版本证据也是关联对象的一种——有版
-                  // 本证据但无任务/用例/缺陷时，不能再报“无关联对象（覆盖缺口）”。
-                  row.versionEvidence.total === 0 ? (
-                    <span className="text-warning">无关联对象（覆盖缺口）</span>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-          {matrixPager}
-        </>
-      )}
     </div>
   );
 }

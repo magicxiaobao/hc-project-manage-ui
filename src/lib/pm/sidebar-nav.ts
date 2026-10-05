@@ -2,14 +2,17 @@ import { isItemPath, readItemOrigin } from "./navigation.ts";
 
 export type SidebarModule =
   | "dashboard" | "stats" | "board" | "backlog" | "sprints" | "issues"
-  | "requirements" | "trace" | "gantt" | "dependencies" | "defects"
-  | "tests" | "releases" | "assignment" | "worklogs" | "settings";
+  | "requirements" | "trace" | "traceability" | "gantt" | "dependencies" | "defects"
+  | "tests" | "releases" | "assignment" | "worklogs" | "settings"
+  | "boards" | "testcases" | "testsuites" | "versions" | "release-environments";
 
 const SEGMENTS: Record<string, SidebarModule> = {
   dashboard: "dashboard", stats: "stats", backlog: "backlog", sprints: "sprints",
-  issues: "issues", requirements: "requirements", trace: "trace", gantt: "gantt",
+  issues: "issues", requirements: "requirements", trace: "trace", traceability: "traceability", gantt: "gantt",
   dependencies: "dependencies", defects: "defects", tests: "tests", releases: "releases",
   assignment: "assignment", worklogs: "worklogs", settings: "settings",
+  boards: "boards", testcases: "testcases", testsuites: "testsuites", versions: "versions",
+  "release-environments": "release-environments",
 };
 
 function barePath(value: string): string {
@@ -39,8 +42,8 @@ export function highlightedModule(pathname: string, projectKey: string, origin: 
 /**
  * Codex review 4175472566：登录态下从 URL 提取当前项目键。
  * 演示项目的项目从 usePm().projects 查到时走完整演示导航；查不到（真实后
- * 端项目）但路径是 /p/<key>/... 时，走仅含真实后端模块（项目首页/需求/
- * 任务/追溯）的精简导航，而不是退回通用分支。
+ * 端项目）但路径是 /p/<key>/... 时，走仅含已接入真实后端模块的导航，
+ * 而不是退回通用分支。
  */
 export function projectKeyFromPath(pathname: string): string | null {
   const match = /^\/p\/([^/?#]+)/.exec(barePath(pathname));

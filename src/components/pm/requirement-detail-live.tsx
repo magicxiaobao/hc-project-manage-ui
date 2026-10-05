@@ -40,6 +40,7 @@ import type {
   RequirementResponse,
   RequirementTransitionPayload,
 } from "@/lib/api/requirement-types";
+import { TraceRelationsSection } from "./trace-relations-section";
 import { parseOptionalPositiveInt } from "@/lib/task-create";
 
 const COMMENT_PAGE_SIZE = 50;
@@ -259,6 +260,16 @@ export function RequirementDetailLive({
           <p className="type-caption mt-3 text-default-500">暂无描述。</p>
         )}
       </section>
+
+      {projectContextVerified ? (
+        <TraceRelationsSection
+          key={`trace:${requirementId}:${routeProjectId}`}
+          object={{ objectType: "REQUIREMENT", objectId: requirementId }}
+          title={detail.title}
+          projectId={routeProjectId as number}
+          projectKey={projectKey}
+        />
+      ) : null}
 
       {/* Codex review 4175337049：项目归属未确认前不渲染写操作区。 */}
       {projectContextVerified ? (

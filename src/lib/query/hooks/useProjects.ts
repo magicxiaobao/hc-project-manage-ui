@@ -90,6 +90,33 @@ export async function resolveProjectIdByKey(projectKey: string): Promise<number 
   return null;
 }
 
+/** 上次成功解析的项目 id（r25-2 修复的纯逻辑，可独立测试）。 */
+export interface LastGoodProject {
+  key: string;
+  id: number;
+}
+
+/**
+ * r25-2：lastGood 更新规则——
+ * - 解析返回数字 → 更新为 { key, id }；
+ * - 解析成功但返回 null（项目不存在，权威结论）→ 若归属同一 key 则清除，
+ *   之后同一 key 重取失败不再回退到旧项目 id；
+ * - 其余（pending / 失败 / 其它）→ 保持原值。
+ */
+export function nextLastGoodProject(
+  current: LastGoodProject | null,
+  projectKey: string,
+  resolution: { isPending: boolean; isError: boolean; data: number | null | undefined },
+): LastGoodProject | null {
+  if (typeof resolution.data === 'number') {
+    return { key: projectKey, id: resolution.data };
+  }
+  if (!resolution.isPending && !resolution.isError && resolution.data == null) {
+    return current?.key === projectKey ? null : current;
+  }
+  return current;
+}
+
 export function useProjectIdByKey(projectKey: string) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const key = (projectKey ?? '').trim();

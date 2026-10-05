@@ -10,6 +10,7 @@ export function AppModal({
   label,
   dialogClassName,
   bodyClassName,
+  isDismissDisabled = false,
 }: {
   open: boolean;
   title: ReactNode;
@@ -19,6 +20,7 @@ export function AppModal({
   label?: string;
   dialogClassName?: string;
   bodyClassName?: string;
+  isDismissDisabled?: boolean;
 }) {
   const outsideClickCount = useRef(0);
   if (!open) return null;
@@ -26,11 +28,12 @@ export function AppModal({
     <Modal
       isOpen={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (!next && !isDismissDisabled) onClose();
       }}
     >
       <Modal.Backdrop
-        isDismissable
+        isDismissable={!isDismissDisabled}
+        isKeyboardDismissDisabled={isDismissDisabled}
         variant="opaque"
         // A trigger's second click can land on the newly mounted backdrop.
         onMouseDownCapture={(event) => {
@@ -50,7 +53,7 @@ export function AppModal({
               <Modal.Heading className="flex flex-wrap items-center gap-2 pr-10">
                 {title}
               </Modal.Heading>
-              <Modal.CloseTrigger aria-label="关闭" />
+              <Modal.CloseTrigger aria-label="关闭" isDisabled={isDismissDisabled} />
             </Modal.Header>
             <Modal.Body className={bodyClassName}>{children}</Modal.Body>
           </Modal.Dialog>

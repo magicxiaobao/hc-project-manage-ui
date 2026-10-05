@@ -10,8 +10,8 @@ export { createQueryClient, isRetryableQueryError } from './client';
 export { clearQueryCache, setQueryCacheClearer } from './session';
 export { queryKeys } from './keys';
 export { isAuthExpiredError, toUserMessage } from './error';
-export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey, useProjectList, resolveProjectIdByKey } from './hooks/useProjects';
-export type { ProjectListParams } from './hooks/useProjects';
+export { useCreateProject, useProjectDetail, useProjectEnums, useProjectIdByKey, useProjectList, resolveProjectIdByKey, nextLastGoodProject } from './hooks/useProjects';
+export type { ProjectListParams, LastGoodProject } from './hooks/useProjects';
 export { useRequirementList, useRequirementOptions } from './hooks/useRequirements';
 export type { RequirementListParams, RequirementOptions } from './hooks/useRequirements';
 export { useDefectList, useDefectStatusOptions, useDefectBoard, useDefectStatistics, useCreateDefect, useDefectDetail, useUpdateDefect, useUpdateDefectStatus, useChangeDefectSeverity, buildChangeDefectSeverityOptions, DEFECT_TRANSITIONS_BY_STATUS, defectTransitionTargets, defectNeedsReason, defectNeedsActor, defectTransitionLabel } from './hooks/useDefects';
@@ -20,11 +20,15 @@ export { useTaskList } from './hooks/useTasks';
 export type { TaskListParams } from './hooks/useTasks';
 export {
   TASK_TRANSITIONS_BY_STATUS,
+  filterBacklogTasks,
+  isTasksFatalError,
   useAssignTask,
   useCreateTask,
   useCreateTaskComment,
+  useProjectAllTasks,
   useTaskComments,
   useTaskDetail,
+  useUpdateTaskSprint,
   useUpdateTaskStatus,
   taskNeedsActorReason,
   taskNeedsAssigneeConfirm,
@@ -48,6 +52,7 @@ export {
   transitionFieldRequirements,
 } from './hooks/useRequirements';
 export type { TraceMatrixParams, TransitionFieldRequirements } from './hooks/useRequirements';
+export type { BoardListAllParams, BoardListParams } from './hooks/useBoards';
 export {
   normalizeTestCaseListParams,
   useArchiveTestCase,
@@ -127,3 +132,77 @@ export {
   useWaiveReleaseGate,
 } from './hooks/useReleases';
 export type { ReleaseListParams, ReleaseListAllParams } from './hooks/useReleases';
+export {
+  invalidateBoardDomain,
+  invalidateOtherBoardColumns,
+  normalizeBoardColumnsParams,
+  useBoardColumnsWithTasks,
+  useCreateBoardColumn,
+  useDeleteBoardColumn,
+  useReorderBoardColumns,
+  useUpdateBoardColumn,
+} from './hooks/useBoardColumns';
+export {
+  normalizeBoardListParams,
+  useActivateBoard,
+  useArchiveBoard,
+  useBoardDetail,
+  useBoardList,
+  useBoardListAll,
+  useCopyBoard,
+  useCreateBoard,
+  useInvalidBoard,
+  useSetDefaultBoard,
+  useUpdateBoard,
+} from './hooks/useBoards';
+export {
+  filterMountableSprints,
+  normalizeSprintListParams,
+  sortMountableSprints,
+  useCancelSprint,
+  useCompleteSprint,
+  useCreateSprint,
+  useInvalidSprint,
+  usePlanningSprints,
+  useProjectAllSprints,
+  useSprintBurndown,
+  useSprintDetail,
+  useSprintList,
+  useSprintRetrospective,
+  useStartSprint,
+  useUpdateRetrospective,
+  useUpdateSprint,
+} from './hooks/useSprints';
+export type { SprintListParams } from './hooks/useSprints';
+export {
+  isGanttFatalError,
+  useBatchUpdateGanttTasks,
+  useCreateMilestone,
+  useCriticalPath,
+  useDeleteMilestone,
+  useGanttData,
+  useMilestoneList,
+  useTaskGanttDependencies,
+  useUpdateMilestone,
+} from './hooks/useGantt';
+export {
+  useTaskDependencyListAll,
+  useTaskDependencyStatistics,
+  useDependencyConflicts,
+  useTaskPredecessors,
+  useTaskSuccessors,
+  useCheckCircularDependency,
+  useCreateTaskDependency,
+  useInvalidTaskDependency,
+  useBatchDeleteTaskDependencies,
+  useTaskDependencyWriting,
+  useRefreshTaskDependencyDomains,
+} from "./hooks/useTaskDependencies";
+export {
+  useTraceRelations,
+  useLinkTraceRelation,
+  useUnlinkTraceRelation,
+  useRefreshTraceRelationDomains,
+  useTraceRelationCandidates,
+  useTraceObjectTitle,
+} from './hooks/useTraceRelations';

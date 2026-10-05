@@ -21,6 +21,12 @@ export {
   VersionSelect,
 } from "@/components/biz/field-selects";
 export { FilterCheckbox } from "@/components/biz/filter-checkbox";
+export {
+  DiscardConfirmDialog,
+  FieldError,
+  RequiredMark,
+  useUnsavedChangesGuard,
+} from "@/components/biz/form-guard";
 export { IssueCard } from "@/components/biz/issue-card";
 export { IssueDialog } from "@/components/biz/issue-dialog";
 export { BoardFilterBar, ListFilterBar } from "@/components/biz/issue-filters";
@@ -31,12 +37,6 @@ export { IssueTypeIcon } from "@/components/biz/issue-type-icon";
 export { KanbanBoard } from "@/components/biz/kanban-board";
 export { KanbanColumn } from "@/components/biz/kanban-column";
 export { LabeledField } from "@/components/biz/labeled-field";
-export {
-  DiscardConfirmDialog,
-  FieldError,
-  RequiredMark,
-  useUnsavedChangesGuard,
-} from "@/components/biz/form-guard";
 export { Loading, Spinner } from "@/components/biz/loading";
 export { MineList } from "@/components/biz/mine-list";
 export { NoticePanel } from "@/components/biz/notice-panel";

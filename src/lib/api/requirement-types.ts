@@ -187,31 +187,8 @@ export interface RequirementImpact {
   generatedAt: string;
 }
 
-/** 追溯矩阵单行（忠实于后端 RequirementMatrixRow） */
-export interface RequirementMatrixRow {
-  requirement: TraceNodeSummary;
-  taskSummaries: TraceNodeSummary[];
-  testCaseSummaries: TraceNodeSummary[];
-  defectSummaries: TraceNodeSummary[];
-  versionEvidence: {
-    total: number;
-    truncated: boolean;
-    items: Array<{
-      versionId: number;
-      versionName: string;
-      versionStatus: string | null;
-      evidenceRunId: number | null;
-    }>;
-  };
-}
-
-/** 追溯矩阵查询条件 */
-export interface RequirementMatrixQuery {
-  projectId?: number;
-  title?: string;
-  requirementType?: RequirementType;
-  status?: RequirementStatus;
-}
+/** 矩阵契约统一由 trace-types 定义。 */
+export type { RequirementMatrixRow, RequirementMatrixQuery } from './trace-types';
 
 /** 追溯历史事件（忠实于后端 TraceHistoryResponse 的 JSON 视图） */
 export interface TraceHistoryEvent {
