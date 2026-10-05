@@ -19,7 +19,7 @@
  *
  * 未登录时不使用本组件（路由层渲染登录提示）。
  */
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button, Label, Spinner, TextArea, TextField } from "@heroui/react";
 import { toast } from "sonner";
@@ -49,6 +49,7 @@ import type {
 } from "@/lib/api/release-types";
 import { ReleaseDraftEditDialog } from "@/components/pm/release-form-dialog";
 import { ReleaseWaiverDialog } from "@/components/pm/release-waiver-dialog";
+import { buildGateOptions } from "@/lib/release-form";
 import { ReleaseReasonDialog } from "@/components/pm/release-reason-dialog";
 import type { ReleaseReasonAction } from "@/components/pm/release-reason-dialog";
 import { ReleaseResultDialog } from "@/components/pm/release-result-dialog";
@@ -260,10 +261,11 @@ export function ReleaseDetailLive({
 
   const detail = detailQuery.data ?? null;
 
-  // 路由项目归属守卫（仿 version-detail-live r20-1 先例；codex r24 P1-3）：
-  // 路由里的 projectKey 必须解析出项目并与记录的 projectId 精确一致，
-  // 否则跨项目链接会在错误的项目上下文里展示并允许操作其它项目的发布。
-  // 解析中/解析失败时不误判：只读展示，写操作区隐藏。
+  // 路由项目归属守卫（仿 version-detail-live r20-1 先例；codex r24 P1-3；
+  // r25 P2-2 裁定与 version-detail-live:153-162 对齐）：
+  // 路由里的 projectKey 必须解析出项目并与记录的 projectId 精确一致。
+  // 归属不符时直接返回 EmptyHint，不在错误项目上下文展示它项目详情；
+  // 解析中/解析失败时不误判：只读展示，写操作区隐藏并挂 projectContextNotice。
   const routeProjectQuery = useProjectIdByKey(projectKey);
   const routeProjectId = routeProjectQuery.data;
   const projectContextVerified =
@@ -274,6 +276,22 @@ export function ReleaseDetailLive({
     typeof routeProjectId === "number" &&
     detail != null &&
     detail.release.projectId !== routeProjectId;
+
+  // 项目归属解析中/失败时的操作区提示（仿 version-detail-live:165-167；
+  // codex r25 P2-3）：此前 routeProjectQuery 失败/进行中只会让 canWrite 静默
+  // 翻 false、写操作区无声消失，既无提示也无重试入口。这里给出明确文案：
+  // 解析中 → 操作区稍后可用；失败 → 操作区已禁用 + 重试项目解析入口。
+  const projectContextNotice =
+    detail != null && !projectContextVerified && !projectMismatch
+      ? routeProjectQuery.isPending
+        ? "正在确认项目归属，操作区稍后可用"
+        : "当前无法确认归属，操作区已禁用"
+      : null;
+  const projectContextNoticeRetry =
+    projectContextNotice != null && !routeProjectQuery.isPending;
+  const retryProjectContext = () => {
+    void routeProjectQuery.refetch();
+  };
 
   // 已通过门禁（提交快照 + 实时预览）从豁免下拉排除（codex r24 P2-5；
   // DIRECT_REQUIREMENT_SCOPE 由弹窗恒排除）
@@ -288,10 +306,18 @@ export function ReleaseDetailLive({
     return [...excluded];
   }, [detail, gatesPreviewQuery.data]);
 
+  // 顶部"豁免门禁"入口（waive、无预设）当前可豁免的门禁数：全部非 DIRECT
+  // 门禁已通过时为 0，此时禁用入口（codex r25 P2-4；弹窗内另有兜底）。
+  const waivableGateCount = buildGateOptions(excludedGateTypes).length;
+
   // 弹窗 keyed 实例在早返回之外声明：pending/error/not-found/成功四个分支
-  // 共用同一实例；后台重取失败（isError 但保留缓存 data）时错误分支只在
-  // 顶部加横幅、不卸载子树，编辑/豁免/原因/结果弹窗的脏草稿得以保留
-  //（仿 version-detail-live r19-2 约定；codex r24 P1-1）。
+  // 共用同一 keyed Fragment 实例（codex r25 P1-1；仿 testrun-detail-live
+  // r10-1 <Fragment key="testrun-dialogs">）：分支切换时 React 按 key 复用
+  // 而不 remount；后台重取失败（isError 但保留缓存 data）时错误分支只在
+  // 顶部加横幅、不卸载子树，编辑/豁免/原因/结果弹窗的脏草稿得以保留。
+  // 各分支根统一为同一 <div> 容器且子节点顺序一致（横幅/消息 → 内容 → 弹窗），
+  // 弹窗始终处于稳定父节点与位置——此前无 key 外层 Fragment 在 success↔
+  // isError(有缓存) 切换时按索引 reconcile 会卸载重建全部弹窗。
   // detail 为 null 时弹窗没有可打开的入口（按钮依赖详情数据），渲染 null。
   const editDialog = detail ? (
     <ReleaseDraftEditDialog
@@ -346,13 +372,13 @@ export function ReleaseDetailLive({
     />
   );
   const dialogs = (
-    <>
+    <Fragment key="release-dialogs">
       {editDialog}
       {deleteDialog}
       {waiverDialog}
       {reasonDialog}
       {resultDialog}
-    </>
+    </Fragment>
   );
 
   const release: ReleaseResponse | null = detail?.release ?? null;
@@ -374,7 +400,9 @@ export function ReleaseDetailLive({
         isApproved={isApproved}
         isTerminal={isTerminal}
         canWrite={projectContextVerified}
-        projectMismatch={projectMismatch}
+        projectContextNotice={projectContextNotice}
+        projectContextNoticeRetry={projectContextNoticeRetry}
+        onRetryProjectContext={retryProjectContext}
         operating={operating}
         gatesPreviewQuery={gatesPreviewQuery}
         setEditOpen={setEditOpen}
@@ -382,6 +410,7 @@ export function ReleaseDetailLive({
         setWaiverMode={setWaiverMode}
         setWaiverGateType={setWaiverGateType}
         setResultMode={setResultMode}
+        waivableGateCount={waivableGateCount}
         handleSubmit={handleSubmit}
         handleClone={handleClone}
         submitPending={submitMutation.isPending}
@@ -395,69 +424,70 @@ export function ReleaseDetailLive({
 
   if (detailQuery.isPending) {
     return (
-      <>
-        <div className="mx-auto flex max-w-5xl items-center gap-2 p-4 md:p-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+        <div className="flex items-center gap-2">
           <Spinner size="sm" />
           <span className="text-sm text-default-500">正在加载发布详情…</span>
         </div>
         {dialogs}
-      </>
+      </div>
     );
   }
 
-  if (detailQuery.isError) {
-    if (detailContent) {
-      // 后台重取失败但有缓存数据：顶部横幅提示，不卸载子树（弹窗草稿保留）
-      return (
-        <>
-          <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pt-4 md:px-6 md:pt-6">
-            <div
-              role="alert"
-              className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
-            >
-              <p className="type-body text-danger">
-                发布详情刷新失败：{toUserMessage(detailQuery.error)}
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2"
-                onPress={() => void detailQuery.refetch()}
-              >
-                重试
-              </Button>
-            </div>
-          </div>
-          {detailContent}
-          {dialogs}
-        </>
-      );
-    }
+  // 错项目上下文：按 version-detail-live:153-162 先例直接返回 EmptyHint，
+  // 不在错误项目上下文展示它项目详情（codex r25 P2-2 裁定；此前只读展示
+  // 完整详情的口径与修复说明/版本先例不一致）。
+  if (projectMismatch) {
     return (
-      <div className="mx-auto flex max-w-5xl flex-col items-start gap-3 p-4 md:p-6">
-        <p className="type-body text-danger">发布详情加载失败：{toUserMessage(detailQuery.error)}</p>
+      <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+        <div className="px-4 py-8">
+          <EmptyHint>{`发布 #${releaseId} 不属于当前项目（/p/${projectKey}），请检查链接。`}</EmptyHint>
+        </div>
+        {dialogs}
+      </div>
+    );
+  }
+
+  // 各分支根统一为同一 <div> 容器且子节点顺序一致（横幅/消息 → 内容 → 弹窗），
+  // 弹窗为 keyed Fragment 实例，分支切换时只做 keyed 移动不 remount
+  //（codex r25 P1-1）。
+  return (
+    <div className="mx-auto flex max-w-5xl flex-col gap-4 p-4 md:p-6">
+      {detailQuery.isError && detailContent ? (
+        // 后台重取失败但有缓存数据：顶部横幅提示，不卸载子树（弹窗草稿保留）
+        <div
+          role="alert"
+          className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
+        >
+          <p className="type-body text-danger">
+            发布详情刷新失败：{toUserMessage(detailQuery.error)}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2"
+            onPress={() => void detailQuery.refetch()}
+          >
+            重试
+          </Button>
+        </div>
+      ) : null}
+      {detailQuery.isError && !detailContent ? (
+        <p className="type-body text-danger">
+          发布详情加载失败：{toUserMessage(detailQuery.error)}
+        </p>
+      ) : null}
+      {detailQuery.isError && !detailContent ? (
         <Button variant="ghost" onPress={() => void detailQuery.refetch()}>
           重试
         </Button>
-        {dialogs}
-      </div>
-    );
-  }
-
-  if (!detailContent) {
-    return (
-      <div className="mx-auto max-w-5xl p-4 md:p-6">
-        <EmptyHint>未找到该发布。</EmptyHint>
-        {dialogs}
-      </div>
-    );
-  }
-
-  return (
-    <>
+      ) : null}
       {detailContent}
+      {!detailQuery.isError && !detailContent ? (
+        <EmptyHint>未找到该发布。</EmptyHint>
+      ) : null}
       {dialogs}
-    </>
+    </div>
   );
 }
 
@@ -466,8 +496,11 @@ export function ReleaseDetailLive({
  *
  * 写操作区（草稿操作/门禁操作/审批/结果记录/生命周期）只有在路由项目
  * 解析成功且与记录的 projectId 精确一致时才渲染（canWrite；仿
- * version-detail-live r20-1 先例）。解析中/解析失败/归属不符时只读展示，
- * 归属不符另在顶部挂横幅提示。
+ * version-detail-live r20-1 先例）。解析中/解析失败时只读展示，并在顶部
+ * 挂 projectContextNotice（解析中文案/失败文案 + 失败时重试入口；仿
+ * version-detail-live:165-167；codex r25 P2-3）。归属不符由上层直接返回
+ * EmptyHint，不渲染本组件（codex r25 P2-2 裁定，与 version-detail-live
+ * :153-162 一致）。
  */
 function ReleaseDetailContent({
   detail,
@@ -479,7 +512,9 @@ function ReleaseDetailContent({
   isApproved,
   isTerminal,
   canWrite,
-  projectMismatch,
+  projectContextNotice,
+  projectContextNoticeRetry,
+  onRetryProjectContext,
   operating,
   gatesPreviewQuery,
   setEditOpen,
@@ -487,6 +522,7 @@ function ReleaseDetailContent({
   setWaiverMode,
   setWaiverGateType,
   setResultMode,
+  waivableGateCount,
   handleSubmit,
   handleClone,
   submitPending,
@@ -506,8 +542,12 @@ function ReleaseDetailContent({
   isTerminal: boolean;
   /** 路由 projectKey 解析出的项目与记录 projectId 精确一致（写操作总开关） */
   canWrite: boolean;
-  /** 路由项目已解析但与记录 projectId 不符（顶部横幅提示） */
-  projectMismatch: boolean;
+  /** 路由项目归属解析中/失败时的顶部提示文案（null = 无需提示） */
+  projectContextNotice: string | null;
+  /** projectContextNotice 为失败文案时是否展示"重试确认项目归属"入口 */
+  projectContextNoticeRetry: boolean;
+  /** 重试路由项目归属解析（routeProjectQuery.refetch） */
+  onRetryProjectContext: () => void;
   operating: boolean;
   gatesPreviewQuery: ReturnType<typeof usePreviewReleaseGates>;
   setEditOpen: (open: boolean) => void;
@@ -515,6 +555,8 @@ function ReleaseDetailContent({
   setWaiverMode: (mode: "waive" | "revoke" | null) => void;
   setWaiverGateType: (gateType: string | undefined) => void;
   setResultMode: (mode: ReleaseRecordMode | null) => void;
+  /** 顶部"豁免门禁"入口（waive、无预设）当前可豁免的门禁数；为 0 时禁用入口 */
+  waivableGateCount: number;
   handleSubmit: () => void;
   handleClone: (kind: "copy" | "rollback") => void;
   submitPending: boolean;
@@ -534,14 +576,22 @@ function ReleaseDetailContent({
         hint={`真实后端数据（GET /release/v1/findById/${release.id}）。默认展示提交快照；实时门禁仅在草稿预览时显示。`}
       />
 
-      {projectMismatch ? (
+      {projectContextNotice ? (
         <div
-          role="alert"
-          className="rounded-sm border border-danger/40 bg-danger/5 px-4 py-3"
+          role="status"
+          className="rounded-sm border border-border bg-surface px-4 py-3"
         >
-          <p className="type-body text-danger">
-            该发布不属于当前项目，仅可查看，无法在此操作。请切换到正确的项目后重试。
-          </p>
+          <p className="type-body text-default-500">{projectContextNotice}</p>
+          {projectContextNoticeRetry ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onPress={onRetryProjectContext}
+            >
+              重试确认项目归属
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -633,7 +683,9 @@ function ReleaseDetailContent({
                 setWaiverGateType(undefined);
                 setWaiverMode("waive");
               }}
-              isDisabled={operating}
+              // 无可豁免门禁时禁用入口（codex r25 P2-4；行级入口按行门禁状态
+              // 单独渲染，不受此影响）
+              isDisabled={operating || waivableGateCount === 0}
             >
               豁免门禁
             </Button>

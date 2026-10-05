@@ -12,6 +12,9 @@
  *   挂载，X/遮罩/Esc/取消按钮走 guard(doClose)；成功提交前 markClean()）、
  *   必填字段 RequiredMark、校验全量收集、FieldError 挂在对应输入正下方、
  *   编辑时清除该字段错误；在途禁用全部可编辑控件
+ * - 无可豁免门禁时（codex r25 P2-4）：弹窗内明示"暂无可豁免门禁"并禁用提交，
+ *   gateType 不回退隐藏默认值；选项随门禁预览变化时清理已失效的 gateType
+ *   及对应字段错误；提交前校验值在当前可选项内（失效挂 FieldError 拒绝提交）
  */
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button, Label, TextArea, TextField } from "@heroui/react";
@@ -19,41 +22,17 @@ import { toast } from "sonner";
 import { AppModal, FieldError, OptionSelect, RequiredMark, useUnsavedChangesGuard } from "@/components/biz";
 import { toUserMessage, useRevokeReleaseWaiver, useWaiveReleaseGate } from "@/lib/query";
 import {
+  buildGateOptions,
   buildReleaseWaiverPayload,
   emptyReleaseWaiverInput,
   validateReleaseWaiverInput,
 } from "@/lib/release-form";
 import type { ReleaseWaiverInput } from "@/lib/release-form";
-import { RELEASE_GATE_TYPES, RELEASE_GATE_TYPE_LABELS } from "@/lib/api/release-types";
 
 /**
- * 可豁免门禁选项（老前端 ReleaseGatePanel.vue:23 口径）：
- * - 恒排除 DIRECT_REQUIREMENT_SCOPE（后端 waiveGate 直接抛 ReleaseGateBlocked）
- * - 排除调用方传入的已通过门禁（后端同样拒绝豁免已通过门禁）
- * - revoke 模式下若预设门禁被排除（防御性），仍保留该预设以免下拉显示空值
+ * 可豁免门禁选项见 @/lib/release-form 的 buildGateOptions（老前端
+ * ReleaseGatePanel.vue:23 口径），弹窗与详情页顶部入口共用。
  */
-function buildGateOptions(
-  excludedGateTypes: readonly string[],
-  presetGateType?: string,
-): Array<{ id: string; label: string }> {
-  const options: Array<{ id: string; label: string }> = RELEASE_GATE_TYPES.filter(
-    (gateType) => gateType !== 'DIRECT_REQUIREMENT_SCOPE' && !excludedGateTypes.includes(gateType),
-  ).map((gateType) => ({
-    id: gateType,
-    label: RELEASE_GATE_TYPE_LABELS[gateType],
-  }));
-  if (
-    presetGateType != null &&
-    !options.some((option) => option.id === presetGateType) &&
-    (RELEASE_GATE_TYPES as readonly string[]).includes(presetGateType)
-  ) {
-    options.unshift({
-      id: presetGateType,
-      label: RELEASE_GATE_TYPE_LABELS[presetGateType as keyof typeof RELEASE_GATE_TYPE_LABELS] ?? presetGateType,
-    });
-  }
-  return options;
-}
 
 export function ReleaseWaiverDialog({
   open,
@@ -90,11 +69,14 @@ export function ReleaseWaiverDialog({
     if (open) {
       const options = buildGateOptions(excludedGateTypes, mode === "revoke" ? presetGateType : undefined);
       // 行级入口预选该行门禁（若仍可豁免）；否则默认首个可豁免项
-      //（绝不默认 DIRECT_REQUIREMENT_SCOPE，见 emptyReleaseWaiverInput）
+      //（绝不默认 DIRECT_REQUIREMENT_SCOPE，见 emptyReleaseWaiverInput）。
+      // 无可豁免门禁时 gateType 留空：绝不回退到隐藏默认值（如已通过的
+      // REQUIRED_CASES_PASSED，否则提交必被后端拒绝；codex r25 P2-4），
+      // 提交按钮随之禁用并明示"暂无可豁免门禁"。
       const presetAvailable =
         presetGateType != null && options.some((option) => option.id === presetGateType);
       const snapshot: ReleaseWaiverInput = {
-        gateType: presetAvailable ? presetGateType! : (options[0]?.id ?? emptyReleaseWaiverInput().gateType),
+        gateType: presetAvailable ? presetGateType! : (options[0]?.id ?? ""),
         reason: "",
       };
       initialFormRef.current = JSON.stringify(snapshot);
@@ -105,6 +87,38 @@ export function ReleaseWaiverDialog({
     // 只在 open 翻转时重置；调用方以 open=false→true 重新打开承载 mode/preset 变化
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // 渲染用选项与打开时快照保持同一口径（不可豁免项恒排除）
+  const renderOptions = buildGateOptions(
+    excludedGateTypes,
+    mode === "revoke" ? presetGateType : undefined,
+  );
+  const renderOptionIdsKey = renderOptions.map((option) => option.id).join(",");
+
+  // 豁免选项随门禁实时预览更新可能被排除：form.gateType 若已不在当前
+  // 可选项内则清理并回退首项（同时清除对应字段错误），避免提交失效值
+  //（codex r25 P2-4：此前 gateType 只在 open 翻转时重置，选项变化不清理）。
+  useLayoutEffect(() => {
+    if (!open) return;
+    setForm((current) => {
+      if (
+        current.gateType === "" ||
+        renderOptions.some((option) => option.id === current.gateType)
+      ) {
+        return current;
+      }
+      return { ...current, gateType: renderOptions[0]?.id ?? "" };
+    });
+    setFieldErrors((current) => {
+      if (current.gateType === undefined) return current;
+      const next = { ...current };
+      delete next.gateType;
+      return next;
+    });
+    // 选项由 excludedGateTypes/presetGateType/mode 派生；renderOptionIdsKey
+    // 聚合其变化，open 翻转与选项变化时重跑
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, renderOptionIdsKey]);
 
   const isDirty = JSON.stringify(form) !== initialFormRef.current;
   const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(open && isDirty);
@@ -135,7 +149,11 @@ export function ReleaseWaiverDialog({
 
   const handleSubmit = () => {
     if (mutation.isPending) return;
-    const errors = validateReleaseWaiverInput(form);
+    // 提交前校验值在当前可选项内（codex r25 P2-4）：防止选项变化后
+    // form.gateType 失效仍提交；失效时挂 FieldError 拒绝提交
+    const errors = validateReleaseWaiverInput(form, {
+      allowedGateTypes: renderOptions.map((option) => option.id),
+    });
     if (errors.length > 0) {
       const nextFieldErrors: Record<string, string> = {};
       for (const error of errors) nextFieldErrors[error.field] = error.message;
@@ -169,8 +187,7 @@ export function ReleaseWaiverDialog({
       ? "确认豁免"
       : "确认撤销";
 
-  // 渲染用选项与打开时快照保持同一口径（不可豁免项恒排除）
-  const renderOptions = buildGateOptions(excludedGateTypes, mode === "revoke" ? presetGateType : undefined);
+  // 渲染用选项见组件上部 renderOptions（与打开时快照保持同一口径）
 
   return (
     <>
@@ -178,19 +195,24 @@ export function ReleaseWaiverDialog({
       <AppModal open={open} title={title} onClose={close} size="md">
         {dialog}
         <div className="flex flex-col gap-4">
-          <div>
-            <Label>
-              门禁类型<RequiredMark />
-            </Label>
-            <OptionSelect
-              label="门禁类型（必填）"
-              value={form.gateType}
-              options={renderOptions}
-              onChange={(next) => set({ gateType: next })}
-              isDisabled={mutation.isPending}
-            />
-            <FieldError message={fieldErrors.gateType} />
-          </div>
+          {renderOptions.length === 0 ? (
+            // 无可豁免门禁：明示并禁用提交，不回退隐藏默认值（codex r25 P2-4）
+            <p className="type-body text-default-500">暂无可豁免门禁</p>
+          ) : (
+            <div>
+              <Label>
+                门禁类型<RequiredMark />
+              </Label>
+              <OptionSelect
+                label="门禁类型（必填）"
+                value={form.gateType}
+                options={renderOptions}
+                onChange={(next) => set({ gateType: next })}
+                isDisabled={mutation.isPending}
+              />
+              <FieldError message={fieldErrors.gateType} />
+            </div>
+          )}
 
           <div>
             <TextField
@@ -214,7 +236,11 @@ export function ReleaseWaiverDialog({
             <Button variant="ghost" onPress={close} isDisabled={mutation.isPending}>
               取消
             </Button>
-            <Button variant="primary" onPress={handleSubmit} isDisabled={mutation.isPending}>
+            <Button
+              variant="primary"
+              onPress={handleSubmit}
+              isDisabled={mutation.isPending || renderOptions.length === 0}
+            >
               {submitLabel}
             </Button>
           </div>

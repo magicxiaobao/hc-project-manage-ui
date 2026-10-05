@@ -26,7 +26,7 @@ import type {
   ReleaseResponse,
   ReleaseSuccessPayload,
 } from './api/release-types';
-import { RELEASE_GATE_TYPES } from './api/release-types';
+import { RELEASE_GATE_TYPE_LABELS, RELEASE_GATE_TYPES } from './api/release-types';
 
 /** 字段级校验错误：调用方按 field 挂到对应输入下展示 */
 export interface ReleaseFormFieldError {
@@ -225,13 +225,61 @@ export function emptyReleaseWaiverInput(): ReleaseWaiverInput {
   };
 }
 
-/** 校验豁免表单：门禁类型必须为五项之一，原因必填 */
+/**
+ * 可豁免门禁选项（老前端 ReleaseGatePanel.vue:23 口径）：
+ * - 恒排除 DIRECT_REQUIREMENT_SCOPE（后端 waiveGate 直接抛 ReleaseGateBlocked）
+ * - 排除调用方传入的已通过门禁（后端同样拒绝豁免已通过门禁）
+ * - revoke 模式下若预设门禁被排除（防御性），仍保留该预设以免下拉显示空值
+ *
+ * 放 lib 层供弹窗与详情页共用：详情页顶部"豁免门禁"入口据此判断当前
+ * 是否有可豁免项（codex r25 P2-4）。
+ */
+export function buildGateOptions(
+  excludedGateTypes: readonly string[],
+  presetGateType?: string,
+): Array<{ id: string; label: string }> {
+  const options: Array<{ id: string; label: string }> = RELEASE_GATE_TYPES.filter(
+    (gateType) => gateType !== 'DIRECT_REQUIREMENT_SCOPE' && !excludedGateTypes.includes(gateType),
+  ).map((gateType) => ({
+    id: gateType,
+    label: RELEASE_GATE_TYPE_LABELS[gateType],
+  }));
+  if (
+    presetGateType != null &&
+    !options.some((option) => option.id === presetGateType) &&
+    (RELEASE_GATE_TYPES as readonly string[]).includes(presetGateType)
+  ) {
+    options.unshift({
+      id: presetGateType,
+      label: RELEASE_GATE_TYPE_LABELS[presetGateType as keyof typeof RELEASE_GATE_TYPE_LABELS] ?? presetGateType,
+    });
+  }
+  return options;
+}
+
+/** 校验豁免表单：门禁类型必须为可豁免项之一，原因必填 */
 export function validateReleaseWaiverInput(
   input: ReleaseWaiverInput,
+  opts?: {
+    /**
+     * 当前可豁免的门禁类型（codex r25 P2-4：随门禁预览变化；不传则沿用
+     * 全部五项枚举的旧口径）。传入后额外校验值在可选项内，失效时挂
+     * gateType 字段错误拒绝提交。
+     */
+    allowedGateTypes?: readonly string[];
+  },
 ): ReleaseFormFieldError[] {
   const errors: ReleaseFormFieldError[] = [];
-  if (!(RELEASE_GATE_TYPES as readonly string[]).includes(input.gateType)) {
-    errors.push({ field: 'gateType', message: '门禁类型不合法' });
+  const allowed =
+    opts?.allowedGateTypes ?? (RELEASE_GATE_TYPES as readonly string[]);
+  if (!allowed.includes(input.gateType)) {
+    errors.push({
+      field: 'gateType',
+      message:
+        opts?.allowedGateTypes != null
+          ? '所选门禁已不在可豁免范围内，请重新选择'
+          : '门禁类型不合法',
+    });
   }
   if (input.reason.trim() === '') {
     errors.push({ field: 'reason', message: '请填写豁免原因' });

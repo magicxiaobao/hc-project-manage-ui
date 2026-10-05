@@ -211,6 +211,36 @@ describe('validateReleaseWaiverInput / buildReleaseWaiverPayload', () => {
     expect(emptyReleaseWaiverInput().gateType).not.toBe('DIRECT_REQUIREMENT_SCOPE');
     expect(emptyReleaseWaiverInput().gateType).toBe('REQUIRED_CASES_PASSED');
   });
+
+  it('allowedGateTypes 传入时：已排除的值挂 gateType 错误（r25-4）', () => {
+    const errors = validateReleaseWaiverInput(
+      { gateType: 'REQUIRED_CASES_PASSED', reason: '无阻断' },
+      { allowedGateTypes: ['NO_BLOCKING_DEFECT'] },
+    );
+    expect(errors).toEqual([
+      { field: 'gateType', message: '所选门禁已不在可豁免范围内，请重新选择' },
+    ]);
+  });
+
+  it('allowedGateTypes 传入时：范围内值通过', () => {
+    expect(
+      validateReleaseWaiverInput(
+        { gateType: 'NO_BLOCKING_DEFECT', reason: '无阻断' },
+        { allowedGateTypes: ['NO_BLOCKING_DEFECT'] },
+      ),
+    ).toEqual([]);
+  });
+
+  it('不传 allowedGateTypes 时保持旧口径（五项枚举成员资格）', () => {
+    expect(
+      validateReleaseWaiverInput({ gateType: 'REQUIRED_CASES_PASSED', reason: '无阻断' }),
+    ).toEqual([]);
+    expect(
+      validateReleaseWaiverInput({ gateType: 'NOPE', reason: '无阻断' }).map(
+        (error) => error.field,
+      ),
+    ).toEqual(['gateType']);
+  });
 });
 
 describe('validateReleaseReasonInput', () => {
