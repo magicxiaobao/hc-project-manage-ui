@@ -21,16 +21,17 @@ export const Route = createFileRoute("/p/$projectKey/defects/")({
 
 function Page() {
   const { projectKey } = Route.useParams();
+  const { keyword } = Route.useSearch();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   if (!isAuthenticated) return <BoardView projectKey={projectKey} lockedKind="defect" />;
-  return <LiveDefectList projectKey={projectKey} />;
+  return <LiveDefectList projectKey={projectKey} keyword={keyword} />;
 }
 
 /**
  * P2 p2-defect-list-create：路由 key（字符串）→ 后端 id（数字）→
  * POST /defect/v1/findByPage。演示数据不再用于已登录的缺陷列表。
  */
-function LiveDefectList({ projectKey }: { projectKey: string }) {
+function LiveDefectList({ projectKey, keyword }: { projectKey: string; keyword?: string }) {
   const resolution = useProjectIdByKey(projectKey);
 
   if (resolution.isPending) {
@@ -62,7 +63,7 @@ function LiveDefectList({ projectKey }: { projectKey: string }) {
       <div className="mx-auto max-w-5xl px-4 pt-4 md:px-6 md:pt-6">
         <DefectViewTabs projectKey={projectKey} active="list" />
       </div>
-      <DefectListLive projectId={resolution.data} projectKey={projectKey} />
+      <DefectListLive projectId={resolution.data} projectKey={projectKey} keyword={keyword} />
     </div>
   );
 }

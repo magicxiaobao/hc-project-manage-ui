@@ -11,11 +11,17 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as R403RouteImport } from './routes/403'
+import { Route as DashboardsRouteImport } from './routes/dashboards'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as SysRouteImport } from './routes/sys'
+import { Route as WorkbenchRouteImport } from './routes/workbench'
+import { Route as WorklogsRouteImport } from './routes/worklogs'
+import { Route as DashboardProjectIdRouteImport } from './routes/dashboard/$projectId'
 import { Route as PProjectKeyRouteImport } from './routes/p/$projectKey'
 import { Route as ProjectsNewRouteImport } from './routes/projects_.new'
 import { Route as SysConfigsRouteImport } from './routes/sys/configs'
@@ -26,6 +32,7 @@ import { Route as SysProfileRouteImport } from './routes/sys/profile'
 import { Route as SysRolesRouteImport } from './routes/sys/roles'
 import { Route as SysUsersRouteImport } from './routes/sys/users'
 import { Route as SysWorkflowDesignerRouteImport } from './routes/sys/workflow-designer'
+import { Route as WorklogsAnalyticsRouteImport } from './routes/worklogs_.analytics'
 import { Route as PProjectKeyIndexRouteImport } from './routes/p/$projectKey/index'
 import { Route as PProjectKeyAssignmentRouteImport } from './routes/p/$projectKey/assignment'
 import { Route as PProjectKeyBacklogRouteImport } from './routes/p/$projectKey/backlog'
@@ -94,6 +101,11 @@ const R403Route = R403RouteImport.update({
   path: '/403',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardsRoute = DashboardsRouteImport.update({
+  id: '/dashboards',
+  path: '/dashboards',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InboxRoute = InboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
@@ -109,14 +121,39 @@ const MeRoute = MeRouteImport.update({
   path: '/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SysRoute = SysRouteImport.update({
   id: '/sys',
   path: '/sys',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkbenchRoute = WorkbenchRouteImport.update({
+  id: '/workbench',
+  path: '/workbench',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorklogsRoute = WorklogsRouteImport.update({
+  id: '/worklogs',
+  path: '/worklogs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardProjectIdRoute = DashboardProjectIdRouteImport.update({
+  id: '/dashboard/$projectId',
+  path: '/dashboard/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PProjectKeyRoute = PProjectKeyRouteImport.update({
@@ -168,6 +205,11 @@ const SysWorkflowDesignerRoute = SysWorkflowDesignerRouteImport.update({
   id: '/workflow-designer',
   path: '/workflow-designer',
   getParentRoute: () => SysRoute,
+} as any)
+const WorklogsAnalyticsRoute = WorklogsAnalyticsRouteImport.update({
+  id: '/worklogs_/analytics',
+  path: '/worklogs/analytics',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const PProjectKeyIndexRoute = PProjectKeyIndexRouteImport.update({
   id: '/',
@@ -475,11 +517,17 @@ const SysUsersUserIdRolesRoute = SysUsersUserIdRolesRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/403': typeof R403Route
+  '/dashboards': typeof DashboardsRoute
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
+  '/search': typeof SearchRoute
   '/sys': typeof SysRouteWithChildren
+  '/workbench': typeof WorkbenchRoute
+  '/worklogs': typeof WorklogsRoute
+  '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
   '/sys/configs': typeof SysConfigsRouteWithChildren
@@ -490,6 +538,7 @@ export interface FileRoutesByFullPath {
   '/sys/roles': typeof SysRolesRouteWithChildren
   '/sys/users': typeof SysUsersRouteWithChildren
   '/sys/workflow-designer': typeof SysWorkflowDesignerRoute
+  '/worklogs/analytics': typeof WorklogsAnalyticsRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsRouteWithChildren
@@ -551,14 +600,21 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/403': typeof R403Route
+  '/dashboards': typeof DashboardsRoute
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
+  '/search': typeof SearchRoute
   '/sys': typeof SysRouteWithChildren
+  '/workbench': typeof WorkbenchRoute
+  '/worklogs': typeof WorklogsRoute
+  '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
   '/sys/profile': typeof SysProfileRoute
   '/sys/workflow-designer': typeof SysWorkflowDesignerRoute
+  '/worklogs/analytics': typeof WorklogsAnalyticsRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
@@ -609,11 +665,17 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/403': typeof R403Route
+  '/dashboards': typeof DashboardsRoute
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
+  '/search': typeof SearchRoute
   '/sys': typeof SysRouteWithChildren
+  '/workbench': typeof WorkbenchRoute
+  '/worklogs': typeof WorklogsRoute
+  '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects_/new': typeof ProjectsNewRoute
   '/sys/configs': typeof SysConfigsRouteWithChildren
@@ -624,6 +686,7 @@ export interface FileRoutesById {
   '/sys/roles': typeof SysRolesRouteWithChildren
   '/sys/users': typeof SysUsersRouteWithChildren
   '/sys/workflow-designer': typeof SysWorkflowDesignerRoute
+  '/worklogs_/analytics': typeof WorklogsAnalyticsRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsRouteWithChildren
@@ -687,11 +750,17 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/403'
+    | '/dashboards'
     | '/inbox'
     | '/login'
     | '/me'
+    | '/notifications'
     | '/projects'
+    | '/search'
     | '/sys'
+    | '/workbench'
+    | '/worklogs'
+    | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects/new'
     | '/sys/configs'
@@ -702,6 +771,7 @@ export interface FileRouteTypes {
     | '/sys/roles'
     | '/sys/users'
     | '/sys/workflow-designer'
+    | '/worklogs/analytics'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/boards'
@@ -763,14 +833,21 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/403'
+    | '/dashboards'
     | '/inbox'
     | '/login'
     | '/me'
+    | '/notifications'
     | '/projects'
+    | '/search'
     | '/sys'
+    | '/workbench'
+    | '/worklogs'
+    | '/dashboard/$projectId'
     | '/projects/new'
     | '/sys/profile'
     | '/sys/workflow-designer'
+    | '/worklogs/analytics'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/dashboard'
@@ -820,11 +897,17 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/403'
+    | '/dashboards'
     | '/inbox'
     | '/login'
     | '/me'
+    | '/notifications'
     | '/projects'
+    | '/search'
     | '/sys'
+    | '/workbench'
+    | '/worklogs'
+    | '/dashboard/$projectId'
     | '/p/$projectKey'
     | '/projects_/new'
     | '/sys/configs'
@@ -835,6 +918,7 @@ export interface FileRouteTypes {
     | '/sys/roles'
     | '/sys/users'
     | '/sys/workflow-designer'
+    | '/worklogs_/analytics'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/boards'
@@ -897,13 +981,20 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   R403Route: typeof R403Route
+  DashboardsRoute: typeof DashboardsRoute
   InboxRoute: typeof InboxRoute
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
+  NotificationsRoute: typeof NotificationsRoute
   ProjectsRoute: typeof ProjectsRoute
+  SearchRoute: typeof SearchRoute
   SysRoute: typeof SysRouteWithChildren
+  WorkbenchRoute: typeof WorkbenchRoute
+  WorklogsRoute: typeof WorklogsRoute
+  DashboardProjectIdRoute: typeof DashboardProjectIdRoute
   PProjectKeyRoute: typeof PProjectKeyRouteWithChildren
   ProjectsNewRoute: typeof ProjectsNewRoute
+  WorklogsAnalyticsRoute: typeof WorklogsAnalyticsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -920,6 +1011,13 @@ declare module '@tanstack/react-router' {
       path: '/403'
       fullPath: '/403'
       preLoaderRoute: typeof R403RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboards': {
+      id: '/dashboards'
+      path: '/dashboards'
+      fullPath: '/dashboards'
+      preLoaderRoute: typeof DashboardsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inbox': {
@@ -943,6 +1041,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/projects': {
       id: '/projects'
       path: '/projects'
@@ -950,11 +1055,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sys': {
       id: '/sys'
       path: '/sys'
       fullPath: '/sys'
       preLoaderRoute: typeof SysRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workbench': {
+      id: '/workbench'
+      path: '/workbench'
+      fullPath: '/workbench'
+      preLoaderRoute: typeof WorkbenchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/worklogs': {
+      id: '/worklogs'
+      path: '/worklogs'
+      fullPath: '/worklogs'
+      preLoaderRoute: typeof WorklogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/$projectId': {
+      id: '/dashboard/$projectId'
+      path: '/dashboard/$projectId'
+      fullPath: '/dashboard/$projectId'
+      preLoaderRoute: typeof DashboardProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p/$projectKey': {
@@ -1026,6 +1159,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sys/workflow-designer'
       preLoaderRoute: typeof SysWorkflowDesignerRouteImport
       parentRoute: typeof SysRoute
+    }
+    '/worklogs_/analytics': {
+      id: '/worklogs_/analytics'
+      path: '/worklogs/analytics'
+      fullPath: '/worklogs/analytics'
+      preLoaderRoute: typeof WorklogsAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/p/$projectKey/': {
       id: '/p/$projectKey/'
@@ -1760,23 +1900,21 @@ const PProjectKeyRouteWithChildren = PProjectKeyRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   R403Route: R403Route,
+  DashboardsRoute: DashboardsRoute,
   InboxRoute: InboxRoute,
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
+  NotificationsRoute: NotificationsRoute,
   ProjectsRoute: ProjectsRoute,
+  SearchRoute: SearchRoute,
   SysRoute: SysRouteWithChildren,
+  WorkbenchRoute: WorkbenchRoute,
+  WorklogsRoute: WorklogsRoute,
+  DashboardProjectIdRoute: DashboardProjectIdRoute,
   PProjectKeyRoute: PProjectKeyRouteWithChildren,
   ProjectsNewRoute: ProjectsNewRoute,
+  WorklogsAnalyticsRoute: WorklogsAnalyticsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

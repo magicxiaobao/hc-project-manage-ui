@@ -1,0 +1,76 @@
+import type { WorkLogAnalyticsResponse, WorkLogStatisticsResponse } from "../api/worklog-types";
+export function statisticsFixture(
+  overrides: Partial<WorkLogStatisticsResponse> = {},
+): WorkLogStatisticsResponse {
+  return {
+    dimension: "project",
+    userId: null,
+    userName: null,
+    userCnName: null,
+    projectId: 7,
+    projectName: "项目七",
+    taskId: null,
+    taskTitle: null,
+    sprintId: null,
+    sprintName: null,
+    statisticDate: "2026-10-05",
+    totalHours: 1.25,
+    effectiveHours: null,
+    billableHours: null,
+    overtimeHours: null,
+    recordCount: 1,
+    completedTasks: null,
+    avgEfficiency: null,
+    workTypeHours: null,
+    workLocationHours: null,
+    approvalStatusHours: null,
+    entries: null,
+    effectiveHoursRatio: null,
+    billableHoursRatio: null,
+    overtimeHoursRatio: null,
+    ...overrides,
+  };
+}
+export function analyticsFixture(
+  overrides: Partial<WorkLogAnalyticsResponse> = {},
+): WorkLogAnalyticsResponse {
+  return {
+    dateRange: null,
+    userStats: null,
+    dailyTrend: [
+      {
+        period: "daily",
+        date: "2026-10-05",
+        hours: 2.5,
+        effectiveHours: null,
+        recordCount: 1,
+        userCount: 1,
+        avgHoursPerUser: null,
+        efficiency: null,
+      },
+    ],
+    weeklyTrend: null,
+    monthlyTrend: null,
+    overview: {
+      totalHours: 4,
+      effectiveHours: 2,
+      totalRecords: 3,
+      billableHours: 3,
+      overtimeHours: 2,
+      userCount: 1,
+      projectCount: 1,
+      taskCount: 1,
+      avgDailyHours: null,
+      avgHoursPerUser: null,
+      avgHoursPerProject: null,
+      effectiveRatio: 0.5,
+      billableRatio: 0.75,
+      overtimeRatio: 0.5,
+    },
+    efficiency: null,
+    teamCollaboration: null,
+    keyMetricsSummary: { unconfirmed: { totalHours: 999 }, averageEfficiency: 888 },
+    insights: ["真实洞察"],
+    ...overrides,
+  };
+}

@@ -153,6 +153,7 @@ it("preserves explicit false filters and an empty sprint without truthy coercion
       ascending: false,
     }),
     {
+      keyword: undefined,
       query: "HC-141",
       kind: "task",
       mine: false,
@@ -188,6 +189,7 @@ it("does not trust arrays, objects or string booleans as filter values", () => {
       ascending: "false",
     }),
     {
+      keyword: undefined,
       query: undefined,
       kind: undefined,
       mine: undefined,
@@ -276,4 +278,13 @@ it("names the current sort direction and leaves other columns unsorted", () => {
   assert.deepEqual(headerSortState("key", "key", true), { ariaSort: "ascending", direction: "升序" });
   assert.deepEqual(headerSortState("key", "key", undefined), { ariaSort: "descending", direction: "降序" });
   assert.deepEqual(headerSortState("title", "key", true), { ariaSort: "none", direction: null });
+});
+
+it("accepts normalized title keyword independently from the demonstration query", () => {
+  const parsed = parseProjectViewSearch({ keyword: '  中文 内部空格 & ? # + / % _  ', query: 'HC-141' });
+  assert.equal(parsed.keyword, '中文 内部空格 & ? # + / % _');
+  assert.equal(parsed.query, 'HC-141');
+  assert.equal(parseProjectViewSearch({ keyword: ['title'] }).keyword, undefined);
+  assert.equal(parseProjectViewSearch({ keyword: '   ' }).keyword, undefined);
+  assert.equal(parseProjectViewSearch({ keyword: '字'.repeat(201) }).keyword?.length, 201);
 });

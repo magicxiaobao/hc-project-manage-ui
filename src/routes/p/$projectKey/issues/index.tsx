@@ -15,18 +15,19 @@ export const Route = createFileRoute("/p/$projectKey/issues/")({
 
 function Page() {
   const { projectKey } = Route.useParams();
+  const { keyword } = Route.useSearch();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   // Codex review 4175631821：未登录时 index 路由保留演示列表；
   // 深链接子路由（$taskId/new）走各自的登录守卫，不再被布局路由的演示分支吞掉。
   if (!isAuthenticated) return <ListView projectKey={projectKey} />;
-  return <LiveTaskList projectKey={projectKey} />;
+  return <LiveTaskList projectKey={projectKey} keyword={keyword} />;
 }
 
 /**
  * P1 p1-task-list：路由 key（字符串）→ 后端 id（数字）→ POST /task/v1/findByPage。
  * 演示数据不再用于已登录的任务列表。
  */
-function LiveTaskList({ projectKey }: { projectKey: string }) {
+function LiveTaskList({ projectKey, keyword }: { projectKey: string; keyword?: string }) {
   const resolution = useProjectIdByKey(projectKey);
 
   if (resolution.isPending) {
@@ -53,5 +54,5 @@ function LiveTaskList({ projectKey }: { projectKey: string }) {
     );
   }
 
-  return <TaskListLive projectId={resolution.data} projectKey={projectKey} />;
+  return <TaskListLive projectId={resolution.data} projectKey={projectKey} keyword={keyword} />;
 }

@@ -1,5 +1,9 @@
 import { normalizeRelationQuery } from '../trace-relations';
 import type { AlmObjectKey, AlmRelationType } from '../api/trace-types';
+import type { NotificationQueryRequest } from '../api/notification-types';
+import type { WorkLogUserStatisticsParams, WorkLogAnalyticsRequest } from '../api/worklog-types';
+import { normalizeWorkLogAnalytics, type WorkLogDimension } from '../worklog-analytics-data';
+
 /**
  * query key 约定（P1 起所有数据获取统一使用）：
  * - 根命名空间 'hc'：避免与第三方库或其它 QueryClient 的缓存冲突
@@ -9,7 +13,7 @@ import type { AlmObjectKey, AlmRelationType } from '../api/trace-types';
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
-function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone' | 'taskDependency' | 'traceRelation' | 'system') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone' | 'taskDependency' | 'traceRelation' | 'system' | 'dashboard' | 'dashboardWidget' | 'workLog') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -17,6 +21,7 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
     list: (params: Record<string, unknown> = {}) => [...all, 'list', params] as const,
     /** 详情查询 */
     detail: (id: number | string) => [...all, 'detail', id] as const,
+    config: (id: number) => [...all, 'config', id] as const,
     /** 允许的状态流转：id + 当前状态（后端按 id 权威计算，状态仅作缓存区分） */
     allowed: (id: number | string, status: string) => [...all, 'allowed', id, status] as const,
     /** 状态流转历史 */
@@ -64,7 +69,28 @@ export const queryKeys = {
       ["hc", "taskDependency", "predecessors", taskId] as const,
     successors: (taskId: number | null) => ["hc", "taskDependency", "successors", taskId] as const,
   },
-  project: domainKeys('project'),
+  notification: {
+    all: ['hc', 'notification'] as const,
+    list: (params: { userId: number | null; page: number; pageSize: number; bean: NotificationQueryRequest }) => ['hc', 'notification', 'list', params] as const,
+    unreadCount: (userId: number | null) => ['hc', 'notification', 'unreadCount', { userId }] as const,
+  },
+  workLog: {
+    ...domainKeys('workLog'),
+    userStatistics: (params: WorkLogUserStatisticsParams & { userId: number | null }) => ['hc', 'workLog', 'userStatistics', { ...params, projectIds: [...new Set(params.projectIds)].sort((a, b) => a - b) }] as const,
+    analytics: (params: WorkLogAnalyticsRequest | null) => ['hc', 'workLog', 'analytics', params ? normalizeWorkLogAnalytics('analytics', params) : null] as const,
+    statisticsGroup: (dimension: WorkLogDimension, params: WorkLogAnalyticsRequest | null) => ['hc', 'workLog', 'statisticsGroup', dimension, params ? normalizeWorkLogAnalytics(dimension, params) : null] as const,
+  },
+  dashboard: domainKeys('dashboard'),
+  dashboardWidget: domainKeys('dashboardWidget'),
+  project: {
+    ...domainKeys('project'),
+    searchScope: () => ['hc', 'project', 'searchScope'] as const,
+    dashboard: (id: number) => ['hc', 'project', 'dashboard', id] as const,
+    progress: (id: number) => ['hc', 'project', 'progress', id] as const,
+    statistics: () => ['hc', 'project', 'statistics'] as const,
+    dashboardCompare: (ids: readonly number[]) => ['hc', 'project', 'dashboardCompare', [...new Set(ids)].sort((a, b) => a - b)] as const,
+    statisticsOptions: (params: Record<string, unknown>) => ['hc', 'project', 'statisticsOptions', params] as const,
+  },
   requirement: domainKeys('requirement'),
   task: domainKeys('task'),
   defect: domainKeys('defect'),

@@ -7,6 +7,10 @@
  *   变更契约前先更新契约测试（src/lib/api/__tests__/contract.test.ts）。
  */
 export * from './types';
+export * from './dashboard-types';
+export * from './project-stats-types';
+export * from './worklog-types';
+export * from './notification-types';
 export * from './requirement-types';
 export * from './task-types';
 export * from './defect-types';
@@ -28,6 +32,10 @@ export type { AlmObjectKey, RequirementImpact, RequirementTrace, TraceNodeSummar
 export * from './system-types';
 export * from './client';
 export { authApi } from './auth';
+export { dashboardApi, dashboardWidgetApi } from './dashboard';
+export { projectStatsApi } from './project-stats';
+export { workLogApi } from './worklog';
+export { notificationApi } from './notification';
 export { projectApi } from './project';
 export { requirementApi } from './requirement';
 export { taskApi } from './task';

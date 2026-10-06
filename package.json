@@ -24,7 +24,9 @@
     "format": "prettier --write .",
     "test:pm": "node --import ./scripts/pm-test-register.mjs --test src/lib/pm/*.test.ts",
     "test:lib": "vitest run --testTimeout=15000 src/lib/__tests__ src/lib/access/__tests__ src/lib/buttons/__tests__ src/lib/query/__tests__ src/components",
-    "test:contract": "vitest run src/lib/api/__tests__/contract.test.ts src/lib/api/__tests__/system-contract.test.ts"
+    "test:contract": "vitest run src/lib/api/__tests__/contract.test.ts src/lib/api/__tests__/dashboard-contract.test.ts src/lib/api/__tests__/project-stats-contract.test.ts src/lib/api/__tests__/worklog-contract.test.ts src/lib/api/__tests__/notification-contract.test.ts src/lib/api/__tests__/workbench-contract.test.ts src/lib/api/__tests__/global-search-contract.test.ts src/lib/api/__tests__/system-contract.test.ts",
+    "test:global-search": "vitest run src/lib/api/__tests__/global-search-contract.test.ts src/lib/query/__tests__/global-search.test.tsx src/components/pm/__tests__/global-search-page.test.tsx src/components/pm/__tests__/global-search-list-routes.test.tsx",
+    "test:workbench": "vitest run src/lib/__tests__/workbench-data.test.ts src/lib/api/__tests__/workbench-contract.test.ts src/lib/query/__tests__/workbench-hooks.test.tsx src/components/pm/workbench/__tests__/workbench-page.test.tsx"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -5,6 +5,8 @@ import { BarChart3, Bug, CalendarRange, ChartGantt, ClipboardList, Clock3, Flask
 import type { ReactNode } from "react";
 import type { Project } from "@/lib/pm/domain";
 import { chosenProjectKey, highlightedModule, moduleDestination, type SidebarModule } from "@/lib/pm/sidebar-nav";
+import { useAuthStore } from "@/lib/api/auth-store";
+import { useProjectIdByKey } from "@/lib/query/hooks/useProjects";
 import { cn } from "@/lib/utils";
 
 export function ProjectSidebar({
@@ -34,6 +36,9 @@ export function ProjectSidebar({
    */
   accessNav?: ReactNode;
 }) {
+  const authenticated = useAuthStore(s => s.isAuthenticated);
+  const liveProject = useProjectIdByKey(liveProjectKey ?? "");
+  const liveProjectId = liveProject.isSuccess && typeof liveProject.data === "number" && Number.isSafeInteger(liveProject.data) && liveProject.data > 0 ? liveProject.data : null;
   const [compact, setCompact] = useState<boolean | null>(null);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1023px)");
@@ -47,7 +52,7 @@ export function ProjectSidebar({
   }, [onClose]);
   const current = project ? highlightedModule(pathname, project.key, itemOrigin) : undefined;
   // 真实后端项目：只展示已接入真实后端的模块（P1 需求/任务/追溯、P2 缺陷/测试/
-  // 版本发布、P3 看板/冲刺/待办/甘特/依赖）；仪表盘/统计/分配/工时/设置仍是
+  // 版本发布、P3 看板/冲刺/待办/甘特/依赖、P4 仪表盘）；统计/分配/工时/设置仍是
   // 演示数据范围，不在分支里露出来。
   const liveCurrent = liveProjectKey ? highlightedModule(pathname, liveProjectKey, itemOrigin) : undefined;
   // Codex review 4175510487：登录态下 live 分支优先于演示项目分支——
@@ -60,9 +65,12 @@ export function ProjectSidebar({
             <div className="type-caption px-1">真实后端项目</div>
             <div className="my-4 h-px bg-border" />
             <nav aria-label="项目模块（真实后端）" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+              <SideLink to="/workbench" active={pathname === "/workbench"} icon={<LayoutDashboard className="size-4" />} label="工作台" onClose={onClose} />
+              <SideLink to="/dashboards" active={pathname.startsWith("/dashboards")} icon={<LayoutDashboard className="size-4" />} label="仪表盘管理" onClose={onClose} />
               <div role="group" aria-label="项目" className="flex shrink-0 flex-col gap-1">
                 <h2 className="type-label px-3">项目</h2>
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey" active={liveCurrent === "board"} activeOptions={{ exact: true }} icon={<Kanban className="size-4" />} label="项目详情" onClose={onClose} />
+                {liveProjectId !== null ? <ProjectLink projectKey={liveProjectKey} projectId={liveProjectId} to="/dashboard/$projectId" active={pathname.startsWith("/dashboard/")} icon={<LayoutDashboard className="size-4" />} label="项目仪表盘" onClose={onClose} /> : null}
               </div>
               <div role="group" aria-label="需求与任务" className="flex shrink-0 flex-col gap-1">
                 <h2 className="type-label px-3">需求与任务</h2>
@@ -131,8 +139,9 @@ export function ProjectSidebar({
             <div className="type-section px-1">恒川</div>
             <div className="type-caption px-1">项目协作</div>
             <div className="my-4 h-px bg-border" />
-            <nav className="flex flex-col gap-1">
-              <SideLink to="/" active={pathname === "/"} icon={<SquareCheckBig className="size-4" />} label="工作台" onClose={onClose} />
+            <nav aria-label="全局导航" className="flex flex-col gap-1">
+              {authenticated ? <SideLink to="/workbench" active={pathname === "/workbench"} icon={<LayoutDashboard className="size-4" />} label="工作台" onClose={onClose} /> : null}
+              <SideLink to="/" active={pathname === "/"} icon={<SquareCheckBig className="size-4" />} label={authenticated ? "演示首页" : "工作台"} onClose={onClose} />
               <SideLink to="/projects" active={pathname.startsWith("/projects")} icon={<Kanban className="size-4" />} label="项目" onClose={onClose} />
             </nav>
           </>
@@ -233,7 +242,7 @@ function ProjectSwitcher({
   );
 }
 
-function SideLink({ to, active, icon, label, onClose }: { to: "/" | "/projects"; active: boolean; icon: ReactNode; label: string; onClose: () => void }) {
+function SideLink({ to, active, icon, label, onClose }: { to: "/" | "/projects" | "/workbench" | "/dashboards"; active: boolean; icon: ReactNode; label: string; onClose: () => void }) {
   return (
     <Link to={to} onClick={onClose} className={cn("flex h-10 items-center gap-3 rounded-sm px-3", active ? "type-emphasis bg-line text-primary" : "type-body hover:bg-line")}>
       {icon}
@@ -244,6 +253,7 @@ function SideLink({ to, active, icon, label, onClose }: { to: "/" | "/projects";
 
 function ProjectLink({
   projectKey,
+  projectId,
   to,
   active,
   activeOptions,
@@ -252,7 +262,8 @@ function ProjectLink({
   onClose,
 }: {
   projectKey: string;
-  to: "/p/$projectKey" | "/p/$projectKey/dashboard" | "/p/$projectKey/backlog" | "/p/$projectKey/sprints" | "/p/$projectKey/issues" | "/p/$projectKey/defects" | "/p/$projectKey/assignment" | "/p/$projectKey/requirements" | "/p/$projectKey/trace" | "/p/$projectKey/traceability" | "/p/$projectKey/gantt" | "/p/$projectKey/dependencies" | "/p/$projectKey/tests" | "/p/$projectKey/worklogs" | "/p/$projectKey/releases" | "/p/$projectKey/stats" | "/p/$projectKey/settings" | "/p/$projectKey/boards" | "/p/$projectKey/testcases" | "/p/$projectKey/testsuites" | "/p/$projectKey/versions" | "/p/$projectKey/release-environments";
+  projectId?: number;
+  to: "/dashboard/$projectId" | "/p/$projectKey" | "/p/$projectKey/dashboard" | "/p/$projectKey/backlog" | "/p/$projectKey/sprints" | "/p/$projectKey/issues" | "/p/$projectKey/defects" | "/p/$projectKey/assignment" | "/p/$projectKey/requirements" | "/p/$projectKey/trace" | "/p/$projectKey/traceability" | "/p/$projectKey/gantt" | "/p/$projectKey/dependencies" | "/p/$projectKey/tests" | "/p/$projectKey/worklogs" | "/p/$projectKey/releases" | "/p/$projectKey/stats" | "/p/$projectKey/settings" | "/p/$projectKey/boards" | "/p/$projectKey/testcases" | "/p/$projectKey/testsuites" | "/p/$projectKey/versions" | "/p/$projectKey/release-environments";
   active: boolean;
   activeOptions?: { exact: true };
   icon: ReactNode;
@@ -262,7 +273,7 @@ function ProjectLink({
   return (
     <Link
       to={to}
-      params={{ projectKey }}
+      params={to === "/dashboard/$projectId" ? { projectId: String(projectId) } : { projectKey }}
       {...(activeOptions ? { activeOptions } : {})}
       onClick={onClose}
       {...(active ? { "aria-current": "page" as const } : {})}

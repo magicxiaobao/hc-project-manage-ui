@@ -13,9 +13,10 @@
  *
  * 未登录走演示列表（ListView）时不使用本组件。
  */
+import { useListTitleSearch } from "./use-list-title-search";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Button, Input, Spinner, TextField } from "@heroui/react";
+import { Button, FieldError, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, StatusChip } from "@/components/biz";
 import { priorityLabel, statusLabel } from "@/lib/pm/domain";
 import { toUserMessage, useTaskList } from "@/lib/query";
@@ -28,17 +29,15 @@ const PAGE_SIZE = 20;
 const PRIORITY_OPTIONS = [{ id: "", label: "全部" }, ...TASK_PRIORITIES.map((priority) => ({ id: priority, label: priorityLabel(priority) }))];
 const STATUS_OPTIONS = [{ id: "", label: "全部" }, ...TASK_STATUSES.map((status) => ({ id: status, label: statusLabel("task", status) }))];
 
-export function TaskListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
+export function TaskListLive({ projectId, projectKey, keyword }: { projectId: number; projectKey: string; keyword?: string }) {
   const navigate = useNavigate();
-  const [titleInput, setTitleInput] = useState("");
-  const [appliedTitle, setAppliedTitle] = useState("");
+  const { titleInput, setTitleInput, appliedTitle, page, setPage, titleError, applyTitle, resetTitle, queryProjectId } = useListTitleSearch("task", projectId, projectKey, keyword);
   const [taskTypeInput, setTaskTypeInput] = useState("");
   const [appliedTaskType, setAppliedTaskType] = useState("");
   const [priority, setPriority] = useState("");
   const [status, setStatus] = useState("");
   const [assigneeInput, setAssigneeInput] = useState("");
   const [appliedAssignee, setAppliedAssignee] = useState("");
-  const [page, setPage] = useState(1);
   const [filterError, setFilterError] = useState<string | null>(null);
 
   const bean = useMemo<TaskQueryRequest>(() => {
@@ -56,7 +55,7 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
     return value;
   }, [projectId, appliedTitle, appliedTaskType, priority, status, appliedAssignee]);
 
-  const listQuery = useTaskList({ page, pageSize: PAGE_SIZE, bean, projectId });
+  const listQuery = useTaskList({ page, pageSize: PAGE_SIZE, bean, projectId: queryProjectId });
 
   const applyFilters = () => {
     // Codex review 4175337116：执行人筛选必须为正整数用户 ID；非法输入直接报错，
@@ -67,15 +66,14 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
       return;
     }
     setFilterError(null);
-    setAppliedTitle(titleInput);
+    if (!applyTitle()) return;
     setAppliedTaskType(taskTypeInput);
     setAppliedAssignee(assigneeInput);
     setPage(1);
   };
 
   const resetFilters = () => {
-    setTitleInput("");
-    setAppliedTitle("");
+    resetTitle();
     setTaskTypeInput("");
     setAppliedTaskType("");
     setPriority("");
@@ -111,8 +109,9 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
         }}
       >
         <div className="min-w-48 flex-1">
-          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索">
+          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索" isInvalid={!!titleError} validationBehavior="aria">
             <Input placeholder="按标题搜索，回车确认" />
+            {titleError ? <div role="alert"><FieldError>{titleError}</FieldError></div> : null}
           </TextField>
         </div>
         <div className="w-36">
@@ -141,7 +140,7 @@ export function TaskListLive({ projectId, projectKey }: { projectId: number; pro
 
       {filterError ? <p className="text-xs text-danger">{filterError}</p> : null}
 
-      {listQuery.isPending ? (
+      {listQuery.isPending && queryProjectId !== null ? (
         <div className="flex items-center gap-2 py-8 text-sm text-default-500">
           <Spinner size="sm" />
           正在加载任务…
