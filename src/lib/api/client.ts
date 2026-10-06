@@ -235,11 +235,23 @@ export function createApiClient(options: ApiClientOptions = {}) {
     const token = readToken();
     if (token) headers.set(TOKEN_HEADER, token);
     const generationAtStart = readSessionGeneration ? readSessionGeneration() : 0;
-    const res = await fetch(joinUrl(baseUrl, path), { ...init, headers });
-    if (res.status === 401 && !isOwnErrorEndpoint(path)) {
-      return handleUnauthorized(path, retry, token, generationAtStart, () => raw(path, init, true));
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    init.signal?.addEventListener('abort', abort, { once: true });
+    if (init.signal?.aborted) controller.abort();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(joinUrl(baseUrl, path), { ...init, headers, signal: controller.signal });
+      if (res.status === 401 && !isOwnErrorEndpoint(path)) {
+        return await handleUnauthorized(path, retry, token, generationAtStart, () =>
+          raw(path, init, true),
+        );
+      }
+      return res;
+    } finally {
+      clearTimeout(timer);
+      init.signal?.removeEventListener('abort', abort);
     }
-    return res;
   }
 
   async function request<T>(path: string, init: RequestInit & { _retry?: boolean } = {}): Promise<T> {

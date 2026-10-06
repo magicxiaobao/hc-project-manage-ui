@@ -224,16 +224,18 @@ export function PermissionListLive() {
                         >
                           编辑
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          isDisabled={pending || !isPermissionId(row.id)}
-                          onPress={() =>
-                            openAction(row, row.enabled === true ? "invalid" : "valid")
-                          }
-                        >
-                          {row.enabled === true ? "禁用" : "启用"}
-                        </Button>
+                        {row.enabled !== null && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            isDisabled={pending || !isPermissionId(row.id)}
+                            onPress={() =>
+                              openAction(row, row.enabled === true ? "invalid" : "valid")
+                            }
+                          >
+                            {row.enabled === true ? "禁用" : "启用"}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="danger"
