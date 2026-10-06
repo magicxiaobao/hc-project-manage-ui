@@ -28,6 +28,20 @@ export const dictionaryItemFormFromResponse = (
   attributes: row.attributes == null ? "" : JSON.stringify(row.attributes, null, 2),
   memo: row.memo ?? "",
 });
+export function rebaseDictionaryItemFormOntoRefreshed(
+  draft: DictionaryItemFormInput,
+  oldBaseline: DictionaryItemFormInput,
+  refreshed: DictionaryItemFormInput,
+): DictionaryItemFormInput {
+  return {
+    value: draft.value === oldBaseline.value ? refreshed.value : draft.value,
+    name: draft.name === oldBaseline.name ? refreshed.name : draft.name,
+    sort: draft.sort === oldBaseline.sort ? refreshed.sort : draft.sort,
+    attributes:
+      draft.attributes === oldBaseline.attributes ? refreshed.attributes : draft.attributes,
+    memo: draft.memo === oldBaseline.memo ? refreshed.memo : draft.memo,
+  };
+}
 export const dictionaryItemFormSnapshot = (form: DictionaryItemFormInput) =>
   JSON.stringify([form.value, form.name, form.sort, form.attributes, form.memo]);
 export const needsDictionaryItemValueCheck = (

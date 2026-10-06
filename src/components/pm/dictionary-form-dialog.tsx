@@ -14,6 +14,7 @@ import { ApiBusinessError } from "@/lib/api/client";
 import {
   emptyDictionaryForm,
   dictionaryFormFromResponse,
+  rebaseDictionaryFormOntoRefreshed,
   dictionaryFormSnapshot,
   validateDictionaryForm,
   buildDictionaryCreatePayload,
@@ -112,6 +113,24 @@ export function DictionaryFormDialog({
     setErrors({});
     if (decision === "refill") setServerWarning("已同步最新字典信息，请复核");
   }, [open, isCreate, dictionaryId, detail.data, detail.dataUpdatedAt, form, busy]);
+  const canReconcile =
+    !isCreate &&
+    baseline.current !== null &&
+    detail.data !== undefined &&
+    detail.data.id === dictionaryId &&
+    baselineVersionRef.current !== detail.dataUpdatedAt;
+  const reconcile = () => {
+    if (!canReconcile || busyRef.current || baseline.current === null || detail.data === undefined)
+      return;
+    const refreshed = dictionaryFormFromResponse(detail.data);
+    const rebased = rebaseDictionaryFormOntoRefreshed(current.current, baseline.current, refreshed);
+    baseline.current = refreshed;
+    baselineVersionRef.current = detail.dataUpdatedAt;
+    current.current = rebased;
+    setForm(rebased);
+    setErrors({});
+    setServerWarning("已基于最新数据重新对账，请复核后保存");
+  };
   const set = (patch: Partial<DictionaryFormInput>) => {
     current.current = { ...current.current, ...patch };
     setForm(current.current);
@@ -270,6 +289,11 @@ export function DictionaryFormDialog({
               </div>
             ) : null}
             {serverWarning ? <p role="status">{serverWarning}</p> : null}
+            {canReconcile ? (
+              <Button onPress={reconcile} isDisabled={busy}>
+                基于最新数据继续编辑
+              </Button>
+            ) : null}
             {textField("code", "编码")}
             {textField("title", "名称")}
             <div>

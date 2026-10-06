@@ -28,6 +28,18 @@ export const dictionaryFormFromResponse = (row: DictionaryResponse): DictionaryF
   valueType: typeof row.valueType === "number" ? String(row.valueType) : "",
   memo: row.memo ?? "",
 });
+export function rebaseDictionaryFormOntoRefreshed(
+  draft: DictionaryFormInput,
+  oldBaseline: DictionaryFormInput,
+  refreshed: DictionaryFormInput,
+): DictionaryFormInput {
+  return {
+    code: draft.code === oldBaseline.code ? refreshed.code : draft.code,
+    title: draft.title === oldBaseline.title ? refreshed.title : draft.title,
+    valueType: draft.valueType === oldBaseline.valueType ? refreshed.valueType : draft.valueType,
+    memo: draft.memo === oldBaseline.memo ? refreshed.memo : draft.memo,
+  };
+}
 export const dictionaryFormSnapshot = (form: DictionaryFormInput, create = true) =>
   JSON.stringify([...(create ? [form.code] : []), form.title, form.valueType, form.memo]);
 export function validateDictionaryForm(

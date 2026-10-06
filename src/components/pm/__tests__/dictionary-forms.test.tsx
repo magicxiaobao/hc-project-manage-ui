@@ -750,3 +750,136 @@ it("字典 clean 表单后台 refill 同步基线版本，允许保存最新字�
     memo: "server memo",
   });
 });
+
+it("字典 warn-keep 后显式对账保留草稿和服务端未改字段，解除保存拦截", async () => {
+  const close = vi.fn();
+  const h = mount(() => DictionaryFormDialog({ open: true, dictionaryId: 1, onClose: close }));
+  expect(textOf(h.tree)).not.toContain("基于最新数据继续编辑");
+  change(h.tree, "名称", "draft title");
+  h.render();
+  mocks.detail.data = { ...row(), title: "server title", valueType: 3, memo: "server memo" };
+  mocks.detail.dataUpdatedAt = 2;
+  mocks.client.setQueryData(
+    queryKeys.system.list({ kind: "dictionaryDetail", dictionaryId: 1 }),
+    mocks.detail.data,
+    { updatedAt: 2 },
+  );
+  h.render();
+  expect(textOf(h.tree)).toContain("已保留草稿");
+  expect(button(h.tree, "基于最新数据继续编辑").isDisabled).toBe(false);
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(textOf(h.tree)).toContain("字典信息在后台有更新，请复核后重试");
+
+  button(h.tree, "基于最新数据继续编辑").onPress();
+  h.render();
+  expect(textOf(h.tree)).toContain("已基于最新数据重新对账，请复核后保存");
+  expect(textOf(h.tree)).not.toContain("基于最新数据继续编辑");
+  expect(nodes(h.tree).find((node) => node.props["aria-label"] === "名称")?.props.value).toBe(
+    "draft title",
+  );
+  expect(nodes(h.tree).find((node) => node.props["aria-label"] === "备注")?.props.value).toBe(
+    "server memo",
+  );
+  expect(mocks.guards.get(h)?.dirty).toBe(true);
+  button(h.tree, "取消").onPress();
+  expect(close).not.toHaveBeenCalled();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.update).toHaveBeenCalledWith({
+    id: 1,
+    title: "draft title",
+    valueType: 3,
+    memo: "server memo",
+  });
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("字典项 warn-keep 后显式对账保留用户字段和 JSON 草稿，解除保存拦截", async () => {
+  const key = queryKeys.system.list({ kind: "dictionaryItemDetail", itemId: 9, dictId: 1 });
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 1 });
+  const close = vi.fn();
+  const h = mount(() =>
+    DictionaryItemFormDialog({ open: true, itemId: 9, dictionary: row(), onClose: close }),
+  );
+  expect(textOf(h.tree)).not.toContain("基于最新数据继续编辑");
+  change(h.tree, "数据值", "draft value");
+  change(h.tree, "附加属性 JSON", '{"draft":true}');
+  h.render();
+  mocks.itemDetail.data = {
+    ...item(),
+    value: "server value",
+    name: "server name",
+    sort: 7,
+    attributes: { server: true },
+    memo: "server memo",
+  };
+  mocks.itemDetail.dataUpdatedAt = 2;
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 2 });
+  h.render();
+  expect(textOf(h.tree)).toContain("已保留草稿");
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.itemUpdate).not.toHaveBeenCalled();
+  expect(textOf(h.tree)).toContain("字典项信息在后台有更新，请复核后重试");
+
+  button(h.tree, "基于最新数据继续编辑").onPress();
+  h.render();
+  expect(textOf(h.tree)).toContain("已基于最新数据重新对账，请复核后保存");
+  expect(textOf(h.tree)).not.toContain("基于最新数据继续编辑");
+  expect(
+    nodes(h.tree).find((node) => node.props["aria-label"] === "附加属性 JSON")?.props.value,
+  ).toBe('{"draft":true}');
+  expect(mocks.guards.get(h)?.dirty).toBe(true);
+  button(h.tree, "取消").onPress();
+  expect(close).not.toHaveBeenCalled();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.itemUpdate).toHaveBeenCalledWith({
+    id: 9,
+    value: "draft value",
+    name: "server name",
+    sort: 7,
+    attributes: { draft: true },
+    memo: "server memo",
+  });
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("字典项对账同步原始响应，排序校验和清空属性载荷使用最新记录", async () => {
+  const key = queryKeys.system.list({ kind: "dictionaryItemDetail", itemId: 9, dictId: 1 });
+  mocks.itemDetail.data = { ...item(), sort: null, attributes: null };
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 1 });
+  const h = mount(() =>
+    DictionaryItemFormDialog({ open: true, itemId: 9, dictionary: row(), onClose() {} }),
+  );
+  change(h.tree, "显示文本", "draft name");
+  h.render();
+  mocks.itemDetail.data = { ...item(), sort: 7, attributes: { server: true } };
+  mocks.itemDetail.dataUpdatedAt = 2;
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 2 });
+  h.render();
+  button(h.tree, "基于最新数据继续编辑").onPress();
+  h.render();
+  change(h.tree, "排序", "");
+  change(h.tree, "附加属性 JSON", "");
+  h.render();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(errors(h)).toContain("后端不支持清空排序，请输入整数");
+  expect(mocks.itemUpdate).not.toHaveBeenCalled();
+  change(h.tree, "排序", "0");
+  h.render();
+  expect(errors(h)).toEqual([]);
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.itemUpdate).toHaveBeenCalledWith({
+    id: 9,
+    value: "value9",
+    name: "draft name",
+    sort: 0,
+    attributes: {},
+    memo: "",
+  });
+});

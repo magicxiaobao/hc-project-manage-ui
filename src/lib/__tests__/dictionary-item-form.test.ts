@@ -10,6 +10,8 @@ import {
   buildDictionaryItemUpdatePayload,
   dictionaryItemFormSnapshot,
   dictionaryItemFormFromResponse,
+  rebaseDictionaryItemFormOntoRefreshed,
+  type DictionaryItemFormInput,
 } from "../dictionary-item-form";
 const original: DictionaryItemResponse = {
   id: 9,
@@ -84,6 +86,54 @@ describe("字典项边界与载荷", () => {
     );
     expect(dictionaryItemFormSnapshot({ ...base })).toBe(dictionaryItemFormSnapshot(base));
   });
+});
+
+describe("字典项草稿三路对账", () => {
+  const baseline = { value: "v", name: "name", sort: "0", attributes: "{}", memo: "memo" };
+  const refreshed = {
+    value: "new value",
+    name: "new name",
+    sort: "2147483647",
+    attributes: '{"server":true}',
+    memo: "new memo",
+  };
+  it.each<keyof DictionaryItemFormInput>(["value", "name", "sort", "attributes", "memo"])(
+    "保留已编辑的 %s，其余字段取最新值",
+    (field) => {
+      const draft = { ...baseline, [field]: "draft" };
+      expect(rebaseDictionaryItemFormOntoRefreshed(draft, baseline, refreshed)).toEqual({
+        ...refreshed,
+        [field]: "draft",
+      });
+      expect(draft).toEqual({ ...baseline, [field]: "draft" });
+      expect(baseline).toEqual({
+        value: "v",
+        name: "name",
+        sort: "0",
+        attributes: "{}",
+        memo: "memo",
+      });
+    },
+  );
+  it("全未改取最新值，全已改保留草稿", () => {
+    expect(rebaseDictionaryItemFormOntoRefreshed({ ...baseline }, baseline, refreshed)).toEqual(
+      refreshed,
+    );
+    const draft = { value: "draft", name: "", sort: "-2147483648", attributes: "", memo: "" };
+    expect(rebaseDictionaryItemFormOntoRefreshed(draft, baseline, refreshed)).toEqual(draft);
+  });
+  it.each(["-2147483648", "2147483647", "", "+0"])(
+    "排序边界 %s、空串和 JSON 排版按原始字符串比较",
+    (sort) => {
+      expect(
+        rebaseDictionaryItemFormOntoRefreshed(
+          { ...baseline, value: "", name: "", sort, attributes: "{ }", memo: "" },
+          { ...baseline, name: "" },
+          refreshed,
+        ),
+      ).toEqual({ value: "", name: "new name", sort, attributes: "{ }", memo: "" });
+    },
+  );
 });
 
 it("旧记录含空格时提交 trim 后值实际改变，必须重新检查唯一性", () => {
