@@ -36,8 +36,8 @@ const PAGE_SIZE = 20;
 
 function formatDateTime(value: number | null): string {
   if (value == null) return "—";
-  // 后端时间戳为毫秒 epoch，转本地时间展示
-  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+  // 后端时间戳为 Unix 秒 epoch（DateMapper.getEpochSecond），Date 构造需毫秒
+  return new Date(value * 1000).toLocaleString("zh-CN", { hour12: false });
 }
 
 /** null（防御分支）按启用口径：与 role-form-dialog 的回填默认值一致 */

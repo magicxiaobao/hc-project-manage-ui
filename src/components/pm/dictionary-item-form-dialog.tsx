@@ -59,6 +59,8 @@ export function DictionaryItemFormDialog({
   const baseline = useRef<DictionaryItemFormInput | null>(open && isCreate ? form : null);
   const original = useRef<DictionaryItemResponse | null>(null);
   const seenVersion = useRef<number | null>(null);
+  // 基线锁定时捕获的详情版本：保存时若服务端版本已变化则拦截（与 dictionary-form-dialog 的 r2-6 修复同口径）
+  const baselineVersionRef = useRef<number | null>(null);
   const [errors, setErrors] = useState<DictionaryItemFormErrors>({});
   const [submitError, setSubmitError] = useState("");
   const [serverWarning, setServerWarning] = useState("");
@@ -80,6 +82,7 @@ export function DictionaryItemFormDialog({
     baseline.current = open && isCreate ? next : null;
     original.current = null;
     seenVersion.current = null;
+    baselineVersionRef.current = null;
     busyRef.current = false;
     setBusy(false);
     setErrors({});
@@ -110,6 +113,7 @@ export function DictionaryItemFormDialog({
     }
     const next = dictionaryItemFormFromResponse(detail.data);
     baseline.current = next;
+    baselineVersionRef.current = detail.dataUpdatedAt;
     original.current = detail.data;
     current.current = next;
     setForm(next);
@@ -197,6 +201,14 @@ export function DictionaryItemFormDialog({
           client.getQueryState(detailKey)?.fetchStatus === "fetching")
       ) {
         setSubmitError("详情在预检期间有更新，请复核后重试");
+        return;
+      }
+      // 基线锁定后服务端版本已变化（如 warn-keep 保留草稿期间后台刷新）：拦截保存，防止整表单旧值覆盖他人修改
+      if (
+        !isCreate &&
+        baselineVersionRef.current !== client.getQueryState(detailKey)?.dataUpdatedAt
+      ) {
+        setSubmitError("字典项信息在后台有更新，请复核后重试");
         return;
       }
       if (isCreate) await create.mutateAsync(buildDictionaryItemCreatePayload(dictId!, submitted));

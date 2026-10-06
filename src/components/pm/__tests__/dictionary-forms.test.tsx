@@ -379,6 +379,12 @@ it("新增项必传空 name；不按 valueType 转换 value；成功 markClean �
 });
 it("编辑原值不变跳过预检、清空 name/memo/attributes 正确，不发送上下文字段", async () => {
   const close = vi.fn();
+  // 基线版本拦截依赖 queryClient 中的详情版本：如实预置缓存（与其它用例同口径）
+  mocks.client.setQueryData(
+    queryKeys.system.list({ kind: "dictionaryItemDetail", itemId: 9, dictId: 1 }),
+    mocks.itemDetail.data,
+    { updatedAt: 1 },
+  );
   const h = mount(() =>
     DictionaryItemFormDialog({ open: true, itemId: 9, dictionary: row(), onClose: close }),
   );
@@ -638,6 +644,54 @@ it("项后台更新不覆盖 JSON 草稿；预检期间详情版本变化禁止�
   expect(
     nodes(h.tree).find((node) => node.props["aria-label"] === "附加属性 JSON")?.props.value,
   ).toBe('{"draft":true}');
+});
+
+it("字典项 dirty 草稿遇后台更新后禁止保存；关闭重开建立新基线后放行", async () => {
+  let open = true;
+  const key = queryKeys.system.list({ kind: "dictionaryItemDetail", itemId: 9, dictId: 1 });
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 1 });
+  const h = mount(() =>
+    DictionaryItemFormDialog({ open, itemId: 9, dictionary: row(), onClose() {} }),
+  );
+  change(h.tree, "数据值", "draft value");
+  h.render();
+  mocks.itemDetail.data = { ...item(), memo: "server memo" };
+  mocks.itemDetail.dataUpdatedAt = 2;
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 2 });
+  h.render();
+  expect(textOf(h.tree)).toContain("已保留草稿");
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.itemUpdate).not.toHaveBeenCalled();
+  expect(textOf(h.tree)).toContain("字典项信息在后台有更新，请复核后重试");
+  expect(
+    nodes(h.tree).find((node) => node.props["aria-label"] === "数据值")?.props.value,
+  ).toBe("draft value");
+  open = false;
+  h.render();
+  open = true;
+  h.render();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.itemUpdate).toHaveBeenCalled();
+});
+
+it("字典项 clean 表单后台 refill 同步基线版本，允许保存最新字段", async () => {
+  const key = queryKeys.system.list({ kind: "dictionaryItemDetail", itemId: 9, dictId: 1 });
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 1 });
+  const h = mount(() =>
+    DictionaryItemFormDialog({ open: true, itemId: 9, dictionary: row(), onClose() {} }),
+  );
+  mocks.itemDetail.data = { ...item(), memo: "server memo" };
+  mocks.itemDetail.dataUpdatedAt = 2;
+  mocks.client.setQueryData(key, mocks.itemDetail.data, { updatedAt: 2 });
+  h.render();
+  expect(textOf(h.tree)).toContain("已同步最新字典项信息");
+  change(h.tree, "数据值", "reviewed value");
+  h.render();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.itemUpdate).toHaveBeenCalled();
 });
 
 it("字典 dirty 草稿遇后台更新后禁止保存；关闭重开建立新基线后放行", async () => {

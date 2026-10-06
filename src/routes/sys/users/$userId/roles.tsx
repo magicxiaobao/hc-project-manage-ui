@@ -37,7 +37,9 @@ function Page() {
     );
   }
 
-  if (!Number.isInteger(userIdNum) || userIdNum <= 0) {
+  // 与编辑路由（$userId/index.tsx）同口径：只接受规范十进制正整数，
+  // 拒绝 0x10 / 1e3 / 超安全整数等非规范形式，防止误载入他人角色做全量替换
+  if (!/^[1-9]\d*$/.test(userId) || !Number.isSafeInteger(userIdNum)) {
     return (
       <div className="p-4 md:p-6">
         <EmptyHint>用户 id 不合法，无法分配角色。</EmptyHint>
