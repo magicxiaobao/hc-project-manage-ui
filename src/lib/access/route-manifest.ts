@@ -69,23 +69,23 @@ export const routeManifest: readonly PagePolicy[] = [
     inherits: "/p/$projectKey/issues/",
   },
   { route: "/p/$projectKey/trace", title: "追溯", policy: "menu", aliases: ["/trace"] },
-  // Existing demo-only modules retain their maturity boundary in backend mode.
+  // Modules with live backend implementations use menu authorization; demo-only modules remain unavailable.
   ...(
     [
-      "assignment",
       "backlog",
-      "dashboard",
       "defects",
       "dependencies",
       "gantt",
       "releases",
-      "settings",
       "sprints",
-      "stats",
       "tests",
-      "worklogs",
     ] as const
   ).map((name): PagePolicy => ({
+    route: `/p/$projectKey/${name}`,
+    title: name,
+    policy: "menu",
+  })),
+  ...(["assignment", "dashboard", "settings", "stats", "worklogs"] as const).map((name): PagePolicy => ({
     route: `/p/$projectKey/${name}`,
     title: name,
     policy: "menu",

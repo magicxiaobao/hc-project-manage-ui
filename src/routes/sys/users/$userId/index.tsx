@@ -1,9 +1,6 @@
-/**
- * 编辑用户占位路由（P5 p5-user-form 实施后替换为真实表单）。
- * r4 P1-3：从 $userId.tsx 父路由拆出，保证父路由的 <Outlet/> 能渲染子路由。
- */
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { EmptyHint } from "@/components/biz";
+import { UserFormDialog } from "@/components/pm/user-form-dialog";
 
 export const Route = createFileRoute("/sys/users/$userId/")({
   component: Page,
@@ -11,16 +8,21 @@ export const Route = createFileRoute("/sys/users/$userId/")({
 
 function Page() {
   const { userId } = Route.useParams();
-  return (
-    <div className="p-4 md:p-6">
-      <EmptyHint>
-        {`用户 ${userId} 的编辑表单将在 p5-user-form 切片中实现。返回用户列表。`}
-      </EmptyHint>
-      <div className="mt-2 text-center">
-        <Link to="/sys/users" className="type-link hover:underline">
-          返回用户列表
-        </Link>
+  const navigate = useNavigate();
+  const userIdNum = Number(userId);
+  if (!/^[1-9]\d*$/.test(userId) || !Number.isSafeInteger(userIdNum)) {
+    return (
+      <div className="p-4 md:p-6">
+        <EmptyHint>用户 id 不合法，无法编辑用户。</EmptyHint>
+        <div className="mt-2 text-center">
+          <Link to="/sys/users" className="type-link hover:underline">
+            返回用户列表
+          </Link>
+        </div>
       </div>
-    </div>
+    );
+  }
+  return (
+    <UserFormDialog open userId={userIdNum} onClose={() => { void navigate({ to: "/sys/users" }); }} />
   );
 }

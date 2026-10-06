@@ -137,7 +137,6 @@ export function ProjectSidebar({
             </nav>
           </>
         )}
-        <div className="type-caption mt-auto px-1 pt-4">{liveProjectKey ? "真实后端数据" : project ? project.summary : "把事项拖到允许的状态列。"}</div>
         <div className="type-caption mt-auto px-1 pt-4">{accessNav != null ? "当前账号授权菜单" : liveProjectKey ? "真实后端项目" : project ? project.summary : "把事项拖到允许的状态列。"}</div>    </>
   );
   return (

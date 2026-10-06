@@ -217,6 +217,25 @@ describe("deriveSnapshot 菜单语义", () => {
     expect(canAccess(snapshot, "/sys/users")).toBe(false);
   });
 
+  it.each(["backlog", "defects", "dependencies", "gantt", "releases", "sprints", "tests"])(
+    "已接入真实后端的 %s 模块依菜单授权放行",
+    (name) => {
+      const path = `/p/HC/${name}`;
+      const menus = [menu({ id: 1, path, permission: "project:view" })];
+      expect(canAccess(ready(["project:view"], menus), path)).toBe(true);
+      expect(canAccess(ready([], menus), path)).toBe(false);
+    },
+  );
+
+  it.each(["assignment", "dashboard", "settings", "stats", "worklogs", "items/DEMO-1"])(
+    "演示页面 %s 即使有菜单授权仍不可用",
+    (name) => {
+      const path = `/p/HC/${name}`;
+      const menus = [menu({ id: 1, path, permission: "project:view" })];
+      expect(canAccess(ready(["project:view"], menus), path)).toBe(false);
+    },
+  );
+
   it("孤儿/环/重复 ID 使快照失败", () => {
     const orphan = menu({ id: 9, parentId: 999, type: 2, path: "/sys/users" });
     expect(() => deriveSnapshot(user([]), [orphan])).toThrow();
@@ -241,6 +260,12 @@ describe("landingPath", () => {
       ],
     );
     expect(landingPath(snapshot)).toBe("/sys/users");
+  });
+  it("system:admin 在空菜单树时落到可访问的 sys 页面", () => {
+    const snapshot = ready(["system:admin"], []);
+    const path = landingPath(snapshot);
+    expect(path).toBe("/sys/users");
+    expect(canAccess(snapshot, path!)).toBe(true);
   });
   it("无可访问页返回 null（调用方转 /403）", () => {
     expect(landingPath(ready([], []))).toBeNull();

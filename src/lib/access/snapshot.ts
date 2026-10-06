@@ -7,6 +7,7 @@ import {
   constraintsMatch,
   mapMenuPath,
   matchPage,
+  routeManifest,
   type PageMapping,
   type PageMatch,
 } from "./route-manifest";
@@ -272,5 +273,14 @@ export function landingPath(snapshot: AccessSnapshot): string | null {
     }
     return null;
   };
-  return walk(snapshot.visibleNavigation);
+  const path = walk(snapshot.visibleNavigation);
+  if (path) return path;
+  if (snapshot.authorities.has("system:admin")) {
+    for (const page of routeManifest) {
+      if (!page.route.startsWith("/sys/")) continue;
+      const fallback = bindMapping({ page, constraints: {} });
+      if (fallback && canAccess(snapshot, fallback)) return fallback;
+    }
+  }
+  return null;
 }
