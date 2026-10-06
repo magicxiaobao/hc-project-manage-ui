@@ -176,6 +176,8 @@ describe('buildUserUpdatePayload', () => {
     email: 'bob@example.com',
     phone: '13800138000',
     departmentName: '研发部',
+    departmentId: null,
+    positionId: null,
   };
 
   it.each(['cnName', 'email', 'phone', 'departmentName'] as const)(
@@ -199,7 +201,14 @@ describe('buildUserUpdatePayload', () => {
     const payload = buildUserUpdatePayload(
       42,
       input({ username: 'bob', cnName: '', email: '   ', phone: '', departmentName: '   ' }),
-      { cnName: empty, email: empty, phone: empty, departmentName: empty },
+      {
+        cnName: empty,
+        email: empty,
+        phone: empty,
+        departmentName: empty,
+        departmentId: null,
+        positionId: null,
+      },
     );
     expect(payload).toMatchObject({ cnName: null, email: null, phone: null, departmentName: null });
   });
@@ -207,6 +216,29 @@ describe('buildUserUpdatePayload', () => {
   it('输入未改，与 original 相同时传原值', () => {
     const payload = buildUserUpdatePayload(42, input({ username: 'bob', ...original }), original);
     expect(payload).toMatchObject(original);
+  });
+
+  it.each(['', '   '])('部门/岗位原始有值，输入清空（%j）保留关联', (empty) => {
+    const payload = buildUserUpdatePayload(
+      42,
+      input({ username: 'bob', departmentIdText: empty, positionIdText: empty }),
+      { ...original, departmentId: 3, positionId: 5 },
+    );
+    expect(payload).toMatchObject({ departmentId: 3, positionId: 5 });
+  });
+
+  it('部门/岗位原始为空，输入仍为空时传 null', () => {
+    const payload = buildUserUpdatePayload(42, input({ username: 'bob' }), original);
+    expect(payload).toMatchObject({ departmentId: null, positionId: null });
+  });
+
+  it('部门/岗位输入新 ID 时使用新值', () => {
+    const payload = buildUserUpdatePayload(
+      42,
+      input({ username: 'bob', departmentIdText: ' 7 ', positionIdText: '9' }),
+      { ...original, departmentId: 3, positionId: 5 },
+    );
+    expect(payload).toMatchObject({ departmentId: 7, positionId: 9 });
   });
 
   it('caller 传 null original 时沿用原有 trim/空转 null 语义', () => {

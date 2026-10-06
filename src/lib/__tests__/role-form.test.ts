@@ -137,7 +137,7 @@ describe('emptyRoleFormInput / roleFormInputFromResponse', () => {
     ).toEqual({ roleName: '', roleCode: 'ADMIN', description: '', enabled: true });
   });
 
-  it('回填：enabled=null 回退为 true（不静默写成禁用）', () => {
+  it('回填与更新载荷往返保留 enabled=null', () => {
     const form = roleFormInputFromResponse({
       id: 1,
       roleName: '管理员',
@@ -147,7 +147,23 @@ describe('emptyRoleFormInput / roleFormInputFromResponse', () => {
       createdAt: null,
       updatedAt: null,
     });
-    expect(form.enabled).toBe(true);
+    expect(form.enabled).toBeNull();
+    expect(buildRoleUpdatePayload(1, form).enabled).toBeNull();
+  });
+
+  it('未知状态角色只改名称保存时 enabled 仍为 null', () => {
+    const form = roleFormInputFromResponse({
+      id: 1,
+      roleName: '管理员',
+      roleCode: 'ADMIN',
+      description: null,
+      enabled: null,
+      createdAt: null,
+      updatedAt: null,
+    });
+    const payload = buildRoleUpdatePayload(1, { ...form, roleName: '项目管理员' });
+    expect(payload.roleName).toBe('项目管理员');
+    expect(payload.enabled).toBeNull();
   });
 });
 

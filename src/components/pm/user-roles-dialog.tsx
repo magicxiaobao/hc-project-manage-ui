@@ -52,8 +52,10 @@ import {
   buildAssignRoleIds,
   extractEnabledRoleIds,
   extractRoleIds,
+  filterMissingNewRoleIds,
   filterRoleCandidates,
   guardedToggleSelection,
+  isAssignmentBaselineCurrent,
   isSaveSessionValid,
   isSelectionEditable,
   mergeLiveEnabledIds,
@@ -106,6 +108,7 @@ export function UserRolesDialog({
   // 快照非空 ⇔ 播种已完成；快照为空时勾选被禁用（r16-1）。
   const [fullSnapshot, setFullSnapshot] = useState<number[] | null>(null);
   const initialRef = useRef<number[] | null>(null);
+  const assignedUpdatedAtRef = useRef<number | null>(null);
   // r18-2：锁定的初始回显角色（含 RoleResponse，供"已禁用"提示取展示名）。
   // stale/retained 展示一律以它为源，与保存载荷（handleSave 的 buildAssignRoleIds，
   // current=initialRef）同源——实时 assigned.data 的后台刷新不再漂移展示承诺。
@@ -132,10 +135,11 @@ export function UserRolesDialog({
     if (initializedForRef.current === userId) return;
     initializedForRef.current = userId;
     initialRef.current = extractRoleIds(assigned.data);
+    assignedUpdatedAtRef.current = assigned.dataUpdatedAt;
     initialRolesRef.current = [...assigned.data];
     // 同一弹窗切换用户时先作废旧快照：勾选保持禁用直到新一轮播种完成。
     setFullSnapshot(null);
-  }, [open, userId, assigned.data]);
+  }, [open, userId, assigned.data, assigned.dataUpdatedAt]);
   // 播种与快照锁定在同一 effect 内原子完成（r16-1/r16-2）：回显与全量候选
   // 首次同时就绪时，把初始快照里仍在候选的 id 补进选中态（回显里可能有
   // 已禁用角色，全量候选不含；buildAssignRoleIds 会在保存时把候选外已分配
@@ -193,6 +197,7 @@ export function UserRolesDialog({
     setSubmitted("");
     setFullSnapshot(null);
     initialRef.current = null;
+    assignedUpdatedAtRef.current = null;
     initialRolesRef.current = null;
     initializedForRef.current = null;
     selectedSeededForRef.current = null;
@@ -223,6 +228,21 @@ export function UserRolesDialog({
 
   const handleSave = async () => {
     if (busy || userId == null || !saveReady) return;
+    if (!isAssignmentBaselineCurrent(assignedUpdatedAtRef.current, assigned.dataUpdatedAt)) {
+      setSubmitError("该用户的角色分配已在别处变更，请关闭弹窗重新打开后再操作");
+      return;
+    }
+    const validSelected = filterMissingNewRoleIds(
+      selected,
+      initialRef.current ?? [],
+      extractRoleIds([...(options.data ?? []), ...(fullOptions.data ?? [])]),
+    );
+    const removedCount = selected.length - validSelected.length;
+    if (removedCount > 0) {
+      setSelected(validSelected);
+      setSubmitError(`${removedCount} 个角色在编辑期间失效，已自动移除，请确认后重新保存`);
+      return;
+    }
     setSubmitError("");
     // r16-5：保存会话 token 化——await 后比对，会话已失效则跳过关闭/导航。
     const session = saveSessionRef.current;
@@ -230,7 +250,7 @@ export function UserRolesDialog({
     // fullOptions.data 都绝不能做 optionIds，否则基线漂移会凭空产生删除意图。
     const optionIds = fullSnapshot ?? [];
     const roleIds = buildAssignRoleIds({
-      selected: selected.filter(
+      selected: validSelected.filter(
         (id) => !options.data?.some((role) => role.id === id && role.enabled === false),
       ),
       current: initialRef.current ?? [],

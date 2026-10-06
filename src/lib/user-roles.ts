@@ -82,6 +82,24 @@ export function filterRoleCandidates(
   return roles.filter((role) => role.enabled === true || retainedIds.has(role.id));
 }
 
+/** 剔除编辑期间消失的新选角色；初始已分配角色仍按锁定基线处理。 */
+export function filterMissingNewRoleIds(
+  selected: readonly number[],
+  initial: readonly number[],
+  candidateIds: readonly number[],
+): number[] {
+  const available = new Set([...initial, ...candidateIds]);
+  return selected.filter((id) => available.has(id));
+}
+
+/** 全量替换前必须确认分配查询仍是播种时的版本。 */
+export function isAssignmentBaselineCurrent(
+  seededUpdatedAt: number | null,
+  currentUpdatedAt: number,
+): boolean {
+  return seededUpdatedAt !== null && seededUpdatedAt === currentUpdatedAt;
+}
+
 /**
  * 计算保存时实际要提交的 roleIds。
  * - selected：弹窗中用户在候选（仅启用角色）上勾选的 id；

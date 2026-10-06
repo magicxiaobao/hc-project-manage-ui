@@ -6,8 +6,10 @@ import {
   buildAssignRoleIds,
   extractEnabledRoleIds,
   extractRoleIds,
+  filterMissingNewRoleIds,
   filterRoleCandidates,
   guardedToggleSelection,
+  isAssignmentBaselineCurrent,
   isSaveSessionValid,
   isSelectionEditable,
   mergeLiveEnabledIds,
@@ -76,6 +78,31 @@ describe('buildAssignRoleIds', () => {
     expect(
       buildAssignRoleIds({ selected: [], current: [1], optionIds: [1, 2] }),
     ).toEqual([]);
+  });
+});
+
+describe('filterMissingNewRoleIds', () => {
+  test('保留初始已分配的禁用角色', () => {
+    expect(filterMissingNewRoleIds([9], [9], [])).toEqual([9]);
+  });
+
+  test('剔除新选后从候选中消失的角色', () => {
+    expect(filterMissingNewRoleIds([1, 2], [], [1])).toEqual([1]);
+  });
+
+  test('保留仍在全量或搜索候选中的正常新选角色', () => {
+    expect(filterMissingNewRoleIds([1, 2], [], [1, 2, 3])).toEqual([1, 2]);
+  });
+});
+
+describe('isAssignmentBaselineCurrent', () => {
+  test('版本一致放行', () => {
+    expect(isAssignmentBaselineCurrent(10, 10)).toBe(true);
+  });
+
+  test('版本不一致或未播种时拦截', () => {
+    expect(isAssignmentBaselineCurrent(10, 11)).toBe(false);
+    expect(isAssignmentBaselineCurrent(null, 10)).toBe(false);
   });
 });
 

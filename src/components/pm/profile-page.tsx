@@ -122,6 +122,7 @@ export function ProfilePage() {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<ChangePasswordField, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const submittingRef = useRef(false);
 
   const setField = (patch: Partial<ChangePasswordFormInput>) => {
     setForm((current) => ({ ...current, ...patch }));
@@ -146,6 +147,7 @@ export function ProfilePage() {
   const { guard, dialog, blocker, markClean } = useUnsavedChangesGuard(isDirty);
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
     if (busy || uploading || userId == null) return;
     // 收集全部错误，不首错即停
     const errors = validateChangePasswordInput(form);
@@ -153,6 +155,7 @@ export function ProfilePage() {
       setFieldErrors(Object.fromEntries(errors.map((e) => [e.field, e.message])));
       return;
     }
+    submittingRef.current = true;
     setFieldErrors({});
     setSubmitError(null);
     setBusy(true);
@@ -170,6 +173,7 @@ export function ProfilePage() {
         setFieldErrors({ [classified.field]: classified.message });
       }
     } finally {
+      submittingRef.current = false;
       setBusy(false);
     }
   };

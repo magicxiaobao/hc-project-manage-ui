@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render as renderInteractive } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createMemoryHistory,
@@ -64,7 +66,35 @@ function render(children: React.ReactNode) {
     <RouterContextProvider router={router}>{children}</RouterContextProvider>,
   );
 }
+afterEach(cleanup);
 describe("权限导航和面包屑（同一快照）", () => {
+  it("目录折叠在同 ID 的节点重建后保持，路由变化时重新展开", () => {
+    const router = createRouter({
+      routeTree: createRootRoute().addChildren([]),
+      history: createMemoryHistory(),
+    });
+    const navigation = (pathname: string) => (
+      <RouterContextProvider router={router}>
+        <PermissionNavigation
+          nodes={systemNavigation(ready().visibleNavigation)}
+          pathname={pathname}
+        />
+      </RouterContextProvider>
+    );
+    const view = renderInteractive(navigation("/sys/users"));
+    fireEvent.click(view.getByRole("button", { name: "系统" }));
+    expect(view.getByRole("button", { name: "系统" }).getAttribute("aria-expanded")).toBe("false");
+    expect(view.queryByText("用户管理")).toBeNull();
+
+    view.rerender(navigation("/sys/users"));
+    expect(view.getByRole("button", { name: "系统" }).getAttribute("aria-expanded")).toBe("false");
+    expect(view.queryByText("用户管理")).toBeNull();
+
+    view.rerender(navigation("/sys/menus"));
+    expect(view.getByRole("button", { name: "系统" }).getAttribute("aria-expanded")).toBe("true");
+    expect(view.getByText("用户管理")).toBeTruthy();
+  });
+
   it.each([
     ["el-icon-user", "user"],
     ["el-user", "user"],

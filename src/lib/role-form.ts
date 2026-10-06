@@ -28,7 +28,7 @@ export interface RoleFormInput {
   roleCode: string;
   description: string;
   /** 启用开关：新建默认启用 */
-  enabled: boolean;
+  enabled: boolean | null;
 }
 
 /** 新建模式的空表单 */
@@ -47,9 +47,8 @@ export function roleFormInputFromResponse(role: RoleResponse): RoleFormInput {
     roleName: role.roleName ?? '',
     roleCode: role.roleCode ?? '',
     description: role.description ?? '',
-    // RoleResponse.enabled 为 boolean|null：null（未映射）时回退为 true，
-    // 避免把未知状态静默写成禁用；列表页同样按此口径展示。
-    enabled: role.enabled ?? true,
+    // 保留未知状态：null 由后端跳过更新，用户拨动开关后才写入 boolean。
+    enabled: role.enabled,
   };
 }
 

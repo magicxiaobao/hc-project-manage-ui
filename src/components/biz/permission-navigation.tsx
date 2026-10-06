@@ -161,7 +161,7 @@ function NavItem({
   const active = !!href && pathname.replace(/\/+$/, "") === href.replace(/\/+$/, "");
   useEffect(() => {
     setExpanded(true);
-  }, [pathname, node]);
+  }, [pathname, node.menu.id]);
   const linkClass = (isActive: boolean) =>
     cn(
       "flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left type-body",

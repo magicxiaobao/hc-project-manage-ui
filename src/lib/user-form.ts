@@ -160,7 +160,10 @@ export function buildUserCreatePayload(input: UserFormInput): UserCreatePayload 
 export function buildUserUpdatePayload(
   id: number,
   input: UserFormInput,
-  original?: Pick<UserResponse, 'cnName' | 'email' | 'phone' | 'departmentName'> | null | undefined,
+  original?: Pick<
+    UserResponse,
+    'cnName' | 'email' | 'phone' | 'departmentName' | 'departmentId' | 'positionId'
+  > | null | undefined,
 ): UserUpdatePayload {
   const updateText = (text: string, originalValue: string | null | undefined): string | null =>
     originalValue?.trim() && !text.trim() ? '' : emptyToNull(text);
@@ -172,12 +175,13 @@ export function buildUserUpdatePayload(
     cnName: updateText(input.cnName, original?.cnName),
     email: updateText(input.email, original?.email),
     phone: updateText(input.phone, original?.phone),
+    // Long 字段的 null 仅表示跳过更新，后端不支持清空关联；输入清空时保留原值。
     departmentId: input.departmentIdText.trim()
       ? parseRequiredPositiveInt(input.departmentIdText)
-      : null,
+      : original?.departmentId ?? null,
     positionId: input.positionIdText.trim()
       ? parseRequiredPositiveInt(input.positionIdText)
-      : null,
+      : original?.positionId ?? null,
     departmentName: updateText(input.departmentName, original?.departmentName),
   };
 }

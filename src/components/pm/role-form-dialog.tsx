@@ -406,7 +406,7 @@ export function RoleFormDialog({
                 点文字才能切换（run213-codex-P5-r24-3）。
               */}
               <Switch
-                isSelected={form.enabled}
+                isSelected={form.enabled ?? true}
                 onChange={(next) => set({ enabled: next })}
                 isDisabled={busy}
                 aria-label="是否启用"
