@@ -520,6 +520,11 @@ export function UserFormDialog({
                   <Input placeholder="正整数，可空" inputMode="numeric" />
                 </TextField>
                 <FieldError message={fieldErrors.departmentIdText} />
+                {!isCreate && (
+                  <p className="text-sm text-default-500">
+                    不支持清空部门，保存后仍保留原值。
+                  </p>
+                )}
               </div>
               <div>
                 <TextField
@@ -532,6 +537,11 @@ export function UserFormDialog({
                   <Input placeholder="正整数，可空" inputMode="numeric" />
                 </TextField>
                 <FieldError message={fieldErrors.positionIdText} />
+                {!isCreate && (
+                  <p className="text-sm text-default-500">
+                    不支持清空岗位，保存后仍保留原值。
+                  </p>
+                )}
               </div>
             </div>
 

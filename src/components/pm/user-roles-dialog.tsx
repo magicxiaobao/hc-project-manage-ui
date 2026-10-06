@@ -108,7 +108,6 @@ export function UserRolesDialog({
   // 快照非空 ⇔ 播种已完成；快照为空时勾选被禁用（r16-1）。
   const [fullSnapshot, setFullSnapshot] = useState<number[] | null>(null);
   const initialRef = useRef<number[] | null>(null);
-  const assignedUpdatedAtRef = useRef<number | null>(null);
   // r18-2：锁定的初始回显角色（含 RoleResponse，供"已禁用"提示取展示名）。
   // stale/retained 展示一律以它为源，与保存载荷（handleSave 的 buildAssignRoleIds，
   // current=initialRef）同源——实时 assigned.data 的后台刷新不再漂移展示承诺。
@@ -135,11 +134,10 @@ export function UserRolesDialog({
     if (initializedForRef.current === userId) return;
     initializedForRef.current = userId;
     initialRef.current = extractRoleIds(assigned.data);
-    assignedUpdatedAtRef.current = assigned.dataUpdatedAt;
     initialRolesRef.current = [...assigned.data];
     // 同一弹窗切换用户时先作废旧快照：勾选保持禁用直到新一轮播种完成。
     setFullSnapshot(null);
-  }, [open, userId, assigned.data, assigned.dataUpdatedAt]);
+  }, [open, userId, assigned.data]);
   // 播种与快照锁定在同一 effect 内原子完成（r16-1/r16-2）：回显与全量候选
   // 首次同时就绪时，把初始快照里仍在候选的 id 补进选中态（回显里可能有
   // 已禁用角色，全量候选不含；buildAssignRoleIds 会在保存时把候选外已分配
@@ -197,7 +195,6 @@ export function UserRolesDialog({
     setSubmitted("");
     setFullSnapshot(null);
     initialRef.current = null;
-    assignedUpdatedAtRef.current = null;
     initialRolesRef.current = null;
     initializedForRef.current = null;
     selectedSeededForRef.current = null;
@@ -228,7 +225,7 @@ export function UserRolesDialog({
 
   const handleSave = async () => {
     if (busy || userId == null || !saveReady) return;
-    if (!isAssignmentBaselineCurrent(assignedUpdatedAtRef.current, assigned.dataUpdatedAt)) {
+    if (!isAssignmentBaselineCurrent(initialRef.current, extractRoleIds(assigned.data ?? []))) {
       setSubmitError("该用户的角色分配已在别处变更，请关闭弹窗重新打开后再操作");
       return;
     }

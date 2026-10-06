@@ -92,12 +92,19 @@ export function filterMissingNewRoleIds(
   return selected.filter((id) => available.has(id));
 }
 
-/** 全量替换前必须确认分配查询仍是播种时的版本。 */
+/** 角色 ID 的无序集合比较：忽略顺序与重复 ID。 */
+export function sameRoleIdSet(a: readonly number[], b: readonly number[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((id) => right.has(id));
+}
+
+/** 全量替换前确认分配内容仍与播种基线一致；fetch 时间戳不是数据版本。 */
 export function isAssignmentBaselineCurrent(
-  seededUpdatedAt: number | null,
-  currentUpdatedAt: number,
+  seededRoleIds: readonly number[] | null,
+  currentRoleIds: readonly number[],
 ): boolean {
-  return seededUpdatedAt !== null && seededUpdatedAt === currentUpdatedAt;
+  return seededRoleIds !== null && sameRoleIdSet(seededRoleIds, currentRoleIds);
 }
 
 /**

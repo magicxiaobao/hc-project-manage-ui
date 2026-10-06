@@ -17,6 +17,7 @@ import {
   roleDisplayName,
   roleOptionsErrorView,
   sameIdSet,
+  sameRoleIdSet,
   seedSelection,
   selectionDirtyBaseline,
   sortedIds,
@@ -95,14 +96,26 @@ describe('filterMissingNewRoleIds', () => {
   });
 });
 
+describe('sameRoleIdSet', () => {
+  test('忽略顺序与重复 ID，空集相等', () => {
+    expect(sameRoleIdSet([1, 2, 1], [2, 1])).toBe(true);
+    expect(sameRoleIdSet([], [])).toBe(true);
+    expect(sameRoleIdSet([1], [2])).toBe(false);
+    expect(sameRoleIdSet([1], [1, 2])).toBe(false);
+  });
+});
+
 describe('isAssignmentBaselineCurrent', () => {
-  test('版本一致放行', () => {
-    expect(isAssignmentBaselineCurrent(10, 10)).toBe(true);
+  test('分配内容一致放行，顺序变更不影响基线', () => {
+    expect(isAssignmentBaselineCurrent([1, 9], [9, 1])).toBe(true);
+    expect(isAssignmentBaselineCurrent([], [])).toBe(true);
   });
 
-  test('版本不一致或未播种时拦截', () => {
-    expect(isAssignmentBaselineCurrent(10, 11)).toBe(false);
-    expect(isAssignmentBaselineCurrent(null, 10)).toBe(false);
+  test('分配新增、删除、替换或未播种时拦截', () => {
+    expect(isAssignmentBaselineCurrent([9], [1, 9])).toBe(false);
+    expect(isAssignmentBaselineCurrent([9], [])).toBe(false);
+    expect(isAssignmentBaselineCurrent([9], [1])).toBe(false);
+    expect(isAssignmentBaselineCurrent(null, [])).toBe(false);
   });
 });
 

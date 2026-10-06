@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   search: { data: [] as RoleResponse[], dataUpdatedAt: 2 },
   assigned: [] as RoleResponse[],
   assignedUpdatedAt: 1,
+  assignedFetching: false,
   save: vi.fn(),
 }));
 vi.mock("react", async (load) => {
@@ -28,7 +29,11 @@ vi.mock("@/components/biz", () => ({
 }));
 vi.mock("@/lib/query", () => ({
   useUserDetail: () => ({ data: { username: "admin" } }),
-  useUserRoles: () => ({ data: mocks.assigned, dataUpdatedAt: mocks.assignedUpdatedAt }),
+  useUserRoles: () => ({
+    data: mocks.assigned,
+    dataUpdatedAt: mocks.assignedUpdatedAt,
+    isFetching: mocks.assignedFetching,
+  }),
   useRoleOptions: (keyword: string) => (keyword ? mocks.search : mocks.full),
   useAssignUserRoles: () => ({ isPending: false, mutateAsync: mocks.save }),
   toUserMessage: (error: unknown) => String(error),
@@ -48,6 +53,7 @@ beforeEach(() => {
   mocks.search.data = [role(1), role(2, false), role(9, false)];
   mocks.assigned = [role(9, false)];
   mocks.assignedUpdatedAt = 1;
+  mocks.assignedFetching = false;
   mocks.save.mockReset().mockResolvedValue("ok");
   harness = new DictionaryHookHarness();
   harness.render(() => UserRolesDialog({ open: true, userId: 7, onClose() {} }));
@@ -114,9 +120,34 @@ it("搜索候选中仍存在的新选角色不会因全量候选刷新而误删"
   expect(mocks.save).toHaveBeenCalledWith({ userId: 7, roleIds: [1, 9] });
 });
 
-it("分配查询版本变化，即使数据引用不变也拒绝覆盖旧基线", async () => {
+it.each([true, false])("重开时先播种旧缓存，后台重取内容相同后可保存（保留引用=%s）", async (sameReference) => {
+  button(harness.tree, "取消").onPress();
+  harness.unmount();
+  // 路由弹窗关闭后卸载；超过 staleTime 重开时先返回旧缓存，后台重取在途。
+  mocks.assignedFetching = true;
+  const onClose = vi.fn();
+  harness = new DictionaryHookHarness();
+  harness.render(() => UserRolesDialog({ open: true, userId: 7, onClose }));
   (checkbox(1)!.onChange as () => void)();
   harness.render();
+  // 重取成功只推进 fetch 时间，分配 ID 集合不变；覆盖结构共享及新引用。
+  if (!sameReference) mocks.assigned = mocks.assigned.map((item) => ({ ...item }));
+  mocks.assignedUpdatedAt = 30_002;
+  mocks.assignedFetching = false;
+  harness.render();
+  await save();
+  expect(mocks.save).toHaveBeenCalledWith({ userId: 7, roleIds: [1, 9] });
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(textOf(harness.tree)).not.toContain("该用户的角色分配已在别处变更");
+});
+
+it.each([
+  { change: "新增", ids: [1, 9] },
+  { change: "删除", ids: [] },
+])("播种后分配 ID 集合发生$change时拒绝覆盖旧基线", async ({ ids }) => {
+  (checkbox(1)!.onChange as () => void)();
+  harness.render();
+  mocks.assigned = ids.map((id) => role(id, id !== 9));
   mocks.assignedUpdatedAt = 2;
   harness.render();
   await save();
@@ -124,7 +155,7 @@ it("分配查询版本变化，即使数据引用不变也拒绝覆盖旧基线"
   expect(textOf(harness.tree)).toContain("该用户的角色分配已在别处变更，请关闭弹窗重新打开后再操作");
 });
 
-it("切换用户重新记录分配版本，保存使用新用户基线", async () => {
+it("切换用户重新记录分配集合，保存使用新用户基线", async () => {
   mocks.assigned = [role(2)];
   mocks.assignedUpdatedAt = 2;
   harness.render(() => UserRolesDialog({ open: true, userId: 8, onClose() {} }));
