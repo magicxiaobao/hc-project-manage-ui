@@ -1,3 +1,4 @@
+import { requestAccessRefresh } from '../../access/service';
 import { hasSystemAdmin, useAuthStore } from '../../api/auth-store';
 /**
  * 系统管理域·角色 react-query hooks（P5 p5-role-list 垂直切片）。
@@ -166,7 +167,10 @@ export function useUpdateRole() {
   const invalidate = useInvalidateSystemDomain();
   return useMutation({
     mutationFn: (data: RoleUpdatePayload) => systemApi.role.updateRole(data),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      invalidate();
+      requestAccessRefresh('authorization-change');
+    },
   });
 }
 
@@ -175,7 +179,10 @@ export function useValidRole() {
   const invalidate = useInvalidateSystemDomain();
   return useMutation({
     mutationFn: (id: number) => systemApi.role.validRole(id),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      invalidate();
+      requestAccessRefresh('authorization-change');
+    },
   });
 }
 
@@ -184,6 +191,9 @@ export function useInvalidRole() {
   const invalidate = useInvalidateSystemDomain();
   return useMutation({
     mutationFn: (id: number) => systemApi.role.invalidRole(id),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      invalidate();
+      requestAccessRefresh('authorization-change');
+    },
   });
 }
