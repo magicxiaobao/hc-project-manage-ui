@@ -136,13 +136,40 @@ it.each(["createWorkLog", "startWork"] as const)(
     expect(invalidate).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: queryKeys.workLog.detail(11) }),
     );
-    expect(invalidate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ queryKey: queryKeys.task.all }),
-    );
+    if (method === "createWorkLog")
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.task.all });
+    else
+      expect(invalidate).not.toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: queryKeys.task.all }),
+      );
     if (method === "startWork")
       expect(api).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 42 }));
   },
 );
+it("创建工时刷新 payload 项目的统计链，不失效其他项目详情", async () => {
+  vi.spyOn(workLogApi, "createWorkLog").mockResolvedValue(11);
+  const s = setup();
+  const invalidate = vi.spyOn(s.client, "invalidateQueries");
+  const affected = [
+    queryKeys.task.detail(8),
+    queryKeys.project.detail(7),
+    queryKeys.project.dashboard(7),
+    queryKeys.project.progress(7),
+    queryKeys.project.statistics(),
+    queryKeys.project.dashboardCompare([7, 9]),
+    queryKeys.dashboard.detail(3),
+    queryKeys.dashboardWidget.detail(4),
+  ];
+  for (const key of [...affected, queryKeys.project.detail(9)])
+    s.client.setQueryData(key, { fixture: true });
+  const h = renderHook(() => useCreateWorkLog(), s);
+  await act(async () => {
+    await h.result.current.mutateAsync({ projectId: 7, taskId: 8, workDescription: "登记" });
+  });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.task.all });
+  for (const key of affected) expect(s.client.getQueryState(key)?.isInvalidated).toBe(true);
+  expect(s.client.getQueryState(queryKeys.project.detail(9))?.isInvalidated).toBe(false);
+});
 it.each(["update", "invalid", "pause", "complete", "approve", "reject"] as const)(
   "%s 失败不失效，成功失效正确的统计链，审批用当前人",
   async (method) => {

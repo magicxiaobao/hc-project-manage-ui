@@ -92,7 +92,11 @@ export function invalidateWorkLogMutation(
   void client.invalidateQueries({ queryKey: queryKeys.dashboard.all });
   void client.invalidateQueries({ queryKey: queryKeys.dashboardWidget.all });
 }
-function useNewWorkLog<T>(fn: (data: T) => Promise<number>) {
+function useNewWorkLog<T>(
+  fn: (data: T) => Promise<number>,
+  recalculate = false,
+  projectIdGetter: (data: T) => number | null | undefined = () => null,
+) {
   const client = useQueryClient();
   return useMutation({
     retry: false,
@@ -102,11 +106,15 @@ function useNewWorkLog<T>(fn: (data: T) => Promise<number>) {
       if (!validWorkLogId(id)) throw new Error("创建响应异常：未返回有效工时记录 ID");
       return id;
     },
-    onSuccess: (id) => invalidateWorkLogMutation(client, id),
+    onSuccess: (id, data) => invalidateWorkLogMutation(client, id, projectIdGetter(data), recalculate),
   });
 }
 export function useCreateWorkLog() {
-  return useNewWorkLog((data: WorkLogCreatePayload) => workLogApi.createWorkLog(data));
+  return useNewWorkLog(
+    (data: WorkLogCreatePayload) => workLogApi.createWorkLog(data),
+    true,
+    (data) => data.projectId,
+  );
 }
 export function useStartWork() {
   return useNewWorkLog((data: Omit<StartWorkParams, "userId">) =>

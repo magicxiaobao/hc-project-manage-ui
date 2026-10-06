@@ -19,6 +19,7 @@ import { taskApi } from "@/lib/api/task";
 import { workLogApi } from "@/lib/api/worklog";
 import { notificationApi } from "@/lib/api/notification";
 import { useNotificationUnreadCount } from "@/lib/query/hooks/useNotifications";
+import { queryKeys } from "@/lib/query/keys";
 import type { ProjectResponse } from "@/lib/api/types";
 import type { TaskResponse } from "@/lib/api/task-types";
 import { Route as WorkbenchRoute } from "@/routes/workbench";
@@ -100,7 +101,7 @@ afterEach(() => {
   vi.useRealTimers();
   useAuthStore.setState({ isAuthenticated: false, user: null });
 });
-async function mount({ guard = false, nav = false, entry = "/workbench" } = {}) {
+async function mount({ guard = false, nav = false, entry = "/workbench", liveProjectKey = "" } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
   });
@@ -112,6 +113,7 @@ async function mount({ guard = false, nav = false, entry = "/workbench" } = {}) 
           <ProjectSidebar
             open={false}
             pathname={entry}
+            liveProjectKey={liveProjectKey}
             projects={[]}
             itemOrigin={null}
             onClose={() => {}}
@@ -132,6 +134,9 @@ async function mount({ guard = false, nav = false, entry = "/workbench" } = {}) 
     "/worklogs/analytics",
     "/notifications",
     "/projects",
+    "/dashboards",
+    "/dashboard/$projectId",
+    "/p/$projectKey",
     "/login",
     "/p/$projectKey/issues",
     "/p/$projectKey/issues/new",
@@ -151,6 +156,42 @@ async function mount({ guard = false, nav = false, entry = "/workbench" } = {}) 
   );
   return { client, router };
 }
+it("真实项目侧栏解析中隐藏项目仪表盘，成功后链接使用数字 ID，管理入口高亮且可导航", async () => {
+  const pending = deferred<Awaited<ReturnType<typeof projectApi.findByPage>>>();
+  vi.mocked(projectApi.findByPage).mockReturnValue(pending.promise);
+  const { router } = await mount({ nav: true, liveProjectKey: "REAL", entry: "/dashboards" });
+  const management = screen.getByRole("link", { name: "仪表盘管理" });
+  expect(management.getAttribute("href")).toBe("/dashboards");
+  expect(management.classList.contains("text-primary")).toBe(true);
+  expect(screen.queryByRole("link", { name: "项目仪表盘" })).toBeNull();
+  await act(async () => {
+    pending.resolve({ ...empty, list: [project], total: 1 });
+  });
+  const dashboard = await screen.findByRole("link", { name: "项目仪表盘" });
+  expect(dashboard.getAttribute("href")).toBe("/dashboard/7");
+  fireEvent.click(dashboard);
+  await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard/7"));
+});
+it("项目仪表盘侧栏保留 active 高亮", async () => {
+  await mount({ nav: true, liveProjectKey: "REAL", entry: "/dashboard/7" });
+  const dashboard = await screen.findByRole("link", { name: "项目仪表盘" });
+  expect(dashboard.getAttribute("aria-current")).toBe("page");
+  expect(dashboard.classList.contains("text-primary")).toBe(true);
+  expect(screen.getByRole("link", { name: "仪表盘管理" }).classList.contains("text-primary")).toBe(false);
+});
+it.each(["missing", "invalid", "error"] as const)("项目 ID 解析 %s 不渲染坏链", async (state) => {
+  if (state === "error") vi.mocked(projectApi.findByPage).mockRejectedValue(new Error("解析失败"));
+  else vi.mocked(projectApi.findByPage).mockResolvedValue({
+    ...empty,
+    list: state === "missing" ? [] : [{ ...project, id: 0 }],
+  });
+  const { client } = await mount({ nav: true, liveProjectKey: "REAL", entry: "/p/REAL" });
+  await waitFor(() => expect(client.getQueryState(queryKeys.project.byKey("REAL"))?.status).toBe(
+    state === "error" ? "error" : "success",
+  ));
+  expect(screen.queryByRole("link", { name: "项目仪表盘" })).toBeNull();
+  expect(screen.getByRole("link", { name: "仪表盘管理" }).getAttribute("href")).toBe("/dashboards");
+});
 it("三卡同时展示，准确服务端 total 与分页预览、真实任务链接", async () => {
   await mount();
   await screen.findByText("总待办数：60");
