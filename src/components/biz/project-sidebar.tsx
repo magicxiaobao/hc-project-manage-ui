@@ -5,6 +5,7 @@ import { BarChart3, Bug, CalendarRange, ChartGantt, ClipboardList, Clock3, Flask
 import type { ReactNode } from "react";
 import type { Project } from "@/lib/pm/domain";
 import { chosenProjectKey, highlightedModule, moduleDestination, type SidebarModule } from "@/lib/pm/sidebar-nav";
+import { useAuthStore } from "@/lib/api/auth-store";
 import { cn } from "@/lib/utils";
 
 export function ProjectSidebar({
@@ -28,6 +29,7 @@ export function ProjectSidebar({
    */
   liveProjectKey?: string | null;
 }) {
+  const authenticated = useAuthStore(s => s.isAuthenticated);
   const [compact, setCompact] = useState<boolean | null>(null);
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1023px)");
@@ -54,6 +56,7 @@ export function ProjectSidebar({
             <div className="type-caption px-1">真实后端项目</div>
             <div className="my-4 h-px bg-border" />
             <nav aria-label="项目模块（真实后端）" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+              <SideLink to="/workbench" active={pathname === "/workbench"} icon={<LayoutDashboard className="size-4" />} label="工作台" onClose={onClose} />
               <div role="group" aria-label="项目" className="flex shrink-0 flex-col gap-1">
                 <h2 className="type-label px-3">项目</h2>
                 <ProjectLink projectKey={liveProjectKey} to="/p/$projectKey" active={liveCurrent === "board"} activeOptions={{ exact: true }} icon={<Kanban className="size-4" />} label="项目详情" onClose={onClose} />
@@ -125,8 +128,9 @@ export function ProjectSidebar({
             <div className="type-section px-1">恒川</div>
             <div className="type-caption px-1">项目协作</div>
             <div className="my-4 h-px bg-border" />
-            <nav className="flex flex-col gap-1">
-              <SideLink to="/" active={pathname === "/"} icon={<SquareCheckBig className="size-4" />} label="工作台" onClose={onClose} />
+            <nav aria-label="全局导航" className="flex flex-col gap-1">
+              {authenticated ? <SideLink to="/workbench" active={pathname === "/workbench"} icon={<LayoutDashboard className="size-4" />} label="工作台" onClose={onClose} /> : null}
+              <SideLink to="/" active={pathname === "/"} icon={<SquareCheckBig className="size-4" />} label={authenticated ? "演示首页" : "工作台"} onClose={onClose} />
               <SideLink to="/projects" active={pathname.startsWith("/projects")} icon={<Kanban className="size-4" />} label="项目" onClose={onClose} />
             </nav>
           </>
@@ -228,7 +232,7 @@ function ProjectSwitcher({
   );
 }
 
-function SideLink({ to, active, icon, label, onClose }: { to: "/" | "/projects"; active: boolean; icon: ReactNode; label: string; onClose: () => void }) {
+function SideLink({ to, active, icon, label, onClose }: { to: "/" | "/projects" | "/workbench"; active: boolean; icon: ReactNode; label: string; onClose: () => void }) {
   return (
     <Link to={to} onClick={onClose} className={cn("flex h-10 items-center gap-3 rounded-sm px-3", active ? "type-emphasis bg-line text-primary" : "type-body hover:bg-line")}>
       {icon}

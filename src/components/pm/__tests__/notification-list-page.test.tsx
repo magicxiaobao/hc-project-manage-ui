@@ -23,7 +23,8 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
     api: actual.createApiClient({ baseUrl: "http://test", getToken: () => "notification-token" }),
   };
 });
-vi.mock("@heroui/react", () => ({
+vi.mock("@heroui/react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@heroui/react")>()),
   Button: ({
     children,
     onPress,

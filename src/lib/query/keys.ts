@@ -1,5 +1,5 @@
 import type { NotificationQueryRequest } from '../api/notification-types';
-import type { WorkLogAnalyticsRequest } from '../api/worklog-types';
+import type { WorkLogUserStatisticsParams, WorkLogAnalyticsRequest } from '../api/worklog-types';
 import { normalizeWorkLogAnalytics, type WorkLogDimension } from '../worklog-analytics-data';
 
 /**
@@ -59,6 +59,7 @@ export const queryKeys = {
   },
   workLog: {
     ...domainKeys('workLog'),
+    userStatistics: (params: WorkLogUserStatisticsParams & { userId: number | null }) => ['hc', 'workLog', 'userStatistics', { ...params, projectIds: [...new Set(params.projectIds)].sort((a, b) => a - b) }] as const,
     analytics: (params: WorkLogAnalyticsRequest | null) => ['hc', 'workLog', 'analytics', params ? normalizeWorkLogAnalytics('analytics', params) : null] as const,
     statisticsGroup: (dimension: WorkLogDimension, params: WorkLogAnalyticsRequest | null) => ['hc', 'workLog', 'statisticsGroup', dimension, params ? normalizeWorkLogAnalytics(dimension, params) : null] as const,
   },

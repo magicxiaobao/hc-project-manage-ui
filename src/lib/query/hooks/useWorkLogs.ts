@@ -70,7 +70,8 @@ export function invalidateWorkLogMutation(
 ) {
   void client.invalidateQueries({
     queryKey: queryKeys.workLog.all,
-    predicate: (q) => ["list", "analytics", "statisticsGroup"].includes(String(q.queryKey[2])),
+    predicate: (q) =>
+      ["list", "analytics", "statisticsGroup", "userStatistics"].includes(String(q.queryKey[2])),
   });
   void client.invalidateQueries({ queryKey: queryKeys.workLog.detail(id) });
   if (!recalculate) return;

@@ -31,6 +31,12 @@ const user = {
 };
 const analyticsParams = { startDate: "2026-10-01", endDate: "2026-10-31", projectIds: [7] };
 const analyticsKeys = [
+  queryKeys.workLog.userStatistics({
+    userId: 42,
+    startDate: "2026-10-05",
+    endDate: "2026-10-06",
+    projectIds: [7],
+  }),
   queryKeys.workLog.analytics(analyticsParams),
   ...(["projects", "users", "tasks"] as const).map((d) =>
     queryKeys.workLog.statisticsGroup(d, analyticsParams),
