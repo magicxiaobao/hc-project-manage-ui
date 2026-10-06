@@ -1,3 +1,4 @@
+import { normalizeSearchKeyword } from "../search/keyword";
 import { COLUMNS, type ColumnId, type ItemKind } from "./domain";
 
 export type ListScope = "all" | "open" | "mine" | "doing" | "done" | "cancelled";
@@ -10,6 +11,7 @@ const LIST_PRIORITIES: readonly ListPriorityFilter[] = ["HIGH", "MEDIUM", "LOW"]
 const LIST_GROUPS: readonly ListGroupId[] = ["todo", "doing", "check", "done", "cancelled"];
 
 export type ProjectViewSearch = {
+  keyword?: string;
   query?: string;
   kind?: "all" | ItemKind;
   mine?: boolean;
@@ -33,6 +35,7 @@ function isListScope(value: unknown): value is ListScope {
 
 export function parseProjectViewSearch(value: Record<string, unknown>): ProjectViewSearch {
   return {
+    keyword: normalizeSearchKeyword(value.keyword) || undefined,
     query: typeof value.query === "string" ? value.query : undefined,
     kind:
       typeof value.kind === "string" &&

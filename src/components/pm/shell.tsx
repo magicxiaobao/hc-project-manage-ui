@@ -1,3 +1,5 @@
+import { GlobalSearchField, focusGlobalSearch } from "./global-search-field";
+import { GlobalSearchDraftProvider } from "./global-search-draft";
 import { NavigationFocus } from "@/components/pm/navigation-focus";
 import { notifyPmChange } from "@/lib/pm/feedback";
 import { useAuthStore } from "@/lib/api/auth-store";
@@ -23,6 +25,14 @@ import type { Person } from "@/lib/pm/domain";
 import { PersistenceStatus } from "@/components/biz/persistence-status";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <GlobalSearchDraftProvider>
+      <AppShellContent>{children}</AppShellContent>
+    </GlobalSearchDraftProvider>
+  );
+}
+
+function AppShellContent({ children }: { children: React.ReactNode }) {
   const location = useRouterState({ select: (state) => state.location });
   const pathname = location.pathname;
   const navigate = useNavigate();
@@ -145,7 +155,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         unread={unread}
         notificationCount={isAuthenticated ? { count: notificationCount.data, loading: notificationCount.isPending, failed: notificationCount.isError } : undefined}
         me={ready ? me : undefined}
-        onSearch={isAuthenticated ? undefined : () => setSearchOpen(true)}
+        onSearch={
+          isAuthenticated
+            ? () => {
+                void navigate({ to: "/search", search: pathname.replace(/\/+$/, "") === "/search" ? location.search : {} }).then(focusGlobalSearch);
+              }
+            : () => setSearchOpen(true)
+        }
         onCreate={isAuthenticated ? undefined : () => usePm.getState().setCreateOpen(true)}
         onNotices={
           isAuthenticated
@@ -174,22 +190,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <PersistenceStatus ready={ready} error={persistenceError} onRetry={() => usePm.getState().retryPersistence()} />
           </section>
         ) : null}
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 lg:hidden">
+        <div className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 py-1">
           <button
             type="button"
-            className="flex size-11 items-center justify-center rounded-sm hover:bg-line"
+            className="flex size-11 shrink-0 items-center justify-center rounded-sm hover:bg-line lg:hidden"
             aria-label="打开导航"
             onClick={() => setNavOpen(true)}
           >
             <Menu className="size-4" />
           </button>
-          <span className="min-w-0 truncate">
+          <span className="min-w-0 truncate lg:hidden">
             {ready ? (
               <span className="type-emphasis">{liveProjectKey ?? (project ? project.name : "恒川")}</span>
             ) : (
               <Loading variant="inline" label="加载中" />
             )}
           </span>
+          <GlobalSearchField />
         </div>
         <main className="relative min-h-0 flex-1 overflow-hidden">
           <div className="h-full overflow-auto">

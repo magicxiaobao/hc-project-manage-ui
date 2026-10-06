@@ -213,3 +213,5 @@ export {
 
 export * from './hooks/useWorkLogs';
 export * from './hooks/useWorkLogAnalytics';
+
+export * from './hooks/useGlobalSearch';

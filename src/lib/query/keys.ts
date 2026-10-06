@@ -66,6 +66,7 @@ export const queryKeys = {
   dashboardWidget: domainKeys('dashboardWidget'),
   project: {
     ...domainKeys('project'),
+    searchScope: () => ['hc', 'project', 'searchScope'] as const,
     dashboard: (id: number) => ['hc', 'project', 'dashboard', id] as const,
     progress: (id: number) => ['hc', 'project', 'progress', id] as const,
     statistics: () => ['hc', 'project', 'statistics'] as const,

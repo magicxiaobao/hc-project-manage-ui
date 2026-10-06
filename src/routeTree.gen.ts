@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as WorklogsRouteImport } from './routes/worklogs'
 import { Route as DashboardProjectIdRouteImport } from './routes/dashboard/$projectId'
 import { Route as PProjectKeyRouteImport } from './routes/p/$projectKey'
@@ -101,6 +102,11 @@ const NotificationsRoute = NotificationsRouteImport.update({
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WorklogsRoute = WorklogsRouteImport.update({
@@ -383,6 +389,7 @@ export interface FileRoutesByFullPath {
   '/me': typeof MeRoute
   '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
+  '/search': typeof SearchRoute
   '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
@@ -443,6 +450,7 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
+  '/search': typeof SearchRoute
   '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/projects/new': typeof ProjectsNewRoute
@@ -492,6 +500,7 @@ export interface FileRoutesById {
   '/me': typeof MeRoute
   '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
+  '/search': typeof SearchRoute
   '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
@@ -554,6 +563,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/notifications'
     | '/projects'
+    | '/search'
     | '/worklogs'
     | '/dashboard/$projectId'
     | '/p/$projectKey'
@@ -614,6 +624,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/notifications'
     | '/projects'
+    | '/search'
     | '/worklogs'
     | '/dashboard/$projectId'
     | '/projects/new'
@@ -662,6 +673,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/notifications'
     | '/projects'
+    | '/search'
     | '/worklogs'
     | '/dashboard/$projectId'
     | '/p/$projectKey'
@@ -723,6 +735,7 @@ export interface RootRouteChildren {
   MeRoute: typeof MeRoute
   NotificationsRoute: typeof NotificationsRoute
   ProjectsRoute: typeof ProjectsRoute
+  SearchRoute: typeof SearchRoute
   WorklogsRoute: typeof WorklogsRoute
   DashboardProjectIdRoute: typeof DashboardProjectIdRoute
   PProjectKeyRoute: typeof PProjectKeyRouteWithChildren
@@ -779,6 +792,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/worklogs': {
@@ -1361,6 +1381,7 @@ const rootRouteChildren: RootRouteChildren = {
   MeRoute: MeRoute,
   NotificationsRoute: NotificationsRoute,
   ProjectsRoute: ProjectsRoute,
+  SearchRoute: SearchRoute,
   WorklogsRoute: WorklogsRoute,
   DashboardProjectIdRoute: DashboardProjectIdRoute,
   PProjectKeyRoute: PProjectKeyRouteWithChildren,

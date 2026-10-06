@@ -20,16 +20,17 @@ export const Route = createFileRoute("/p/$projectKey/testcases/")({
 
 function Page() {
   const { projectKey } = Route.useParams();
+  const { keyword } = Route.useSearch();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   if (!isAuthenticated) return <TestsView projectKey={projectKey} />;
-  return <LiveTestCaseList projectKey={projectKey} />;
+  return <LiveTestCaseList projectKey={projectKey} keyword={keyword} />;
 }
 
 /**
  * P2 p2-testcase-list-detail：路由 key（字符串）→ 后端 id（数字）→
  * POST /testCase/v1/findByPage。演示数据不再用于已登录的用例列表。
  */
-function LiveTestCaseList({ projectKey }: { projectKey: string }) {
+function LiveTestCaseList({ projectKey, keyword }: { projectKey: string; keyword?: string }) {
   const resolution = useProjectIdByKey(projectKey);
   // 上次解析成功的项目 id：后台重取失败（isError）或结果变空时，保留已挂载的
   // 列表与其弹窗子树，脏表单不被卸载（codex 本地评审 finding 2）。
@@ -76,7 +77,7 @@ function LiveTestCaseList({ projectKey }: { projectKey: string }) {
           </Button>
         </div>
       ) : null}
-      <TestCaseListLive projectId={projectId} projectKey={projectKey} />
+      <TestCaseListLive projectId={projectId} projectKey={projectKey} keyword={keyword} />
     </>
   );
 }

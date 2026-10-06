@@ -15,9 +15,10 @@
  *
  * 未登录走演示测试视图（TestsView）时不使用本组件。
  */
+import { useListTitleSearch } from "./use-list-title-search";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button, Input, Spinner, TextField } from "@heroui/react";
+import { Button, FieldError, Input, Spinner, TextField } from "@heroui/react";
 import { toast } from "sonner";
 import { shouldClampPage } from "@/lib/pagination";
 import {
@@ -63,15 +64,13 @@ function toSelectOptions(options: { id: string; label: string }[]) {
   return [{ id: "", label: "全部" }, ...options];
 }
 
-export function TestCaseListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
-  const [titleInput, setTitleInput] = useState("");
-  const [appliedTitle, setAppliedTitle] = useState("");
+export function TestCaseListLive({ projectId, projectKey, keyword }: { projectId: number; projectKey: string; keyword?: string }) {
+  const { titleInput, setTitleInput, appliedTitle, page, setPage, titleError, applyTitle, resetTitle, queryProjectId } = useListTitleSearch("testCase", projectId, projectKey, keyword);
   const [numberInput, setNumberInput] = useState("");
   const [appliedNumber, setAppliedNumber] = useState("");
   const [testType, setTestType] = useState("");
   const [priority, setPriority] = useState("");
   const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   // 编辑快照：打开瞬间捕获记录，弹窗生命周期不依赖实时分页结果。
   // 否则编辑期间他人归档/改状态导致重取后记录脱离当前页，脏表单会被
@@ -91,19 +90,18 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
     return value;
   }, [projectId, appliedTitle, appliedNumber, testType, priority, status]);
 
-  const listQuery = useTestCaseList({ page, pageSize: PAGE_SIZE, bean, projectId });
+  const listQuery = useTestCaseList({ page, pageSize: PAGE_SIZE, bean, projectId: queryProjectId });
   const duplicateMutation = useDuplicateTestCase();
   const archiveMutation = useArchiveTestCase();
 
   const applyFilters = () => {
-    setAppliedTitle(titleInput);
+    if (!applyTitle()) return;
     setAppliedNumber(numberInput);
     setPage(1);
   };
 
   const resetFilters = () => {
-    setTitleInput("");
-    setAppliedTitle("");
+    resetTitle();
     setNumberInput("");
     setAppliedNumber("");
     setTestType("");
@@ -184,8 +182,9 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
         }}
       >
         <div className="min-w-48 flex-1">
-          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索">
+          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索" isInvalid={!!titleError} validationBehavior="aria">
             <Input placeholder="按标题搜索，回车确认" />
+            {titleError ? <div role="alert"><FieldError>{titleError}</FieldError></div> : null}
           </TextField>
         </div>
         <div className="w-40">
@@ -228,7 +227,7 @@ export function TestCaseListLive({ projectId, projectKey }: { projectId: number;
         </Button>
       </form>
 
-      {listQuery.isPending ? (
+      {listQuery.isPending && queryProjectId !== null ? (
         <div className="flex items-center gap-2 py-8 text-sm text-default-500">
           <Spinner size="sm" />
           正在加载测试用例…
