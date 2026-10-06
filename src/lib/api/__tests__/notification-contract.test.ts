@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { normalizeNotificationList } from '../../notification-data';
 import { notificationApi } from '../notification';
 import type {
   NotificationCreatePayload,
@@ -43,6 +44,9 @@ function pathAndMethod(path: string, method: 'GET' | 'POST') {
   const url = new URL(String(input));
   expect(url.pathname).toBe(path);
   expect(init?.method).toBe(method);
+  const headers = new Headers(init?.headers);
+  expect(headers.get('token')).toBe('collab-token');
+  expect(headers.has('Authorization')).toBe(false);
   return { url, init };
 }
 
@@ -162,4 +166,17 @@ describe('notificationApi（12 个端点）', () => {
     expect(await notificationApi.pageNotification(4, unfiltered)).toEqual(result);
     request('/notification/v1/pageNotification/4', 'POST', unfiltered);
   });
+});
+
+it.each(['unread', 'read', ''] as const)('页面生成 %s 筛选只传中文 type/isRead', async read => {
+  const body = normalizeNotificationList({ type: 'SYSTEM', read });
+  reply({ list: [], total: 0, pageNumber: 1, pageSize: 10 });
+  await notificationApi.pageNotification(0, body);
+  request('/notification/v1/pageNotification/0', 'POST', { page: 1, pageSize: 10, bean: { type: '系统通知', ...(read === '' ? {} : { isRead: read === 'read' }) } });
+});
+it('HTTP / 业务失败由统一客户端抛错', async () => {
+  reply(null, 500, 10009);
+  await expect(notificationApi.getUnreadCount(4)).rejects.toThrow();
+  reply(null, 200, 10009);
+  await expect(notificationApi.markAllAsRead(4)).rejects.toThrow('参数错误');
 });

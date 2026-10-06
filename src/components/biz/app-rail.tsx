@@ -4,14 +4,18 @@ import type { MouseEventHandler, ReactNode } from "react";
 import type { Person } from "@/lib/pm/domain";
 import { PersonAvatar } from "@/components/biz/person-avatar";
 
+import { NotificationBadge, notificationAccessibleLabel, type NotificationCountState } from "./notification-badge";
+
 export function AppRail({
   unread,
+  notificationCount,
   me,
   onSearch,
   onCreate,
   onNotices,
 }: {
   unread: number;
+  notificationCount?: NotificationCountState;
   me?: Person;
   /** 未传则不渲染对应按钮（后端模式下隐藏只操作本地演示数据的入口） */
   onSearch?: () => void;
@@ -35,10 +39,10 @@ export function AppRail({
       ) : null}
       <div className="mt-auto flex flex-col items-center gap-2">
         {onNotices ? (
-          <RailButton label="通知" onClick={onNotices}>
+          <RailButton label={notificationCount ? notificationAccessibleLabel(notificationCount) : "通知"} onClick={onNotices}>
             <span className="relative">
               <Bell className="size-5" />
-              {unread > 0 ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-danger" /> : null}
+              {notificationCount ? <NotificationBadge {...notificationCount} /> : unread > 0 ? <span className="absolute -top-1 -right-1 size-2 rounded-full bg-danger" /> : null}
             </span>
           </RailButton>
         ) : null}

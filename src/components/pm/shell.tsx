@@ -1,7 +1,8 @@
 import { NavigationFocus } from "@/components/pm/navigation-focus";
 import { notifyPmChange } from "@/lib/pm/feedback";
 import { useAuthStore } from "@/lib/api/auth-store";
-import { useRouterState } from "@tanstack/react-router";
+import { useNotificationUnreadCount } from "@/lib/query/hooks/useNotifications";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Toaster } from "sonner";
@@ -24,6 +25,8 @@ import { PersistenceStatus } from "@/components/biz/persistence-status";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useRouterState({ select: (state) => state.location });
   const pathname = location.pathname;
+  const navigate = useNavigate();
+  const notificationCount = useNotificationUnreadCount(true);
   const itemOrigin = location.state?.pmItemOrigin;
   const navOpen = usePm((state) => state.navOpen);
   const setNavOpen = usePm((state) => state.setNavOpen);
@@ -140,12 +143,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <NavigationFocus ready={ready} />
       <AppRail
         unread={unread}
+        notificationCount={isAuthenticated ? { count: notificationCount.data, loading: notificationCount.isPending, failed: notificationCount.isError } : undefined}
         me={ready ? me : undefined}
         onSearch={isAuthenticated ? undefined : () => setSearchOpen(true)}
         onCreate={isAuthenticated ? undefined : () => usePm.getState().setCreateOpen(true)}
         onNotices={
           isAuthenticated
-            ? undefined
+            ? () => { void navigate({ to: "/notifications" }); }
             : () => {
                 const next = !usePm.getState().noticeOpen;
                 usePm.getState().setNoticeOpen(next);
@@ -193,7 +197,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
-      {noticeOpen ? (
+      {noticeOpen && !isAuthenticated ? (
         <NoticePanel
           notices={notices}
           onClose={() => usePm.getState().setNoticeOpen(false)}

@@ -3,7 +3,7 @@
  * 请求无 JsonProperty 别名或 Submitted 协议；CRUD/查询可选字段不代表业务接受空对象。
  * 仅 undefined 在 JSON 序列化时省略，null 不保证显式清空能力；false/0/空串原样保留。
  * LocalDate: YYYY-MM-DD；LocalDateTime: YYYY-MM-DDTHH:mm:ss；Instant: 带时区 ISO-8601。
- * 响应保留 null；createdAt/updatedAt 为 Long → number，时间戳单位不作推断。
+ * 响应保留 null；createdAt/updatedAt 为 Long → number，Unix 秒时间戳。
  */
 
 /** 查询专用中文枚举；create/update/response 的 type 仍为 string。 */

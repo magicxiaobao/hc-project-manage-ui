@@ -14,6 +14,7 @@ import { Route as DashboardsRouteImport } from './routes/dashboards'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as WorklogsRouteImport } from './routes/worklogs'
 import { Route as DashboardProjectIdRouteImport } from './routes/dashboard/$projectId'
@@ -90,6 +91,11 @@ const LoginRoute = LoginRouteImport.update({
 const MeRoute = MeRouteImport.update({
   id: '/me',
   path: '/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsRoute = ProjectsRouteImport.update({
@@ -375,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
   '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
@@ -434,6 +441,7 @@ export interface FileRoutesByTo {
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
   '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
@@ -482,6 +490,7 @@ export interface FileRoutesById {
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/notifications': typeof NotificationsRoute
   '/projects': typeof ProjectsRoute
   '/worklogs': typeof WorklogsRoute
   '/dashboard/$projectId': typeof DashboardProjectIdRoute
@@ -543,6 +552,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/login'
     | '/me'
+    | '/notifications'
     | '/projects'
     | '/worklogs'
     | '/dashboard/$projectId'
@@ -602,6 +612,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/login'
     | '/me'
+    | '/notifications'
     | '/projects'
     | '/worklogs'
     | '/dashboard/$projectId'
@@ -649,6 +660,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/login'
     | '/me'
+    | '/notifications'
     | '/projects'
     | '/worklogs'
     | '/dashboard/$projectId'
@@ -709,6 +721,7 @@ export interface RootRouteChildren {
   InboxRoute: typeof InboxRoute
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
+  NotificationsRoute: typeof NotificationsRoute
   ProjectsRoute: typeof ProjectsRoute
   WorklogsRoute: typeof WorklogsRoute
   DashboardProjectIdRoute: typeof DashboardProjectIdRoute
@@ -752,6 +765,13 @@ declare module '@tanstack/react-router' {
       path: '/me'
       fullPath: '/me'
       preLoaderRoute: typeof MeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects': {
@@ -1339,6 +1359,7 @@ const rootRouteChildren: RootRouteChildren = {
   InboxRoute: InboxRoute,
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
+  NotificationsRoute: NotificationsRoute,
   ProjectsRoute: ProjectsRoute,
   WorklogsRoute: WorklogsRoute,
   DashboardProjectIdRoute: DashboardProjectIdRoute,

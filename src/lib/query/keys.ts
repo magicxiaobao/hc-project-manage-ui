@@ -1,3 +1,4 @@
+import type { NotificationQueryRequest } from '../api/notification-types';
 import type { WorkLogAnalyticsRequest } from '../api/worklog-types';
 import { normalizeWorkLogAnalytics, type WorkLogDimension } from '../worklog-analytics-data';
 
@@ -51,6 +52,11 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
 }
 
 export const queryKeys = {
+  notification: {
+    all: ['hc', 'notification'] as const,
+    list: (params: { userId: number | null; page: number; pageSize: number; bean: NotificationQueryRequest }) => ['hc', 'notification', 'list', params] as const,
+    unreadCount: (userId: number | null) => ['hc', 'notification', 'unreadCount', { userId }] as const,
+  },
   workLog: {
     ...domainKeys('workLog'),
     analytics: (params: WorkLogAnalyticsRequest | null) => ['hc', 'workLog', 'analytics', params ? normalizeWorkLogAnalytics('analytics', params) : null] as const,
