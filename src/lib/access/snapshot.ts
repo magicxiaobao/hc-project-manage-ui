@@ -283,6 +283,14 @@ export function landingPath(snapshot: AccessSnapshot): string | null {
       const fallback = bindMapping({ page, constraints: {} });
       if (fallback && canAccess(snapshot, fallback)) return fallback;
     }
+  } else {
+    const pages = routeManifest.filter((page) => page.policy === "authenticated");
+    // Prefer the workbench; keep manifest order for the remaining pages.
+    pages.sort((a, b) => Number(b.route === "/workbench") - Number(a.route === "/workbench"));
+    for (const page of pages) {
+      const fallback = bindMapping({ page, constraints: {} });
+      if (fallback && canAccess(snapshot, fallback)) return fallback;
+    }
   }
   return null;
 }

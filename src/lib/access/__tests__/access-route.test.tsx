@@ -262,7 +262,7 @@ describe("guardAccess 直接调用", () => {
     expect(error).toMatchObject({ options: { to: "/403" } });
   });
 
-  it("/ 按授权 landing 调度；无可访问页 → /403", async () => {
+  it("/ 按授权 landing 调度；无可见导航 → /workbench", async () => {
     signIn(["sys:user:view"]);
     let error: unknown;
     try {
@@ -280,7 +280,7 @@ describe("guardAccess 直接调用", () => {
     } catch (caught) {
       error = caught;
     }
-    expect(error).toMatchObject({ options: { href: "/403" } });
+    expect(error).toMatchObject({ options: { href: "/workbench" } });
   });
 });
 

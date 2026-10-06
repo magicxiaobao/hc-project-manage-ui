@@ -254,7 +254,7 @@ describe("deriveSnapshot 菜单语义", () => {
 });
 
 describe("landingPath", () => {
-  it("选择第一个可访问的具体菜单目标", () => {
+  it("优先选择第一个可访问的具体菜单目标", () => {
     const snapshot = ready(
       ["sys:user:view"],
       [
@@ -270,8 +270,14 @@ describe("landingPath", () => {
     expect(path).toBe("/sys/users");
     expect(canAccess(snapshot, path!)).toBe(true);
   });
-  it("无可访问页返回 null（调用方转 /403）", () => {
-    expect(landingPath(ready([], []))).toBeNull();
+  it("非管理员在 ready 空导航时落到工作台", () => {
+    const snapshot = ready([], []);
+    expect(snapshot.visibleNavigation).toHaveLength(0);
+    expect(landingPath(snapshot)).toBe("/workbench");
+    expect(canAccess(snapshot, "/workbench")).toBe(true);
+  });
+  it("无登录用户时仍返回 null", () => {
+    expect(landingPath({ ...ready([], []), userId: null })).toBeNull();
   });
 });
 
