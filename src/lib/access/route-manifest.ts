@@ -13,6 +13,13 @@ export interface PagePolicy {
 export const routeManifest: readonly PagePolicy[] = [
   { route: "/me", title: "个人资料", policy: "authenticated" },
   { route: "/inbox", title: "收件箱", policy: "authenticated" },
+  { route: "/workbench", title: "工作台", policy: "authenticated" },
+  { route: "/dashboards", title: "仪表盘管理", policy: "authenticated" },
+  { route: "/dashboard/$projectId", title: "项目仪表盘", policy: "authenticated" },
+  { route: "/search", title: "全局搜索", policy: "authenticated" },
+  { route: "/notifications", title: "通知中心", policy: "authenticated" },
+  { route: "/worklogs", title: "工时管理", policy: "authenticated" },
+  { route: "/worklogs/analytics", title: "工时统计", policy: "authenticated", inherits: "/worklogs" },
   { route: "/projects", title: "项目", policy: "menu" },
   { route: "/projects/new", title: "新建项目", policy: "menu", inherits: "/projects" },
   { route: "/sys/users/", title: "用户管理", policy: "menu", aliases: ["/system/user"] },

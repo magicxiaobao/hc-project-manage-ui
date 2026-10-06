@@ -316,3 +316,26 @@ it("字典菜单 alias 依动态授权控制，管理员兜底；alias 无第二
   expect(canAccess(ready(["system:admin"], []), "/sys/dictionaries")).toBe(true);
   expect(canAccess(ready(["system:admin"], []), "/system/dictionary")).toBe(false);
 });
+
+
+describe("P4 全局页面仅要求登录", () => {
+  it.each([
+    ["/workbench", "/workbench", "工作台"],
+    ["/dashboards", "/dashboards", "仪表盘管理"],
+    ["/dashboard/42", "/dashboard/$projectId", "项目仪表盘"],
+    ["/search", "/search", "全局搜索"],
+    ["/notifications", "/notifications", "通知中心"],
+    ["/worklogs", "/worklogs", "工时管理"],
+    ["/worklogs/analytics", "/worklogs/analytics", "工时统计"],
+  ])("%s 无菜单授权也可访问", (path, route, title) => {
+    const hit = matchPage(path);
+    expect(hit).not.toBeNull();
+    expect(hit?.page).toMatchObject({ route, title, policy: "authenticated" });
+    expect(hit?.page.aliases).toBeUndefined();
+    expect(hit?.page.inherits).toBe(path === "/worklogs/analytics" ? "/worklogs" : undefined);
+    const snapshot = ready([], []);
+    expect(canAccess(snapshot, path)).toBe(true);
+    expect(canAccess({ ...snapshot, userId: null }, path)).toBe(false);
+    expect(canAccess({ ...snapshot, status: "loading" }, path)).toBe(false);
+  });
+});

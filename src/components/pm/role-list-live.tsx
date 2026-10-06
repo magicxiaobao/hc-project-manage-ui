@@ -8,8 +8,7 @@
  *   useRoleListAll 循环拉全量 → filterRolesLocal 本地过滤 → slice 本地分页；
  * - POST /role/v1/valid/{id} 启用、POST /role/v1/invalid/{id} 禁用；
  * - RoleResponse.enabled 有映射（user-roles-dialog 按 role.enabled===true
- *   过滤搜索证据），状态列诚实展示启用/禁用；null（防御）按启用口径处理，
- *   与 role-form-dialog 的回填默认值一致。
+ *   过滤搜索证据），状态列展示启用/禁用；null 显示未知且不提供状态切换。
  *
  * 列：角色名称 / 角色编码 / 描述 / 状态 / 更新时间 / 操作。
  * 行操作：编辑（role-form-dialog 弹窗）、启用/禁用（二次确认）、启用角色分配权限。
@@ -38,11 +37,6 @@ function formatDateTime(value: number | null): string {
   if (value == null) return "—";
   // 后端时间戳为 Unix 秒 epoch（DateMapper.getEpochSecond），Date 构造需毫秒
   return new Date(value * 1000).toLocaleString("zh-CN", { hour12: false });
-}
-
-/** null（防御分支）按启用口径：与 role-form-dialog 的回填默认值一致 */
-function isRoleEnabled(role: RoleResponse): boolean {
-  return role.enabled ?? true;
 }
 
 export function RoleListLive() {
@@ -214,7 +208,7 @@ export function RoleListLive() {
               </thead>
               <tbody>
                 {pageRoles.map((role) => {
-                  const enabled = isRoleEnabled(role);
+                  const enabled = role.enabled;
                   return (
                     <tr key={role.id} className="border-t border-border hover:bg-surface">
                       <td className="px-3 py-2 font-medium">{role.roleName ?? "—"}</td>
@@ -233,7 +227,7 @@ export function RoleListLive() {
                           </Chip>
                         ) : (
                           <Chip size="sm" color="default" variant="soft">
-                            禁用
+                            {enabled === false ? "禁用" : "未知"}
                           </Chip>
                         )}
                       </td>
@@ -262,7 +256,7 @@ export function RoleListLive() {
                               toast.error(toUserMessage(error, "角色操作失败"))
                             }
                           />
-                          {enabled ? (
+                          {enabled === null ? null : enabled ? (
                             <Button
                               size="sm"
                               variant="ghost"
