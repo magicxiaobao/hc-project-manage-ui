@@ -115,6 +115,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
    * 401 重放仍失败）除了清本地存储，还需递增会话代际并清 zustand 内存态，
    * 否则在途的刷新成功后会把已失效的会话复活。未注册时退化为仅清存储（单元测试）。
    */
+  let permissionDeniedHandler: (() => void) | null = null;
   let sessionInvalidator: (() => void) | null = null;
   /**
    * 刷新失效归因读取器（由 auth-store 注册）：最近一次因 refresh token 被
@@ -183,9 +184,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
       !readSessionGeneration || readSessionGeneration() === generationAtStart;
     // 超时覆盖整个请求（含响应体读取）：fetch 在收到响应头后即 resolve，
     // 若此时清 timer，后续 body stall 会无限等待。放到 finally 保证解析完成后才清。
+    const abort = () => controller.abort();
+    init.signal?.addEventListener('abort', abort, { once: true });
+    if (init.signal?.aborted) controller.abort();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(joinUrl(baseUrl, path), { ...init, headers, signal: controller.signal });
+      if (res.status === 403 && authStillCurrent()) permissionDeniedHandler?.();
 
       // 401 自动刷新 + 重放一次（登录/刷新接口自身除外；并发 401 共用一次刷新）
       if (res.status === 401 && !isOwnErrorEndpoint(path)) {
@@ -255,7 +260,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         if (res.ok && !text) return undefined as T;
         throw new HttpResponseError(`接口返回格式异常: ${path}`, res.status);
       }
-      if (data.code === 1) return data.result;
+      if (data.code === 1 && res.ok) return data.result;
+      if (data.code === 10011 && res.status !== 403 && authStillCurrent()) permissionDeniedHandler?.();
       if (AUTH_EXPIRED_CODES.includes(data.code)) {
         // 旧会话请求的迟到“登录失效”信号：代际已变化则不清除新会话凭证、不跳转；
         // 同一请求在途期间令牌已被轮转（如并发请求的刷新先成功）：该信号来自旧令牌，
@@ -270,6 +276,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       throw new ApiBusinessError<T>(data, res.status);
     } finally {
       clearTimeout(timer);
+      init.signal?.removeEventListener('abort', abort);
     }
   }
 
@@ -295,6 +302,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
     delete: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: 'DELETE' }),
+    /**
+     * 原始响应请求：携带 token 头但不解析 Result 信封，直接返回 Response。
+     * 供头像字节流（GET /user/v1/{userId}/avatar/content，返回原始字节流非信封）
+     * 等非信封端点使用；调用方自行处理状态与 body。
+     */
+    raw: (path: string, init?: RequestInit): Promise<Response> => {
+      const headers = new Headers(init?.headers);
+      const token = readToken();
+      if (token) headers.set(TOKEN_HEADER, token);
+      return fetch(joinUrl(baseUrl, path), { ...init, headers });
+    },
+    setPermissionDeniedHandler(fn: (() => void) | null) { permissionDeniedHandler = fn; },
     setTokenRefresher(fn: TokenRefresher | null) {
       tokenRefresher = fn;
     },

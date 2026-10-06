@@ -10,12 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as R403RouteImport } from './routes/403'
 import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as SysRouteImport } from './routes/sys'
 import { Route as PProjectKeyRouteImport } from './routes/p/$projectKey'
 import { Route as ProjectsNewRouteImport } from './routes/projects_.new'
+import { Route as SysConfigsRouteImport } from './routes/sys/configs'
+import { Route as SysDictionariesRouteImport } from './routes/sys/dictionaries'
+import { Route as SysMenusRouteImport } from './routes/sys/menus'
+import { Route as SysPermissionsRouteImport } from './routes/sys/permissions'
+import { Route as SysProfileRouteImport } from './routes/sys/profile'
+import { Route as SysRolesRouteImport } from './routes/sys/roles'
+import { Route as SysUsersRouteImport } from './routes/sys/users'
+import { Route as SysWorkflowDesignerRouteImport } from './routes/sys/workflow-designer'
 import { Route as PProjectKeyIndexRouteImport } from './routes/p/$projectKey/index'
 import { Route as PProjectKeyAssignmentRouteImport } from './routes/p/$projectKey/assignment'
 import { Route as PProjectKeyBacklogRouteImport } from './routes/p/$projectKey/backlog'
@@ -38,6 +48,14 @@ import { Route as PProjectKeyTraceRouteImport } from './routes/p/$projectKey/tra
 import { Route as PProjectKeyTraceabilityRouteImport } from './routes/p/$projectKey/traceability'
 import { Route as PProjectKeyVersionsRouteImport } from './routes/p/$projectKey/versions'
 import { Route as PProjectKeyWorklogsRouteImport } from './routes/p/$projectKey/worklogs'
+import { Route as SysConfigsIndexRouteImport } from './routes/sys/configs/index'
+import { Route as SysDictionariesIndexRouteImport } from './routes/sys/dictionaries/index'
+import { Route as SysMenusIndexRouteImport } from './routes/sys/menus/index'
+import { Route as SysPermissionsIndexRouteImport } from './routes/sys/permissions/index'
+import { Route as SysRolesIndexRouteImport } from './routes/sys/roles/index'
+import { Route as SysUsersIndexRouteImport } from './routes/sys/users/index'
+import { Route as SysUsersUserIdRouteImport } from './routes/sys/users/$userId'
+import { Route as SysUsersNewRouteImport } from './routes/sys/users/new'
 import { Route as PProjectKeyBoardsIndexRouteImport } from './routes/p/$projectKey/boards/index'
 import { Route as PProjectKeyBoardsBoardIdRouteImport } from './routes/p/$projectKey/boards.$boardId'
 import { Route as PProjectKeyDefectsIndexRouteImport } from './routes/p/$projectKey/defects/index'
@@ -62,10 +80,18 @@ import { Route as PProjectKeyTestsuitesIndexRouteImport } from './routes/p/$proj
 import { Route as PProjectKeyTestsuitesTestSuiteIdRouteImport } from './routes/p/$projectKey/testsuites/$testSuiteId'
 import { Route as PProjectKeyVersionsIndexRouteImport } from './routes/p/$projectKey/versions/index'
 import { Route as PProjectKeyVersionsVersionIdRouteImport } from './routes/p/$projectKey/versions/$versionId'
+import { Route as SysRolesRoleIdPermissionsRouteImport } from './routes/sys/roles/$roleId/permissions'
+import { Route as SysUsersUserIdIndexRouteImport } from './routes/sys/users/$userId/index'
+import { Route as SysUsersUserIdRolesRouteImport } from './routes/sys/users/$userId/roles'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const R403Route = R403RouteImport.update({
+  id: '/403',
+  path: '/403',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InboxRoute = InboxRouteImport.update({
@@ -88,6 +114,11 @@ const ProjectsRoute = ProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SysRoute = SysRouteImport.update({
+  id: '/sys',
+  path: '/sys',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PProjectKeyRoute = PProjectKeyRouteImport.update({
   id: '/p/$projectKey',
   path: '/p/$projectKey',
@@ -97,6 +128,46 @@ const ProjectsNewRoute = ProjectsNewRouteImport.update({
   id: '/projects_/new',
   path: '/projects/new',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SysConfigsRoute = SysConfigsRouteImport.update({
+  id: '/configs',
+  path: '/configs',
+  getParentRoute: () => SysRoute,
+} as any)
+const SysDictionariesRoute = SysDictionariesRouteImport.update({
+  id: '/dictionaries',
+  path: '/dictionaries',
+  getParentRoute: () => SysRoute,
+} as any)
+const SysMenusRoute = SysMenusRouteImport.update({
+  id: '/menus',
+  path: '/menus',
+  getParentRoute: () => SysRoute,
+} as any)
+const SysPermissionsRoute = SysPermissionsRouteImport.update({
+  id: '/permissions',
+  path: '/permissions',
+  getParentRoute: () => SysRoute,
+} as any)
+const SysProfileRoute = SysProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => SysRoute,
+} as any)
+const SysRolesRoute = SysRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => SysRoute,
+} as any)
+const SysUsersRoute = SysUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => SysRoute,
+} as any)
+const SysWorkflowDesignerRoute = SysWorkflowDesignerRouteImport.update({
+  id: '/workflow-designer',
+  path: '/workflow-designer',
+  getParentRoute: () => SysRoute,
 } as any)
 const PProjectKeyIndexRoute = PProjectKeyIndexRouteImport.update({
   id: '/',
@@ -208,6 +279,46 @@ const PProjectKeyWorklogsRoute = PProjectKeyWorklogsRouteImport.update({
   id: '/worklogs',
   path: '/worklogs',
   getParentRoute: () => PProjectKeyRoute,
+} as any)
+const SysConfigsIndexRoute = SysConfigsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SysConfigsRoute,
+} as any)
+const SysDictionariesIndexRoute = SysDictionariesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SysDictionariesRoute,
+} as any)
+const SysMenusIndexRoute = SysMenusIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SysMenusRoute,
+} as any)
+const SysPermissionsIndexRoute = SysPermissionsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SysPermissionsRoute,
+} as any)
+const SysRolesIndexRoute = SysRolesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SysRolesRoute,
+} as any)
+const SysUsersIndexRoute = SysUsersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SysUsersRoute,
+} as any)
+const SysUsersUserIdRoute = SysUsersUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => SysUsersRoute,
+} as any)
+const SysUsersNewRoute = SysUsersNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => SysUsersRoute,
 } as any)
 const PProjectKeyBoardsIndexRoute = PProjectKeyBoardsIndexRouteImport.update({
   id: '/',
@@ -344,15 +455,41 @@ const PProjectKeyVersionsVersionIdRoute =
     path: '/$versionId',
     getParentRoute: () => PProjectKeyVersionsRoute,
   } as any)
+const SysRolesRoleIdPermissionsRoute =
+  SysRolesRoleIdPermissionsRouteImport.update({
+    id: '/$roleId/permissions',
+    path: '/$roleId/permissions',
+    getParentRoute: () => SysRolesRoute,
+  } as any)
+const SysUsersUserIdIndexRoute = SysUsersUserIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SysUsersUserIdRoute,
+} as any)
+const SysUsersUserIdRolesRoute = SysUsersUserIdRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
+  getParentRoute: () => SysUsersUserIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/403': typeof R403Route
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/sys': typeof SysRouteWithChildren
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
+  '/sys/configs': typeof SysConfigsRouteWithChildren
+  '/sys/dictionaries': typeof SysDictionariesRouteWithChildren
+  '/sys/menus': typeof SysMenusRouteWithChildren
+  '/sys/permissions': typeof SysPermissionsRouteWithChildren
+  '/sys/profile': typeof SysProfileRoute
+  '/sys/roles': typeof SysRolesRouteWithChildren
+  '/sys/users': typeof SysUsersRouteWithChildren
+  '/sys/workflow-designer': typeof SysWorkflowDesignerRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsRouteWithChildren
@@ -374,7 +511,15 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/traceability': typeof PProjectKeyTraceabilityRoute
   '/p/$projectKey/versions': typeof PProjectKeyVersionsRouteWithChildren
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
+  '/sys/users/$userId': typeof SysUsersUserIdRouteWithChildren
+  '/sys/users/new': typeof SysUsersNewRoute
   '/p/$projectKey/': typeof PProjectKeyIndexRoute
+  '/sys/configs/': typeof SysConfigsIndexRoute
+  '/sys/dictionaries/': typeof SysDictionariesIndexRoute
+  '/sys/menus/': typeof SysMenusIndexRoute
+  '/sys/permissions/': typeof SysPermissionsIndexRoute
+  '/sys/roles/': typeof SysRolesIndexRoute
+  '/sys/users/': typeof SysUsersIndexRoute
   '/p/$projectKey/boards/$boardId': typeof PProjectKeyBoardsBoardIdRoute
   '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
   '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
@@ -388,6 +533,8 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
   '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
   '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
+  '/sys/roles/$roleId/permissions': typeof SysRolesRoleIdPermissionsRoute
+  '/sys/users/$userId/roles': typeof SysUsersUserIdRolesRoute
   '/p/$projectKey/boards/': typeof PProjectKeyBoardsIndexRoute
   '/p/$projectKey/defects/': typeof PProjectKeyDefectsIndexRoute
   '/p/$projectKey/issues/': typeof PProjectKeyIssuesIndexRoute
@@ -399,14 +546,19 @@ export interface FileRoutesByFullPath {
   '/p/$projectKey/tests/': typeof PProjectKeyTestsIndexRoute
   '/p/$projectKey/testsuites/': typeof PProjectKeyTestsuitesIndexRoute
   '/p/$projectKey/versions/': typeof PProjectKeyVersionsIndexRoute
+  '/sys/users/$userId/': typeof SysUsersUserIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/403': typeof R403Route
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/sys': typeof SysRouteWithChildren
   '/projects/new': typeof ProjectsNewRoute
+  '/sys/profile': typeof SysProfileRoute
+  '/sys/workflow-designer': typeof SysWorkflowDesignerRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/dashboard': typeof PProjectKeyDashboardRoute
@@ -417,7 +569,14 @@ export interface FileRoutesByTo {
   '/p/$projectKey/trace': typeof PProjectKeyTraceRoute
   '/p/$projectKey/traceability': typeof PProjectKeyTraceabilityRoute
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
+  '/sys/users/new': typeof SysUsersNewRoute
   '/p/$projectKey': typeof PProjectKeyIndexRoute
+  '/sys/configs': typeof SysConfigsIndexRoute
+  '/sys/dictionaries': typeof SysDictionariesIndexRoute
+  '/sys/menus': typeof SysMenusIndexRoute
+  '/sys/permissions': typeof SysPermissionsIndexRoute
+  '/sys/roles': typeof SysRolesIndexRoute
+  '/sys/users': typeof SysUsersIndexRoute
   '/p/$projectKey/boards/$boardId': typeof PProjectKeyBoardsBoardIdRoute
   '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
   '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
@@ -431,6 +590,8 @@ export interface FileRoutesByTo {
   '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
   '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
   '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
+  '/sys/roles/$roleId/permissions': typeof SysRolesRoleIdPermissionsRoute
+  '/sys/users/$userId/roles': typeof SysUsersUserIdRolesRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsIndexRoute
   '/p/$projectKey/defects': typeof PProjectKeyDefectsIndexRoute
   '/p/$projectKey/issues': typeof PProjectKeyIssuesIndexRoute
@@ -442,16 +603,27 @@ export interface FileRoutesByTo {
   '/p/$projectKey/tests': typeof PProjectKeyTestsIndexRoute
   '/p/$projectKey/testsuites': typeof PProjectKeyTestsuitesIndexRoute
   '/p/$projectKey/versions': typeof PProjectKeyVersionsIndexRoute
+  '/sys/users/$userId': typeof SysUsersUserIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/403': typeof R403Route
   '/inbox': typeof InboxRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/projects': typeof ProjectsRoute
+  '/sys': typeof SysRouteWithChildren
   '/p/$projectKey': typeof PProjectKeyRouteWithChildren
   '/projects_/new': typeof ProjectsNewRoute
+  '/sys/configs': typeof SysConfigsRouteWithChildren
+  '/sys/dictionaries': typeof SysDictionariesRouteWithChildren
+  '/sys/menus': typeof SysMenusRouteWithChildren
+  '/sys/permissions': typeof SysPermissionsRouteWithChildren
+  '/sys/profile': typeof SysProfileRoute
+  '/sys/roles': typeof SysRolesRouteWithChildren
+  '/sys/users': typeof SysUsersRouteWithChildren
+  '/sys/workflow-designer': typeof SysWorkflowDesignerRoute
   '/p/$projectKey/assignment': typeof PProjectKeyAssignmentRoute
   '/p/$projectKey/backlog': typeof PProjectKeyBacklogRoute
   '/p/$projectKey/boards': typeof PProjectKeyBoardsRouteWithChildren
@@ -473,7 +645,15 @@ export interface FileRoutesById {
   '/p/$projectKey/traceability': typeof PProjectKeyTraceabilityRoute
   '/p/$projectKey/versions': typeof PProjectKeyVersionsRouteWithChildren
   '/p/$projectKey/worklogs': typeof PProjectKeyWorklogsRoute
+  '/sys/users/$userId': typeof SysUsersUserIdRouteWithChildren
+  '/sys/users/new': typeof SysUsersNewRoute
   '/p/$projectKey/': typeof PProjectKeyIndexRoute
+  '/sys/configs/': typeof SysConfigsIndexRoute
+  '/sys/dictionaries/': typeof SysDictionariesIndexRoute
+  '/sys/menus/': typeof SysMenusIndexRoute
+  '/sys/permissions/': typeof SysPermissionsIndexRoute
+  '/sys/roles/': typeof SysRolesIndexRoute
+  '/sys/users/': typeof SysUsersIndexRoute
   '/p/$projectKey/boards/$boardId': typeof PProjectKeyBoardsBoardIdRoute
   '/p/$projectKey/defects/$defectId': typeof PProjectKeyDefectsDefectIdRoute
   '/p/$projectKey/defects/board': typeof PProjectKeyDefectsBoardRoute
@@ -487,6 +667,8 @@ export interface FileRoutesById {
   '/p/$projectKey/tests/$testRunId': typeof PProjectKeyTestsTestRunIdRoute
   '/p/$projectKey/testsuites/$testSuiteId': typeof PProjectKeyTestsuitesTestSuiteIdRoute
   '/p/$projectKey/versions/$versionId': typeof PProjectKeyVersionsVersionIdRoute
+  '/sys/roles/$roleId/permissions': typeof SysRolesRoleIdPermissionsRoute
+  '/sys/users/$userId/roles': typeof SysUsersUserIdRolesRoute
   '/p/$projectKey/boards/': typeof PProjectKeyBoardsIndexRoute
   '/p/$projectKey/defects/': typeof PProjectKeyDefectsIndexRoute
   '/p/$projectKey/issues/': typeof PProjectKeyIssuesIndexRoute
@@ -498,17 +680,28 @@ export interface FileRoutesById {
   '/p/$projectKey/tests/': typeof PProjectKeyTestsIndexRoute
   '/p/$projectKey/testsuites/': typeof PProjectKeyTestsuitesIndexRoute
   '/p/$projectKey/versions/': typeof PProjectKeyVersionsIndexRoute
+  '/sys/users/$userId/': typeof SysUsersUserIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/403'
     | '/inbox'
     | '/login'
     | '/me'
     | '/projects'
+    | '/sys'
     | '/p/$projectKey'
     | '/projects/new'
+    | '/sys/configs'
+    | '/sys/dictionaries'
+    | '/sys/menus'
+    | '/sys/permissions'
+    | '/sys/profile'
+    | '/sys/roles'
+    | '/sys/users'
+    | '/sys/workflow-designer'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/boards'
@@ -530,7 +723,15 @@ export interface FileRouteTypes {
     | '/p/$projectKey/traceability'
     | '/p/$projectKey/versions'
     | '/p/$projectKey/worklogs'
+    | '/sys/users/$userId'
+    | '/sys/users/new'
     | '/p/$projectKey/'
+    | '/sys/configs/'
+    | '/sys/dictionaries/'
+    | '/sys/menus/'
+    | '/sys/permissions/'
+    | '/sys/roles/'
+    | '/sys/users/'
     | '/p/$projectKey/boards/$boardId'
     | '/p/$projectKey/defects/$defectId'
     | '/p/$projectKey/defects/board'
@@ -544,6 +745,8 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests/$testRunId'
     | '/p/$projectKey/testsuites/$testSuiteId'
     | '/p/$projectKey/versions/$versionId'
+    | '/sys/roles/$roleId/permissions'
+    | '/sys/users/$userId/roles'
     | '/p/$projectKey/boards/'
     | '/p/$projectKey/defects/'
     | '/p/$projectKey/issues/'
@@ -555,14 +758,19 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests/'
     | '/p/$projectKey/testsuites/'
     | '/p/$projectKey/versions/'
+    | '/sys/users/$userId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/403'
     | '/inbox'
     | '/login'
     | '/me'
     | '/projects'
+    | '/sys'
     | '/projects/new'
+    | '/sys/profile'
+    | '/sys/workflow-designer'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/dashboard'
@@ -573,7 +781,14 @@ export interface FileRouteTypes {
     | '/p/$projectKey/trace'
     | '/p/$projectKey/traceability'
     | '/p/$projectKey/worklogs'
+    | '/sys/users/new'
     | '/p/$projectKey'
+    | '/sys/configs'
+    | '/sys/dictionaries'
+    | '/sys/menus'
+    | '/sys/permissions'
+    | '/sys/roles'
+    | '/sys/users'
     | '/p/$projectKey/boards/$boardId'
     | '/p/$projectKey/defects/$defectId'
     | '/p/$projectKey/defects/board'
@@ -587,6 +802,8 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests/$testRunId'
     | '/p/$projectKey/testsuites/$testSuiteId'
     | '/p/$projectKey/versions/$versionId'
+    | '/sys/roles/$roleId/permissions'
+    | '/sys/users/$userId/roles'
     | '/p/$projectKey/boards'
     | '/p/$projectKey/defects'
     | '/p/$projectKey/issues'
@@ -598,15 +815,26 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests'
     | '/p/$projectKey/testsuites'
     | '/p/$projectKey/versions'
+    | '/sys/users/$userId'
   id:
     | '__root__'
     | '/'
+    | '/403'
     | '/inbox'
     | '/login'
     | '/me'
     | '/projects'
+    | '/sys'
     | '/p/$projectKey'
     | '/projects_/new'
+    | '/sys/configs'
+    | '/sys/dictionaries'
+    | '/sys/menus'
+    | '/sys/permissions'
+    | '/sys/profile'
+    | '/sys/roles'
+    | '/sys/users'
+    | '/sys/workflow-designer'
     | '/p/$projectKey/assignment'
     | '/p/$projectKey/backlog'
     | '/p/$projectKey/boards'
@@ -628,7 +856,15 @@ export interface FileRouteTypes {
     | '/p/$projectKey/traceability'
     | '/p/$projectKey/versions'
     | '/p/$projectKey/worklogs'
+    | '/sys/users/$userId'
+    | '/sys/users/new'
     | '/p/$projectKey/'
+    | '/sys/configs/'
+    | '/sys/dictionaries/'
+    | '/sys/menus/'
+    | '/sys/permissions/'
+    | '/sys/roles/'
+    | '/sys/users/'
     | '/p/$projectKey/boards/$boardId'
     | '/p/$projectKey/defects/$defectId'
     | '/p/$projectKey/defects/board'
@@ -642,6 +878,8 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests/$testRunId'
     | '/p/$projectKey/testsuites/$testSuiteId'
     | '/p/$projectKey/versions/$versionId'
+    | '/sys/roles/$roleId/permissions'
+    | '/sys/users/$userId/roles'
     | '/p/$projectKey/boards/'
     | '/p/$projectKey/defects/'
     | '/p/$projectKey/issues/'
@@ -653,14 +891,17 @@ export interface FileRouteTypes {
     | '/p/$projectKey/tests/'
     | '/p/$projectKey/testsuites/'
     | '/p/$projectKey/versions/'
+    | '/sys/users/$userId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  R403Route: typeof R403Route
   InboxRoute: typeof InboxRoute
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
   ProjectsRoute: typeof ProjectsRoute
+  SysRoute: typeof SysRouteWithChildren
   PProjectKeyRoute: typeof PProjectKeyRouteWithChildren
   ProjectsNewRoute: typeof ProjectsNewRoute
 }
@@ -672,6 +913,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/403': {
+      id: '/403'
+      path: '/403'
+      fullPath: '/403'
+      preLoaderRoute: typeof R403RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inbox': {
@@ -702,6 +950,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sys': {
+      id: '/sys'
+      path: '/sys'
+      fullPath: '/sys'
+      preLoaderRoute: typeof SysRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/p/$projectKey': {
       id: '/p/$projectKey'
       path: '/p/$projectKey'
@@ -715,6 +970,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/projects/new'
       preLoaderRoute: typeof ProjectsNewRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/sys/configs': {
+      id: '/sys/configs'
+      path: '/configs'
+      fullPath: '/sys/configs'
+      preLoaderRoute: typeof SysConfigsRouteImport
+      parentRoute: typeof SysRoute
+    }
+    '/sys/dictionaries': {
+      id: '/sys/dictionaries'
+      path: '/dictionaries'
+      fullPath: '/sys/dictionaries'
+      preLoaderRoute: typeof SysDictionariesRouteImport
+      parentRoute: typeof SysRoute
+    }
+    '/sys/menus': {
+      id: '/sys/menus'
+      path: '/menus'
+      fullPath: '/sys/menus'
+      preLoaderRoute: typeof SysMenusRouteImport
+      parentRoute: typeof SysRoute
+    }
+    '/sys/permissions': {
+      id: '/sys/permissions'
+      path: '/permissions'
+      fullPath: '/sys/permissions'
+      preLoaderRoute: typeof SysPermissionsRouteImport
+      parentRoute: typeof SysRoute
+    }
+    '/sys/profile': {
+      id: '/sys/profile'
+      path: '/profile'
+      fullPath: '/sys/profile'
+      preLoaderRoute: typeof SysProfileRouteImport
+      parentRoute: typeof SysRoute
+    }
+    '/sys/roles': {
+      id: '/sys/roles'
+      path: '/roles'
+      fullPath: '/sys/roles'
+      preLoaderRoute: typeof SysRolesRouteImport
+      parentRoute: typeof SysRoute
+    }
+    '/sys/users': {
+      id: '/sys/users'
+      path: '/users'
+      fullPath: '/sys/users'
+      preLoaderRoute: typeof SysUsersRouteImport
+      parentRoute: typeof SysRoute
+    }
+    '/sys/workflow-designer': {
+      id: '/sys/workflow-designer'
+      path: '/workflow-designer'
+      fullPath: '/sys/workflow-designer'
+      preLoaderRoute: typeof SysWorkflowDesignerRouteImport
+      parentRoute: typeof SysRoute
     }
     '/p/$projectKey/': {
       id: '/p/$projectKey/'
@@ -869,6 +1180,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/p/$projectKey/worklogs'
       preLoaderRoute: typeof PProjectKeyWorklogsRouteImport
       parentRoute: typeof PProjectKeyRoute
+    }
+    '/sys/configs/': {
+      id: '/sys/configs/'
+      path: '/'
+      fullPath: '/sys/configs/'
+      preLoaderRoute: typeof SysConfigsIndexRouteImport
+      parentRoute: typeof SysConfigsRoute
+    }
+    '/sys/dictionaries/': {
+      id: '/sys/dictionaries/'
+      path: '/'
+      fullPath: '/sys/dictionaries/'
+      preLoaderRoute: typeof SysDictionariesIndexRouteImport
+      parentRoute: typeof SysDictionariesRoute
+    }
+    '/sys/menus/': {
+      id: '/sys/menus/'
+      path: '/'
+      fullPath: '/sys/menus/'
+      preLoaderRoute: typeof SysMenusIndexRouteImport
+      parentRoute: typeof SysMenusRoute
+    }
+    '/sys/permissions/': {
+      id: '/sys/permissions/'
+      path: '/'
+      fullPath: '/sys/permissions/'
+      preLoaderRoute: typeof SysPermissionsIndexRouteImport
+      parentRoute: typeof SysPermissionsRoute
+    }
+    '/sys/roles/': {
+      id: '/sys/roles/'
+      path: '/'
+      fullPath: '/sys/roles/'
+      preLoaderRoute: typeof SysRolesIndexRouteImport
+      parentRoute: typeof SysRolesRoute
+    }
+    '/sys/users/': {
+      id: '/sys/users/'
+      path: '/'
+      fullPath: '/sys/users/'
+      preLoaderRoute: typeof SysUsersIndexRouteImport
+      parentRoute: typeof SysUsersRoute
+    }
+    '/sys/users/$userId': {
+      id: '/sys/users/$userId'
+      path: '/$userId'
+      fullPath: '/sys/users/$userId'
+      preLoaderRoute: typeof SysUsersUserIdRouteImport
+      parentRoute: typeof SysUsersRoute
+    }
+    '/sys/users/new': {
+      id: '/sys/users/new'
+      path: '/new'
+      fullPath: '/sys/users/new'
+      preLoaderRoute: typeof SysUsersNewRouteImport
+      parentRoute: typeof SysUsersRoute
     }
     '/p/$projectKey/boards/': {
       id: '/p/$projectKey/boards/'
@@ -1038,8 +1405,145 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectKeyVersionsVersionIdRouteImport
       parentRoute: typeof PProjectKeyVersionsRoute
     }
+    '/sys/roles/$roleId/permissions': {
+      id: '/sys/roles/$roleId/permissions'
+      path: '/$roleId/permissions'
+      fullPath: '/sys/roles/$roleId/permissions'
+      preLoaderRoute: typeof SysRolesRoleIdPermissionsRouteImport
+      parentRoute: typeof SysRolesRoute
+    }
+    '/sys/users/$userId/': {
+      id: '/sys/users/$userId/'
+      path: '/'
+      fullPath: '/sys/users/$userId/'
+      preLoaderRoute: typeof SysUsersUserIdIndexRouteImport
+      parentRoute: typeof SysUsersUserIdRoute
+    }
+    '/sys/users/$userId/roles': {
+      id: '/sys/users/$userId/roles'
+      path: '/roles'
+      fullPath: '/sys/users/$userId/roles'
+      preLoaderRoute: typeof SysUsersUserIdRolesRouteImport
+      parentRoute: typeof SysUsersUserIdRoute
+    }
   }
 }
+
+interface SysConfigsRouteChildren {
+  SysConfigsIndexRoute: typeof SysConfigsIndexRoute
+}
+
+const SysConfigsRouteChildren: SysConfigsRouteChildren = {
+  SysConfigsIndexRoute: SysConfigsIndexRoute,
+}
+
+const SysConfigsRouteWithChildren = SysConfigsRoute._addFileChildren(
+  SysConfigsRouteChildren,
+)
+
+interface SysDictionariesRouteChildren {
+  SysDictionariesIndexRoute: typeof SysDictionariesIndexRoute
+}
+
+const SysDictionariesRouteChildren: SysDictionariesRouteChildren = {
+  SysDictionariesIndexRoute: SysDictionariesIndexRoute,
+}
+
+const SysDictionariesRouteWithChildren = SysDictionariesRoute._addFileChildren(
+  SysDictionariesRouteChildren,
+)
+
+interface SysMenusRouteChildren {
+  SysMenusIndexRoute: typeof SysMenusIndexRoute
+}
+
+const SysMenusRouteChildren: SysMenusRouteChildren = {
+  SysMenusIndexRoute: SysMenusIndexRoute,
+}
+
+const SysMenusRouteWithChildren = SysMenusRoute._addFileChildren(
+  SysMenusRouteChildren,
+)
+
+interface SysPermissionsRouteChildren {
+  SysPermissionsIndexRoute: typeof SysPermissionsIndexRoute
+}
+
+const SysPermissionsRouteChildren: SysPermissionsRouteChildren = {
+  SysPermissionsIndexRoute: SysPermissionsIndexRoute,
+}
+
+const SysPermissionsRouteWithChildren = SysPermissionsRoute._addFileChildren(
+  SysPermissionsRouteChildren,
+)
+
+interface SysRolesRouteChildren {
+  SysRolesIndexRoute: typeof SysRolesIndexRoute
+  SysRolesRoleIdPermissionsRoute: typeof SysRolesRoleIdPermissionsRoute
+}
+
+const SysRolesRouteChildren: SysRolesRouteChildren = {
+  SysRolesIndexRoute: SysRolesIndexRoute,
+  SysRolesRoleIdPermissionsRoute: SysRolesRoleIdPermissionsRoute,
+}
+
+const SysRolesRouteWithChildren = SysRolesRoute._addFileChildren(
+  SysRolesRouteChildren,
+)
+
+interface SysUsersUserIdRouteChildren {
+  SysUsersUserIdRolesRoute: typeof SysUsersUserIdRolesRoute
+  SysUsersUserIdIndexRoute: typeof SysUsersUserIdIndexRoute
+}
+
+const SysUsersUserIdRouteChildren: SysUsersUserIdRouteChildren = {
+  SysUsersUserIdRolesRoute: SysUsersUserIdRolesRoute,
+  SysUsersUserIdIndexRoute: SysUsersUserIdIndexRoute,
+}
+
+const SysUsersUserIdRouteWithChildren = SysUsersUserIdRoute._addFileChildren(
+  SysUsersUserIdRouteChildren,
+)
+
+interface SysUsersRouteChildren {
+  SysUsersUserIdRoute: typeof SysUsersUserIdRouteWithChildren
+  SysUsersNewRoute: typeof SysUsersNewRoute
+  SysUsersIndexRoute: typeof SysUsersIndexRoute
+}
+
+const SysUsersRouteChildren: SysUsersRouteChildren = {
+  SysUsersUserIdRoute: SysUsersUserIdRouteWithChildren,
+  SysUsersNewRoute: SysUsersNewRoute,
+  SysUsersIndexRoute: SysUsersIndexRoute,
+}
+
+const SysUsersRouteWithChildren = SysUsersRoute._addFileChildren(
+  SysUsersRouteChildren,
+)
+
+interface SysRouteChildren {
+  SysConfigsRoute: typeof SysConfigsRouteWithChildren
+  SysDictionariesRoute: typeof SysDictionariesRouteWithChildren
+  SysMenusRoute: typeof SysMenusRouteWithChildren
+  SysPermissionsRoute: typeof SysPermissionsRouteWithChildren
+  SysProfileRoute: typeof SysProfileRoute
+  SysRolesRoute: typeof SysRolesRouteWithChildren
+  SysUsersRoute: typeof SysUsersRouteWithChildren
+  SysWorkflowDesignerRoute: typeof SysWorkflowDesignerRoute
+}
+
+const SysRouteChildren: SysRouteChildren = {
+  SysConfigsRoute: SysConfigsRouteWithChildren,
+  SysDictionariesRoute: SysDictionariesRouteWithChildren,
+  SysMenusRoute: SysMenusRouteWithChildren,
+  SysPermissionsRoute: SysPermissionsRouteWithChildren,
+  SysProfileRoute: SysProfileRoute,
+  SysRolesRoute: SysRolesRouteWithChildren,
+  SysUsersRoute: SysUsersRouteWithChildren,
+  SysWorkflowDesignerRoute: SysWorkflowDesignerRoute,
+}
+
+const SysRouteWithChildren = SysRoute._addFileChildren(SysRouteChildren)
 
 interface PProjectKeyBoardsRouteChildren {
   PProjectKeyBoardsBoardIdRoute: typeof PProjectKeyBoardsBoardIdRoute
@@ -1255,13 +1759,24 @@ const PProjectKeyRouteWithChildren = PProjectKeyRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  R403Route: R403Route,
   InboxRoute: InboxRoute,
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
   ProjectsRoute: ProjectsRoute,
+  SysRoute: SysRouteWithChildren,
   PProjectKeyRoute: PProjectKeyRouteWithChildren,
   ProjectsNewRoute: ProjectsNewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

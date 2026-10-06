@@ -25,6 +25,7 @@ export * from './trace-types';
 // 以下 4 个名字在 requirement-types（P2）与 trace-types（P3）中各自定义且语义不同；
 // 显式指定 barrel 导出 P2 版本（保持 P2 主干行为），P3 代码按既有方式从 '@/lib/api/trace-types' 直接导入其版本。
 export type { AlmObjectKey, RequirementImpact, RequirementTrace, TraceNodeSummary } from './requirement-types';
+export * from './system-types';
 export * from './client';
 export { authApi } from './auth';
 export { projectApi } from './project';
@@ -43,4 +44,5 @@ export { sprintApi } from './sprint';
 export { taskDependencyApi } from './task-dependency';
 export { ganttApi, milestoneApi } from './gantt';
 export { requirementTraceApi, traceabilityRelationApi } from './trace';
+export { systemApi } from './system';
 export { useAuthStore } from './auth-store';

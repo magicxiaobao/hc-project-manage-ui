@@ -8,8 +8,12 @@ function PendingPage() {
   return <ContentSkeleton pathname={pathname} />;
 }
 
+import { createQueryClient } from '@/lib/query/client';
 export function getRouter() {
+  const queryClient = createQueryClient();
   return createRouter({
+    context: { queryClient },
+    defaultPreloadStaleTime: 0,
     routeTree,
     defaultErrorComponent: AppErrorComponent,
     defaultPendingComponent: PendingPage,

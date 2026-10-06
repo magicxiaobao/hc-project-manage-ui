@@ -4,7 +4,7 @@
  * 设计：
  * - `useUnsavedChangesGuard(dirty)`：给一个表单接未保存拦截，返回
  *   `{ guard, dialog, blocker, markClean, cancelConfirm }`。
- *   - `blocker`：渲染在整页表单里，拦截 TanStack Router 的路由跳转，
+ *   `{ guard, dialog, blocker, markClean }`。 *   - `blocker`：渲染在整页表单里，拦截 TanStack Router 的路由跳转，
  *     并通过 enableBeforeUnload 拦截浏览器刷新/关闭标签页。
  *   - `guard(action)`：包裹用户主动的离开动作（取消按钮、弹窗的 X/遮罩/Esc）。
  *     表单干净时直接执行 action；脏时弹出确认框。
@@ -153,7 +153,6 @@ export function useUnsavedChangesGuard(dirty: boolean) {
     setConfirming(false);
     pendingRef.current = null;
   }, []);
-
   /** 提交成功后调用：放行随后的程序化跳转（state 回落前的 ref 级别放行） */
   const markClean = useCallback(() => {
     // P2：必须按当前 dirty 置位，不能无条件 true。干净表单直接保存时 dirty
@@ -184,4 +183,4 @@ export function useUnsavedChangesGuard(dirty: boolean) {
   const blocker = <RouteBlocker shouldBlockFn={shouldBlock} />;
 
   return { guard, dialog, blocker, markClean, cancelConfirm };
-}
+  return { guard, dialog, blocker, markClean };}

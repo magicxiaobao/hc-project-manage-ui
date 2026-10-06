@@ -2773,3 +2773,35 @@ describe('发布环境 API 契约', () => {
     expect(init.method).toBe('GET');
   });
 });
+
+describe('动态权限 HTTP 契约', () => {
+  it('login.userInfo.authorities 与 me.authorities 使用真实字符串数组', async () => {
+    memStore.set('token', 'user-token');
+    const userInfo = { userId: '7', userName: 'u', cnName: null, extraInfo: {}, roles: ['admin'], authorities: ['exact:view'] };
+    const fetchMock = mockFetchSequence([
+      { body: { code: 1, msg: 'ok', result: { token: 'login-token', refreshToken: 'refresh', userInfo } } },
+      { body: { code: 1, msg: 'ok', result: { ...userInfo, authorities: ['new:view'] } } },
+    ]);
+    expect((await authApi.login({ username: 'u', password: 'p' })).userInfo.authorities).toEqual(['exact:view']);
+    expect((await authApi.getCurrentUser()).authorities).toEqual(['new:view']);
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(url).toBe('/api/auth/v1/me'); expect(init.method).toBe('GET'); expect(init.body).toBeUndefined();
+    expect(new Headers(init.headers).get('token')).toBe('user-token');
+  });
+  it('刷新令牌响应不虚构 authorities 或 userInfo', async () => {
+    mockFetchSequence([{ body: { code: 1, msg: 'ok', result: { token: 'new', expireSec: 1, userId: 7, refreshToken: 'r', refreshExpire: 2 } } }]);
+    const refreshed = await authApi.refreshToken('r', '7');
+    expect(refreshed).not.toHaveProperty('userInfo'); expect(refreshed).not.toHaveProperty('authorities');
+  });
+  it('明确权限拒绝通知刷新；403 不作为未登录，旧代际拒绝不通知', async () => {
+    const client = createApiClient({ baseUrl: '/api' });
+    const denied = vi.fn(); const invalidated = vi.fn(); let generation = 1;
+    client.setPermissionDeniedHandler(denied); client.setSessionInvalidator(invalidated); client.setSessionGenerationReader(() => generation);
+    mockFetchSequence([{ status: 403, body: { code: 10011, msg: 'denied', result: null } }, { body: { code: 10011, msg: 'denied', result: null } }]);
+    await expect(client.get('/protected')).rejects.toThrow();
+    await expect(client.get('/protected')).rejects.toThrow();
+    expect(denied).toHaveBeenCalledTimes(2); expect(invalidated).not.toHaveBeenCalled();
+    vi.stubGlobal('fetch', vi.fn(async () => { generation++; return new Response(JSON.stringify({ code: 10011, msg: 'denied', result: null }), { status: 403 }); }));
+    await expect(client.get('/protected')).rejects.toThrow(); expect(denied).toHaveBeenCalledTimes(2);  });
+});
+

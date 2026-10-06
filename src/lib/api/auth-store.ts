@@ -4,6 +4,7 @@
  * 以便将来与老前端共存/灰度时互认登录态。
  */
 import { create } from 'zustand';
+import { resetAccess } from '../access/store';
 import {
   AUTH_EXPIRED_CODES,
   ApiBusinessError,
@@ -53,7 +54,8 @@ function getPersistedUser(): AuthenticatedUser | null {
       isCanonicalUserId(user.userId) &&
       typeof user.userName === 'string' &&
       isDisplayName(user.cnName) &&
-      Array.isArray(user.roles)
+      Array.isArray(user.roles) && user.roles.every((role) => typeof role === 'string') &&
+      Array.isArray(user.authorities) && user.authorities.every((code) => typeof code === 'string')
       ? user
       : null;
   } catch {
@@ -90,6 +92,7 @@ interface AuthState {
   isAuthenticated: boolean;
   /** 从 localStorage 恢复登录态（页面刷新后调用） */
   hydrate: () => void;
+  acceptVerifiedUser: (user: AuthenticatedUser, generation: number) => void;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   /** 供 HTTP 客户端 401 时调用：刷新访问令牌，成功返回 true */
@@ -107,6 +110,8 @@ interface AuthState {
  * 丢弃“登出后才返回”的刷新结果，避免并发时序把已登出的用户重新置为登录态。
  */
 let sessionGeneration = 0;
+export const getSessionGeneration = () => sessionGeneration;
+let verifiedGeneration: number | null = null;
 
 /**
  * 刷新失效归因（Codex review 4175724992）：最近一次因 refresh token 被拒绝
@@ -135,6 +140,17 @@ export function shouldHydrateOnStorageEvent(key: string | null): boolean {
   return key === null || key === USER_INFO_STORAGE_KEY;
 }
 
+/**
+ * 系统管理员判定（与后端对齐）。
+ *
+ * 后端 UserController 类级 `@PreAuthorize("hasAuthority('system:admin')")`
+ * （project-manage-system-biz UserController.java:55），系统管理域接口要求
+ * authorities 包含 'system:admin'。路由资格消费已验证权限快照；此函数仅用于管理员 API 的条件。
+ */
+export function hasSystemAdmin(authorities: readonly string[] | null | undefined): boolean {
+  return (authorities ?? []).includes('system:admin');
+}
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   token: null,
@@ -154,9 +170,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       if (prevUser && prevUser.userId !== user.userId) {
         // 顺带递增会话代际：丢弃旧会话在途的 token 刷新结果，防止它覆盖新账号凭证。
         sessionGeneration += 1;
+        resetAccess(null, sessionGeneration);
         clearQueryCache();
       }
-      set({ user, token, isAuthenticated: true });
+      set({ user: verifiedGeneration === sessionGeneration && prevUser?.userId === user.userId ? prevUser : user, token, isAuthenticated: true });
       return;
     }
     // 会话残缺：缺 refreshToken 的会话无法刷新。直接恢复它只会得到一个
@@ -173,6 +190,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     // 清查询缓存、重置 store。页面初始加载时内存无用户，不会误触发。
     if (get().user && (!token || !refreshToken || !user)) {
       sessionGeneration += 1;
+      resetAccess(null, sessionGeneration);
       clearQueryCache();
       set({ user: null, token: null, isAuthenticated: false });
     }
@@ -181,9 +199,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
   },
 
+  acceptVerifiedUser: (user, generation) => {
+    if (generation !== sessionGeneration || !get().isAuthenticated || get().user?.userId !== user.userId) return;
+    verifiedGeneration = generation;
+    writeStorage(USER_INFO_STORAGE_KEY, JSON.stringify(user));
+    set({ user });
+  },
+
   login: async (username: string, password: string) => {
     const res = await authApi.login({ username, password });
     sessionGeneration += 1;
+    resetAccess(null, sessionGeneration);
     persistLogin(res.token, res.refreshToken, res.userInfo);
     // 换账号/重新登录：旧用户的查询缓存必须作废，避免 B 看到 A 的数据。
     clearQueryCache();
@@ -193,6 +219,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   logout: async () => {
     // 先递增代际：使正在进行的刷新完成后被丢弃，不会恢复已登出的会话
     sessionGeneration += 1;
+    resetAccess(null, sessionGeneration);
     const refreshToken = readStorage(REFRESH_TOKEN_STORAGE_KEY);
     // 先清本地、再调后端：即使用户在吊销请求返回前关闭标签页，会话也不会残留。
     // 后端吊销凭请求体中的 refreshToken（持有即吊销，不依赖访问令牌头），顺序调换安全。
@@ -218,7 +245,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       const res = await authApi.refreshToken(refreshToken, user.userId);
       // 登出/login 已发生：丢弃本次刷新结果，不恢复凭证
       if (generation !== sessionGeneration) return false;
-      const nextUser: AuthenticatedUser = { ...user, userId: res.userId };
+      if (res.userId !== user.userId) throw new HttpResponseError('刷新响应用户不匹配', 401);
+      const nextUser: AuthenticatedUser = { ...(get().user ?? user), userId: res.userId };
       persistLogin(res.token, res.refreshToken, nextUser);
       set({ user: nextUser, token: res.token, isAuthenticated: true });
       return true;
@@ -233,6 +261,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         // B 登录后 hydrate() 时 prevUser 为 null 会跳过缓存清理（4175472562
         // 的条件要求内存有用户），B 会直接命中 A 的旧缓存。
         sessionGeneration += 1;
+        resetAccess(null, sessionGeneration);
         // Codex review 4175724992：记录这次使会话失效的刷新所观察到的代际，
         // 供客户端归因——代际变化正是由本次请求的刷新尝试驱动的，失效属于
         // 当前会话，客户端仍需通知登录失效（跳转 /login），而不是按“旧会话
@@ -249,6 +278,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   invalidateSessionFromClient: () => {
     // 先递增代际：在途的刷新完成时核对到代际已变化，丢弃刷新结果，不复活已失效的会话
     sessionGeneration += 1;
+    resetAccess(null, sessionGeneration);
     clearStoredAuth();
     // 会话失效同样作废查询缓存：后续登录的账号从干净状态开始。
     clearQueryCache();

@@ -21,12 +21,7 @@ export {
   VersionSelect,
 } from "@/components/biz/field-selects";
 export { FilterCheckbox } from "@/components/biz/filter-checkbox";
-export {
-  DiscardConfirmDialog,
-  FieldError,
-  RequiredMark,
-  useUnsavedChangesGuard,
-} from "@/components/biz/form-guard";
+
 export { IssueCard } from "@/components/biz/issue-card";
 export { IssueDialog } from "@/components/biz/issue-dialog";
 export { BoardFilterBar, ListFilterBar } from "@/components/biz/issue-filters";
@@ -37,6 +32,12 @@ export { IssueTypeIcon } from "@/components/biz/issue-type-icon";
 export { KanbanBoard } from "@/components/biz/kanban-board";
 export { KanbanColumn } from "@/components/biz/kanban-column";
 export { LabeledField } from "@/components/biz/labeled-field";
+export {
+  DiscardConfirmDialog,
+  FieldError,
+  RequiredMark,
+  useUnsavedChangesGuard,
+} from "@/components/biz/form-guard";
 export { Loading, Spinner } from "@/components/biz/loading";
 export { MineList } from "@/components/biz/mine-list";
 export { NoticePanel } from "@/components/biz/notice-panel";
@@ -60,3 +61,8 @@ export { StateAction } from "@/components/biz/state-action";
 export { SeverityChip, SprintStateChip, StateChip, StatusChip, VersionStatusChip } from "@/components/biz/status-chip";
 export { TransitionBar } from "@/components/biz/transition-bar";
 export { VersionCard } from "@/components/biz/version-card";
+
+export { PermButton } from "./perm-button";
+export type { PermButtonProps } from "./perm-button";
+export { RegisteredButtons } from "./registered-buttons";
+export type { RegisteredButtonsProps } from "./registered-buttons";
