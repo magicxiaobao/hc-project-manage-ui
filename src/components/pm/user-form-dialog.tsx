@@ -361,7 +361,7 @@ export function UserFormDialog({
         if (stale()) return;
         toast.success(`用户已创建（#${id}）`);
       } else {
-        await updateUser.mutateAsync(buildUserUpdatePayload(userId, snapshot));
+        await updateUser.mutateAsync(buildUserUpdatePayload(userId, snapshot, detail.data ?? null));
         if (stale()) return;
         toast.success("用户已更新");
       }

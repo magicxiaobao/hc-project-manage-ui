@@ -19,8 +19,8 @@ import type { UserCreatePayload, UserResponse, UserUpdatePayload } from './api/s
  *   判为"密码不能为空"而抛错，故编辑留空时载荷必须省略 password（不能传 ""）。
  * - createUser 不传 status/enabled/admin/roles/memo（checklist 约定；后端
  *   UserCreator.init() 会自行初始化有效状态）。
- * - 编辑时清空可选字段不会真正清空：后端 updater 忽略 null 字段，属后端契约
- *   限制，前端如实透传即可。
+ * - 编辑时显式清空原本有值的可选文本字段传 ""，后端 updater 会应用空串；
+ *   原始为空且输入仍为空时传 null，后端忽略该字段（不修改）。
  * - username 3–20 字符是 checklist 约定（后端 DTO 无长度校验，DB 列为
  *   VARCHAR(50)）；email/phone 格式校验为前端约定（后端无校验）。
  * - 部门/岗位：后端只有 UserDTO 上的透传字段，无 CRUD 端点，表单只做直输
@@ -157,21 +157,28 @@ export function buildUserCreatePayload(input: UserFormInput): UserCreatePayload 
  * 构建更新载荷：password 留空时省略（undefined → JSON 丢弃，后端按 null 处理，
  * updater 忽略 null 字段 = 不修改；绝不能传 ""，否则后端判"密码不能为空"）。
  */
-export function buildUserUpdatePayload(id: number, input: UserFormInput): UserUpdatePayload {
+export function buildUserUpdatePayload(
+  id: number,
+  input: UserFormInput,
+  original?: Pick<UserResponse, 'cnName' | 'email' | 'phone' | 'departmentName'> | null | undefined,
+): UserUpdatePayload {
+  const updateText = (text: string, originalValue: string | null | undefined): string | null =>
+    originalValue?.trim() && !text.trim() ? '' : emptyToNull(text);
+
   return {
     id,
     username: input.username.trim(),
     password: input.password ? input.password : undefined,
-    cnName: emptyToNull(input.cnName),
-    email: emptyToNull(input.email),
-    phone: emptyToNull(input.phone),
+    cnName: updateText(input.cnName, original?.cnName),
+    email: updateText(input.email, original?.email),
+    phone: updateText(input.phone, original?.phone),
     departmentId: input.departmentIdText.trim()
       ? parseRequiredPositiveInt(input.departmentIdText)
       : null,
     positionId: input.positionIdText.trim()
       ? parseRequiredPositiveInt(input.positionIdText)
       : null,
-    departmentName: emptyToNull(input.departmentName),
+    departmentName: updateText(input.departmentName, original?.departmentName),
   };
 }
 

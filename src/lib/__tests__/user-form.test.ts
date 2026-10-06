@@ -170,6 +170,70 @@ describe('buildUserUpdatePayload', () => {
     const payload = buildUserUpdatePayload(42, input({ username: 'bob', password: 'newpass99' }));
     expect(payload.password).toBe('newpass99');
   });
+
+  const original = {
+    cnName: '鲍勃',
+    email: 'bob@example.com',
+    phone: '13800138000',
+    departmentName: '研发部',
+  };
+
+  it.each(['cnName', 'email', 'phone', 'departmentName'] as const)(
+    '原始 %s 有值，显式清空传空字符串，其余字段保持原值',
+    (field) => {
+      for (const cleared of ['', '   ']) {
+        const payload = buildUserUpdatePayload(
+          42,
+          input({ username: 'bob', ...original, [field]: cleared }),
+          original,
+        );
+        expect(payload).toMatchObject({ ...original, [field]: '' });
+        expect(payload.password).toBeUndefined();
+        expect(payload.departmentId).toBeNull();
+        expect(payload.positionId).toBeNull();
+      }
+    },
+  );
+
+  it.each([null, '', '   '])('原始文本字段为空（%j），输入清空仍传 null', (empty) => {
+    const payload = buildUserUpdatePayload(
+      42,
+      input({ username: 'bob', cnName: '', email: '   ', phone: '', departmentName: '   ' }),
+      { cnName: empty, email: empty, phone: empty, departmentName: empty },
+    );
+    expect(payload).toMatchObject({ cnName: null, email: null, phone: null, departmentName: null });
+  });
+
+  it('输入未改，与 original 相同时传原值', () => {
+    const payload = buildUserUpdatePayload(42, input({ username: 'bob', ...original }), original);
+    expect(payload).toMatchObject(original);
+  });
+
+  it('caller 传 null original 时沿用原有 trim/空转 null 语义', () => {
+    const snapshot = input({
+      username: '  bob  ',
+      cnName: '  鲍勃  ',
+      email: '   ',
+      phone: ' 13800138000 ',
+      departmentName: '',
+      departmentIdText: ' 3 ',
+      positionIdText: '',
+    });
+    const payload = buildUserUpdatePayload(42, snapshot, null);
+    expect(payload).toEqual({
+      id: 42,
+      username: 'bob',
+      password: undefined,
+      cnName: '鲍勃',
+      email: null,
+      phone: '13800138000',
+      departmentId: 3,
+      positionId: null,
+      departmentName: null,
+    });
+    expect(payload).toEqual(buildUserUpdatePayload(42, snapshot));
+    expect(payload).toEqual(buildUserUpdatePayload(42, snapshot, undefined));
+  });
 });
 
 describe('isUsernameTaken', () => {
