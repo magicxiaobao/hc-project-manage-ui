@@ -258,6 +258,8 @@ export function canAccess(snapshot: AccessSnapshot, path: string): boolean {
   if (!target || snapshot.status !== "ready" || !snapshot.userId || target.page.available === false)
     return false;
   if (target.page.policy === "authenticated") return true;
+  // policy "demo"（/projects、/projects/new）：未登录已在 guard 放行；
+  // 登录态按菜单授权口径处理（与改 policy 前一致）。
   if (target.page.route.startsWith("/sys/") && snapshot.authorities.has("system:admin"))
     return true;
   return accessCandidates(snapshot, target).some((entry) => entry.granted);

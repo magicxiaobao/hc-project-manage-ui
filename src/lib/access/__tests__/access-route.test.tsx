@@ -221,6 +221,47 @@ describe("guardAccess 直接调用", () => {
     }
     expect(refreshAccessMock).not.toHaveBeenCalled();
   });
+  it("未登录访问演示路由 /projects → 放行（不跳登录、不拉权限快照）", async () => {
+    signOut();
+    await expect(
+      guardAccess({ location: { pathname: "/projects", href: "/projects" }, queryClient }),
+    ).resolves.toBeUndefined();
+    expect(refreshAccessMock).not.toHaveBeenCalled();
+  });
+
+  it("未登录访问演示路由 /projects/new → 放行", async () => {
+    signOut();
+    await expect(
+      guardAccess({ location: { pathname: "/projects/new", href: "/projects/new" }, queryClient }),
+    ).resolves.toBeUndefined();
+    expect(refreshAccessMock).not.toHaveBeenCalled();
+  });
+
+  it("未登录访问非演示业务路由 → 仍跳登录", async () => {
+    signOut();
+    let error: unknown;
+    try {
+      await guardAccess({ location: { pathname: "/workbench", href: "/workbench" }, queryClient });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(isRedirect(error)).toBe(true);
+    expect(error).toMatchObject({ options: { to: "/login" } });
+  });
+
+  it("已登录访问演示路由 → 仍走权限快照校验", async () => {
+    signIn([]);
+    let error: unknown;
+    try {
+      await guardAccess({ location: { pathname: "/projects", href: "/projects" }, queryClient });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(refreshAccessMock).toHaveBeenCalled();
+    expect(isRedirect(error)).toBe(true);
+    expect(error).toMatchObject({ options: { to: "/403" } });
+  });
+
   it("/ 按授权 landing 调度；无可访问页 → /403", async () => {
     signIn(["sys:user:view"]);
     let error: unknown;

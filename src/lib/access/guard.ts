@@ -43,12 +43,19 @@ export async function guardAccess({
   const page = matchPage(path);
   if (path === "/sys") return; // Outlet-only initialization shell, no business page.
   if (!page && path !== "/" && !registeredPage) throw notFound();
-  if (!useAuthStore.getState().isAuthenticated)
+  if (!useAuthStore.getState().isAuthenticated) {
+    // Codex review 4194259271：演示路由（policy "demo"）未登录时放行——
+    // 组件自行按登录态渲染演示/真实分支（/projects 的 DemoProjectList、
+    // /projects/new 的 DemoCreateProject），不再无条件跳登录。
+    // 登录态仍走下面的 refreshAccess + canAccess 校验（demo 在 canAccess
+    // 里按菜单授权口径处理，与改 policy 前一致）。
+    if (page?.page.policy === "demo") return;
     throw redirect({
       to: "/login",
       search: { redirect: resolvePostLoginTarget(location.href) },
       replace: true,
     });
+  }
   const snapshot = await refreshAccess({ queryClient });
   if (path === "/") throw redirect({ href: landingPath(snapshot) ?? "/403", replace: true });
   if (!canAccess(snapshot, path)) throw redirect({ to: "/403", replace: true });

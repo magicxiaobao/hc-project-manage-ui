@@ -4,7 +4,13 @@ type PagePath = keyof FileRoutesByFullPath;
 export interface PagePolicy {
   route: PagePath;
   title: string;
-  policy: "menu" | "authenticated";
+  /**
+   * - "menu": 需要菜单授权（默认业务页）
+   * - "authenticated": 仅需登录
+   * - "demo": 演示路由——未登录时守卫放行、组件自行渲染演示分支
+   *   （登录态仍走菜单授权，与 "menu" 口径一致）
+   */
+  policy: "menu" | "authenticated" | "demo";
   aliases?: readonly string[];
   inherits?: PagePath;
   available?: boolean;
@@ -20,8 +26,10 @@ export const routeManifest: readonly PagePolicy[] = [
   { route: "/notifications", title: "通知中心", policy: "authenticated" },
   { route: "/worklogs", title: "工时管理", policy: "authenticated" },
   { route: "/worklogs/analytics", title: "工时统计", policy: "authenticated", inherits: "/worklogs" },
-  { route: "/projects", title: "项目", policy: "menu" },
-  { route: "/projects/new", title: "新建项目", policy: "menu", inherits: "/projects" },
+  // Codex review 4194259271：演示路由——未登录时渲染 DemoProjectList /
+  // DemoCreateProject（README 文档化“未登录时仍为演示数据”），守卫不强制跳登录。
+  { route: "/projects", title: "项目", policy: "demo" },
+  { route: "/projects/new", title: "新建项目", policy: "demo", inherits: "/projects" },
   { route: "/sys/users/", title: "用户管理", policy: "menu", aliases: ["/system/user"] },
   { route: "/sys/users/new", title: "新增用户", policy: "menu", inherits: "/sys/users/" },
   { route: "/sys/users/$userId/", title: "编辑用户", policy: "menu", inherits: "/sys/users/" },

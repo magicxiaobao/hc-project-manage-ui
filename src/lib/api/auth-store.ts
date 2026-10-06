@@ -5,6 +5,10 @@
  */
 import { create } from 'zustand';
 import { resetAccess } from '../access/store';
+// 注意：access/service 已依赖本模块（useAuthStore/getSessionGeneration），这里再
+// 引用它的 requestAccessRefresh 会形成模块循环。双方在模块求值期都不访问对方的
+// 绑定（仅在运行时函数体内调用），ESM 下是安全的；hydrate 内的调用点见下。
+import { requestAccessRefresh } from '../access/service';
 import {
   AUTH_EXPIRED_CODES,
   ApiBusinessError,
@@ -151,6 +155,18 @@ export function hasSystemAdmin(authorities: readonly string[] | null | undefined
   return (authorities ?? []).includes('system:admin');
 }
 
+/** 权限集合相等比较（顺序无关）：跨 tab /me 刷新只改 authorities 时判定快照是否过期。 */
+function sameAuthoritySet(
+  a: readonly string[] | null | undefined,
+  b: readonly string[] | null | undefined,
+): boolean {
+  const x = a ?? [];
+  const y = b ?? [];
+  if (x.length !== y.length) return false;
+  const set = new Set(x);
+  return y.every((code) => set.has(code));
+}
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   token: null,
@@ -173,7 +189,22 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         resetAccess(null, sessionGeneration);
         clearQueryCache();
       }
-      set({ user: verifiedGeneration === sessionGeneration && prevUser?.userId === user.userId ? prevUser : user, token, isAuthenticated: true });
+      // Codex review 4194259260：同一用户的 authorities 可能被另一 tab 的 /me
+      // 刷新改写——acceptVerifiedUser 会把刷新后的 user 写回 USER_INFO_STORAGE_KEY，
+      // 接收 tab 的 storage 事件走 hydrate() 到这里。若内存与存储的权限不一致，
+      // 立即请求一次权限快照刷新（经 /me 拉取真相），而不是等到下一次 focus/
+      // 超时/拒绝——否则路由/按钮权限过期。
+      // 注意与既有不变量的张力（service.test.ts「已验证 authorities 不被
+      // hydrate 覆盖」）：内存用户是本 tab 已验证的（verifiedGeneration 对齐），
+      // 存储数据未必经过验证（如另一 tab 的 token 刷新会把它的内存旧权限
+      // persistLogin 写回存储）。因此内存优先保留，只用刷新来对账，
+      // 绝不直接用存储数据覆盖已验证的内存用户。
+      const sameUser =
+        verifiedGeneration === sessionGeneration && prevUser?.userId === user.userId;
+      const authoritiesChanged =
+        sameUser && !sameAuthoritySet(prevUser?.authorities, user.authorities);
+      set({ user: sameUser ? prevUser : user, token, isAuthenticated: true });
+      if (authoritiesChanged) requestAccessRefresh('cross-tab-authority-change');
       return;
     }
     // 会话残缺：缺 refreshToken 的会话无法刷新。直接恢复它只会得到一个
