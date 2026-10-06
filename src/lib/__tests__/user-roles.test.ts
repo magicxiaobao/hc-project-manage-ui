@@ -6,6 +6,7 @@ import {
   buildAssignRoleIds,
   extractEnabledRoleIds,
   extractRoleIds,
+  filterRoleCandidates,
   guardedToggleSelection,
   isSaveSessionValid,
   isSelectionEditable,
@@ -416,5 +417,18 @@ describe('r20-1 回归：LIKE-OR 漏入的禁用角色不污染正向启用证�
       searchUpdatedAt: 4000,
     });
     expect(merged).toEqual([1, 2, 9]);
+  });
+});
+
+describe("filterRoleCandidates", () => {
+  test("搜索漏入的禁用非 kept 角色不进入候选；kept 继续只读保留", () => {
+    const candidates = filterRoleCandidates(
+      [role(1), role(2, { enabled: false }), role(9, { enabled: false })],
+      new Set([9]),
+    );
+    expect(candidates.map((role) => role.id)).toEqual([1, 9]);
+    const selected = candidates.filter((role) => role.enabled === true).map((role) => role.id);
+    expect(buildAssignRoleIds({ selected, current: [9], optionIds: [1] })).toEqual([1, 9]);
+    expect(filterRoleCandidates([role(2, { enabled: false })], new Set())).toEqual([]);
   });
 });

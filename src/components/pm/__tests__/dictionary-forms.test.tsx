@@ -245,6 +245,11 @@ beforeEach(() => {
   }
   mocks.list.data = { list: [row()], total: 21, pageNumber: 1, pageSize: 10 };
   mocks.detail.data = row();
+  mocks.client.setQueryData(
+    queryKeys.system.list({ kind: "dictionaryDetail", dictionaryId: 1 }),
+    mocks.detail.data,
+    { updatedAt: 1 },
+  );
   mocks.items.data = [item()];
   mocks.itemDetail.data = item();
   mocks.hash.data = "h";
@@ -633,4 +638,61 @@ it("项后台更新不覆盖 JSON 草稿；预检期间详情版本变化禁止�
   expect(
     nodes(h.tree).find((node) => node.props["aria-label"] === "附加属性 JSON")?.props.value,
   ).toBe('{"draft":true}');
+});
+
+it("字典 dirty 草稿遇后台更新后禁止保存；关闭重开建立新基线后放行", async () => {
+  let open = true;
+  const h = mount(() => DictionaryFormDialog({ open, dictionaryId: 1, onClose() {} }));
+  change(h.tree, "名称", "draft title");
+  h.render();
+  mocks.detail.data = { ...row(), memo: "server memo" };
+  mocks.detail.dataUpdatedAt = 2;
+  mocks.client.setQueryData(
+    queryKeys.system.list({ kind: "dictionaryDetail", dictionaryId: 1 }),
+    mocks.detail.data,
+    { updatedAt: 2 },
+  );
+  h.render();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(textOf(h.tree)).toContain("字典信息在后台有更新，请复核后重试");
+  expect(nodes(h.tree).find((node) => node.props["aria-label"] === "名称")?.props.value).toBe(
+    "draft title",
+  );
+  open = false;
+  h.render();
+  open = true;
+  h.render();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.update).toHaveBeenCalledWith({
+    id: 1,
+    title: "字典1",
+    valueType: 2,
+    memo: "server memo",
+  });
+});
+
+it("字典 clean 表单后台 refill 同步基线版本，允许保存最新字段", async () => {
+  const h = mount(() => DictionaryFormDialog({ open: true, dictionaryId: 1, onClose() {} }));
+  mocks.detail.data = { ...row(), memo: "server memo" };
+  mocks.detail.dataUpdatedAt = 2;
+  mocks.client.setQueryData(
+    queryKeys.system.list({ kind: "dictionaryDetail", dictionaryId: 1 }),
+    mocks.detail.data,
+    { updatedAt: 2 },
+  );
+  h.render();
+  expect(textOf(h.tree)).toContain("已同步最新字典信息");
+  change(h.tree, "名称", "reviewed title");
+  h.render();
+  button(h.tree, "保存").onPress();
+  await settle(h);
+  expect(mocks.update).toHaveBeenCalledWith({
+    id: 1,
+    title: "reviewed title",
+    valueType: 2,
+    memo: "server memo",
+  });
 });

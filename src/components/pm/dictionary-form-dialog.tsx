@@ -58,6 +58,7 @@ export function DictionaryFormDialog({
   const current = useRef(form);
   const baseline = useRef<DictionaryFormInput | null>(open && isCreate ? form : null);
 
+  const baselineVersionRef = useRef<number | null>(null);
   const seenVersion = useRef<number | null>(null);
   const [errors, setErrors] = useState<DictionaryFormErrors>({});
   const [submitError, setSubmitError] = useState("");
@@ -78,6 +79,7 @@ export function DictionaryFormDialog({
     current.current = next;
     setForm(next);
     baseline.current = open && isCreate ? next : null;
+    baselineVersionRef.current = null;
 
     seenVersion.current = null;
     busyRef.current = false;
@@ -104,6 +106,7 @@ export function DictionaryFormDialog({
     }
     const next = dictionaryFormFromResponse(detail.data);
     baseline.current = next;
+    baselineVersionRef.current = detail.dataUpdatedAt;
     current.current = next;
     setForm(next);
     setErrors({});
@@ -172,6 +175,13 @@ export function DictionaryFormDialog({
           client.getQueryState(detailKey)?.fetchStatus === "fetching")
       ) {
         setSubmitError("详情在预检期间有更新，请复核后重试");
+        return;
+      }
+      if (
+        !isCreate &&
+        baselineVersionRef.current !== client.getQueryState(detailKey)?.dataUpdatedAt
+      ) {
+        setSubmitError("字典信息在后台有更新，请复核后重试");
         return;
       }
       if (isCreate) await create.mutateAsync(buildDictionaryCreatePayload(submitted));

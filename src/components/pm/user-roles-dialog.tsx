@@ -52,6 +52,7 @@ import {
   buildAssignRoleIds,
   extractEnabledRoleIds,
   extractRoleIds,
+  filterRoleCandidates,
   guardedToggleSelection,
   isSaveSessionValid,
   isSelectionEditable,
@@ -159,7 +160,12 @@ export function UserRolesDialog({
     // r19-2：被门禁拦截的编辑（快照未锁定/保存在途）不清除保存错误——
     // 编辑并未真正生效；只有实际生效的勾选变更才清错（表单 UX 硬约定：
     // 用户编辑该字段时清除其错误）。
-    if (!editable) return;
+    if (
+      !editable ||
+      !options.data?.some((role) => role.id === roleId && role.enabled === true) ||
+      saveRetainedIds.has(roleId)
+    )
+      return;
     setSelected((current) => guardedToggleSelection(current, roleId, editable));
     setSubmitError("");
   };
@@ -224,7 +230,9 @@ export function UserRolesDialog({
     // fullOptions.data 都绝不能做 optionIds，否则基线漂移会凭空产生删除意图。
     const optionIds = fullSnapshot ?? [];
     const roleIds = buildAssignRoleIds({
-      selected,
+      selected: selected.filter(
+        (id) => !options.data?.some((role) => role.id === id && role.enabled === false),
+      ),
       current: initialRef.current ?? [],
       optionIds,
     });
@@ -282,6 +290,7 @@ export function UserRolesDialog({
         )
       : [],
   );
+  const candidates = filterRoleCandidates(options.data ?? [], saveRetainedIds);
   const userName = detail.data?.username ?? detail.data?.cnName ?? null;
   // 候选区错误展示态（r16-4）：后台刷新失败但有缓存时不隐藏列表，
   // 改为警告横幅 + 重试入口；保存仍被 saveReady 禁用，横幅内说明原因。
@@ -399,14 +408,14 @@ export function UserRolesDialog({
                     </Button>
                   </div>
                 ) : null}
-                {(options.data ?? []).length === 0 ? (
+                {candidates.length === 0 ? (
                   <EmptyHint>没有可选角色（只列出已启用的角色）</EmptyHint>
                 ) : (
                   <fieldset className="flex flex-col gap-1 rounded-sm border border-border p-2">
                     <legend className="px-1 text-xs text-default-500">
                       可选角色（只含已启用）
                     </legend>
-                    {(options.data ?? []).map((role) => {
+                    {candidates.map((role) => {
                       // r18：保存保留集合（kept）内的角色只读展示为已勾选——
                       // 取消勾选无法生效时不假装可编辑，承诺与保存语义一致。
                       const retained = saveRetainedIds.has(role.id);

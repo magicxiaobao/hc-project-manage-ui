@@ -74,6 +74,14 @@ export function extractEnabledRoleIds(roles: readonly RoleResponse[]): number[] 
   return roles.filter((role) => role.enabled === true).map((role) => role.id);
 }
 
+/** 候选渲染输入：禁用角色仅在保存自动保留集合内时只读展示。 */
+export function filterRoleCandidates(
+  roles: readonly RoleResponse[],
+  retainedIds: ReadonlySet<number>,
+): RoleResponse[] {
+  return roles.filter((role) => role.enabled === true || retainedIds.has(role.id));
+}
+
 /**
  * 计算保存时实际要提交的 roleIds。
  * - selected：弹窗中用户在候选（仅启用角色）上勾选的 id；
