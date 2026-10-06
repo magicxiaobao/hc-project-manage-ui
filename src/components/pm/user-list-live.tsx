@@ -66,6 +66,7 @@ export function UserListLive() {
   const [page, setPage] = useState(1);
   // 删除二次确认的目标用户
   const [deleteTarget, setDeleteTarget] = useState<UserResponse | null>(null);
+  const [disableTarget, setDisableTarget] = useState<UserResponse | null>(null);
   // 新建/编辑弹窗：userId=null 为新建，否则编辑该用户（p5-user-form）
   const [formTarget, setFormTarget] = useState<{ open: boolean; userId: number | null }>({
     open: false,
@@ -113,11 +114,19 @@ export function UserListLive() {
 
   // r4 P1-2：列表只含 validStatus=VALID 的用户（后端硬编码），"启用"不可达；
   // 只保留"禁用"（invalidUser → validStatus=INVALID），后果在文案中明确。
-  const handleDisable = (user: UserResponse) => {
-    invalidUser.mutate(user.id, {
-      onSuccess: () => notifyPmChange(`已禁用用户 ${user.username ?? user.id}`),
+  const handleDisable = () => {
+    if (!disableTarget) return;
+    const target = disableTarget;
+    invalidUser.mutate(target.id, {
+      onSuccess: () => {
+        notifyPmChange(`已禁用用户 ${target.username ?? target.id}`);
+        setDisableTarget(null);
+      },
       // r4 P2-6：失败分支不用成功语通知，改用 error toast。
-      onError: (err) => toast.error(`禁用失败：${toUserMessage(err)}`),
+      onError: (err) => {
+        toast.error(`禁用失败：${toUserMessage(err)}`);
+        setDisableTarget(null);
+      },
     });
   };
 
@@ -263,7 +272,7 @@ export function UserListLive() {
                           size="sm"
                           variant="ghost"
                           isDisabled={invalidUser.isPending}
-                          onPress={() => handleDisable(user)}
+                          onPress={() => setDisableTarget(user)}
                         >
                           禁用
                         </Button>
@@ -315,6 +324,26 @@ export function UserListLive() {
         userId={formTarget.userId}
         onClose={() => setFormTarget({ open: false, userId: null })}
       />
+
+      <AppModal
+        open={disableTarget != null}
+        title="禁用用户"
+        size="sm"
+        onClose={() => setDisableTarget(null)}
+      >
+        <p className="text-sm">
+          确定要禁用用户 <span className="font-medium">{disableTarget?.username ?? disableTarget?.id}</span> 吗？
+          禁用后该用户将不再出现在列表中，当前无恢复入口。
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onPress={() => setDisableTarget(null)}>
+            取消
+          </Button>
+          <Button variant="danger" isDisabled={invalidUser.isPending} onPress={handleDisable}>
+            确定禁用
+          </Button>
+        </div>
+      </AppModal>
 
       <AppModal
         open={deleteTarget != null}

@@ -21,7 +21,12 @@ export function MenuUserPreview() {
         className="flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          const id = draft.trim() ? Number(draft.trim()) : NaN;
+          const value = draft.trim();
+          if (!/^[1-9]\d*$/.test(value)) {
+            setError("请输入正的安全整数用户 ID");
+            return;
+          }
+          const id = Number(value);
           if (!isMenuId(id)) {
             setError("请输入正的安全整数用户 ID");
             return;

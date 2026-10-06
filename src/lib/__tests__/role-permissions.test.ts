@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PermissionResponse } from "../api/system-types";
 import {
   createPermissionSnapshot,
+  filterMissingNewPermissionIds,
   groupCheckState,
   groupPermissions,
   normalizePermissionIds,
@@ -151,6 +152,28 @@ describe("三态切换和全量替换快照", () => {
     groupPermissions([permission(22)]);
     expect(snapshot.visible).toEqual([11, 12]);
     expect(snapshot.baseline).toEqual([11, 99]);
+  });
+  it("最新候选禁用或删除新选择时剔除，保留仍有效的新选择和已有分配", () => {
+    const snapshot = createPermissionSnapshot(
+      groupPermissions([permission(11), permission(12), permission(13), permission(14)]),
+      [11, 99],
+    );
+    const latestVisible = groupPermissions([
+      permission(11, "系统", { enabled: false }),
+      permission(12, "系统", { enabled: false }),
+      permission(14),
+    ]).flatMap((group) => group.children.map((p) => p.id));
+    const selected = filterMissingNewPermissionIds([11, 12, 13, 14], snapshot.baseline, latestVisible);
+    expect(selected).toEqual([11, 14]);
+    expect(serializePermissionSelection({ ...snapshot, selected })).toEqual([11, 14, 99]);
+    expect(snapshot.selected).toEqual([11]);
+  });
+  it("过滤后仍含快照外的有效 ID 时序列化继续拒绝", () => {
+    const snapshot = createPermissionSnapshot(groups, []);
+    const selected = filterMissingNewPermissionIds([88], snapshot.baseline, [88]);
+    expect(() => serializePermissionSelection({ ...snapshot, selected })).toThrow(
+      "选择包含不在编辑快照中的权限",
+    );
   });
   it("保存后的实际回显创建新的干净基线，之后编辑重新变脏", () => {
     const actual = createPermissionSnapshot(groups, [12, 99]);

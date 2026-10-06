@@ -23,6 +23,29 @@ describe("normalizeInternalPath", () => {
 });
 
 describe("matchPage", () => {
+  it.each([
+    ["boards", "boards", "看板"],
+    ["versions", "versions", "版本"],
+    ["testcases", "testcases", "测试用例"],
+    ["testsuites", "testsuites", "测试套件"],
+    ["release-environments", "release-environments", "发布环境"],
+    ["traceability", "traceability", "追溯矩阵"],
+    ["boards/42", "boards/$boardId", "看板详情", "boards"],
+    ["versions/42", "versions/$versionId", "版本详情", "versions"],
+    ["testcases/42", "testcases/$testCaseId", "测试用例详情", "testcases"],
+    ["testsuites/42", "testsuites/$testSuiteId", "测试套件详情", "testsuites"],
+    ["defects/42", "defects/$defectId", "缺陷详情", "defects"],
+    ["defects/board", "defects/board", "缺陷看板", "defects"],
+    ["sprints/42", "sprints/$sprintId", "冲刺详情", "sprints"],
+    ["releases/42", "releases/$releaseId", "发布详情", "releases"],
+    ["tests/42", "tests/$testRunId", "测试执行详情", "tests"],
+  ])("已注册 live 路由 %s 命中菜单策略及父级继承", (path, route, title, parent?: string) => {
+    const hit = matchPage(`/p/HC/${path}`);
+    expect(hit?.page).toMatchObject({ route: `/p/$projectKey/${route}`, title, policy: "menu" });
+    expect(hit?.page.available).not.toBe(false);
+    expect(hit?.page.inherits).toBe(parent ? `/p/$projectKey/${parent}` : undefined);
+    expect(hit?.params.projectKey).toBe("HC");
+  });
   it("具体静态路径优先于参数路径", () => {
     const hit = matchPage("/sys/users/new");
     expect(hit?.page.route).toBe("/sys/users/new");

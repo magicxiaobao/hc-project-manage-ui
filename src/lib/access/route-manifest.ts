@@ -69,6 +69,66 @@ export const routeManifest: readonly PagePolicy[] = [
     inherits: "/p/$projectKey/issues/",
   },
   { route: "/p/$projectKey/trace", title: "追溯", policy: "menu", aliases: ["/trace"] },
+  { route: "/p/$projectKey/boards", title: "看板", policy: "menu" },
+  { route: "/p/$projectKey/versions", title: "版本", policy: "menu" },
+  { route: "/p/$projectKey/testcases", title: "测试用例", policy: "menu" },
+  { route: "/p/$projectKey/testsuites", title: "测试套件", policy: "menu" },
+  { route: "/p/$projectKey/release-environments", title: "发布环境", policy: "menu" },
+  { route: "/p/$projectKey/traceability", title: "追溯矩阵", policy: "menu" },
+  {
+    route: "/p/$projectKey/boards/$boardId",
+    title: "看板详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/boards",
+  },
+  {
+    route: "/p/$projectKey/versions/$versionId",
+    title: "版本详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/versions",
+  },
+  {
+    route: "/p/$projectKey/testcases/$testCaseId",
+    title: "测试用例详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/testcases",
+  },
+  {
+    route: "/p/$projectKey/testsuites/$testSuiteId",
+    title: "测试套件详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/testsuites",
+  },
+  {
+    route: "/p/$projectKey/defects/$defectId",
+    title: "缺陷详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/defects",
+  },
+  {
+    route: "/p/$projectKey/defects/board",
+    title: "缺陷看板",
+    policy: "menu",
+    inherits: "/p/$projectKey/defects",
+  },
+  {
+    route: "/p/$projectKey/sprints/$sprintId",
+    title: "冲刺详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/sprints",
+  },
+  {
+    route: "/p/$projectKey/releases/$releaseId",
+    title: "发布详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/releases",
+  },
+  {
+    route: "/p/$projectKey/tests/$testRunId",
+    title: "测试执行详情",
+    policy: "menu",
+    inherits: "/p/$projectKey/tests",
+  },
   // Modules with live backend implementations use menu authorization; demo-only modules remain unavailable.
   ...(
     [

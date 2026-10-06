@@ -13,6 +13,7 @@ import {
 } from "@/lib/query";
 import {
   createPermissionSnapshot,
+  filterMissingNewPermissionIds,
   groupPermissions,
   normalizePermissionIds,
   parseRoleId,
@@ -54,6 +55,7 @@ function RolePermissionsSession({ rawRoleId }: { rawRoleId: string }) {
   const [notice, setNotice] = useState("");
   const [verificationError, setVerificationError] = useState("");
   const submittedIds = useRef<number[] | null>(null);
+  const assignmentBaseline = useRef<number[] | null>(null);
   // ref 门禁在事件入口即冻结，防止 React 提交前的连续点击产生两次 POST。
   const busyRef = useRef(false);
   const alive = useRef(true);
@@ -104,6 +106,7 @@ function RolePermissionsSession({ rawRoleId }: { rawRoleId: string }) {
       assigned.isFetching
     )
       return;
+    assignmentBaseline.current = normalizePermissionIds(assigned.data);
     setSnapshot(createPermissionSnapshot(treeView.groups, assigned.data));
     setExpanded(new Set(treeView.groups.map((group) => group.key)));
   }, [
@@ -149,6 +152,7 @@ function RolePermissionsSession({ rawRoleId }: { rawRoleId: string }) {
       if (response.data === undefined) throw new Error("尚未取得权限回显");
       const actual = normalizePermissionIds(response.data);
       setSnapshot(createPermissionSnapshot(groups, actual));
+      assignmentBaseline.current = actual;
       setVerificationError(
         samePermissionIds(expected, actual) ? "" : "已保存权限与本次提交不一致，请核对",
       );
@@ -160,8 +164,30 @@ function RolePermissionsSession({ rawRoleId }: { rawRoleId: string }) {
   const save = async () => {
     if (!editable || !dirty || busyRef.current || !snapshot || roleId === null) return;
     let permissionIds: number[];
+    let removedNotice = "";
     try {
-      permissionIds = serializePermissionSelection(snapshot);
+      if (
+        assignmentBaseline.current === null ||
+        !samePermissionIds(assigned.data ?? [], assignmentBaseline.current)
+      ) {
+        setSubmitError("该角色的权限分配已在别处变更，请重新加载后再操作");
+        return;
+      }
+      const latestVisible = groupPermissions(tree.data ?? []).flatMap((group) =>
+        group.children.map((permission) => permission.id),
+      );
+      const selected = filterMissingNewPermissionIds(
+        snapshot.selected,
+        snapshot.baseline,
+        latestVisible,
+      );
+      permissionIds = serializePermissionSelection({ ...snapshot, selected });
+      if (selected.length < snapshot.selected.length) {
+        setSnapshot({ ...snapshot, selected });
+        removedNotice =
+          "以下权限在编辑期间已失效，已从本次提交中移除：" +
+          snapshot.selected.filter((id) => !selected.includes(id)).join("、");
+      }
     } catch (error) {
       setSubmitError(toUserMessage(error));
       return;
@@ -169,7 +195,7 @@ function RolePermissionsSession({ rawRoleId }: { rawRoleId: string }) {
     busyRef.current = true;
     setOperation("saving");
     setSubmitError("");
-    setNotice("");
+    setNotice(removedNotice);
     setVerificationError("");
     try {
       await assign.mutateAsync({ roleId, permissionIds });
@@ -186,7 +212,7 @@ function RolePermissionsSession({ rawRoleId }: { rawRoleId: string }) {
     submittedIds.current = permissionIds;
     markClean();
     setSnapshot(createPermissionSnapshot(snapshot.groups, permissionIds));
-    setNotice("权限分配成功");
+    setNotice(removedNotice ? `${removedNotice}。权限分配成功` : "权限分配成功");
     setOperation("verifying");
     await verify(permissionIds, snapshot.groups);
     if (alive.current) {
@@ -230,6 +256,7 @@ function RolePermissionsSession({ rawRoleId }: { rawRoleId: string }) {
           if (groups.length === 0) return;
           if (ids.data === undefined) throw new Error("尚未取得权限回显");
           setSnapshot(createPermissionSnapshot(groups, ids.data));
+          assignmentBaseline.current = normalizePermissionIds(ids.data);
           setExpanded(new Set(groups.map((group) => group.key)));
         })
         .catch((error) => {

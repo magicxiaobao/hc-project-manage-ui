@@ -217,7 +217,10 @@ describe("deriveSnapshot 菜单语义", () => {
     expect(canAccess(snapshot, "/sys/users")).toBe(false);
   });
 
-  it.each(["backlog", "defects", "dependencies", "gantt", "releases", "sprints", "tests"])(
+  it.each([
+    "backlog", "defects", "dependencies", "gantt", "releases", "sprints", "tests",
+    "boards", "versions", "testcases", "testsuites", "release-environments", "traceability",
+  ])(
     "已接入真实后端的 %s 模块依菜单授权放行",
     (name) => {
       const path = `/p/HC/${name}`;
@@ -273,6 +276,22 @@ describe("landingPath", () => {
 });
 
 describe("accessCandidates 继承", () => {
+  it.each([
+    ["boards/42", "boards"],
+    ["versions/42", "versions"],
+    ["testcases/42", "testcases"],
+    ["testsuites/42", "testsuites"],
+    ["defects/42", "defects"],
+    ["defects/board", "defects"],
+    ["sprints/42", "sprints"],
+    ["releases/42", "releases"],
+    ["tests/42", "tests"],
+  ])("live 子页面 %s 继承 %s 菜单授权并保持项目约束", (path, parent) => {
+    const menus = [menu({ id: 1, path: `/p/HC/${parent}`, permission: "project:view" })];
+    expect(canAccess(ready(["project:view"], menus), `/p/HC/${path}`)).toBe(true);
+    expect(canAccess(ready([], menus), `/p/HC/${path}`)).toBe(false);
+    expect(canAccess(ready(["project:view"], menus), `/p/OTHER/${path}`)).toBe(false);
+  });
   it("隐藏子页面继承 manifest 声明的父菜单授权", () => {
     const snapshot = ready(
       ["sys:user:view"],

@@ -34,6 +34,15 @@ export function samePermissionIds(a: readonly number[], b: readonly number[]): b
   return left.length === right.length && left.every((id, i) => id === right[i]);
 }
 
+/** 编辑期间失效的新选择不提交；已有分配的保留语义仍由快照负责。 */
+export function filterMissingNewPermissionIds(
+  selected: readonly number[],
+  baseline: readonly number[],
+  latestVisible: readonly number[],
+): number[] {
+  return selected.filter((id) => baseline.includes(id) || latestVisible.includes(id));
+}
+
 /** 分组只有展示 key，不持有权限 ID；MENU 同样是独立叶节点。 */
 export function groupPermissions(permissions: readonly PermissionResponse[]): PermissionGroup[] {
   if (!Array.isArray(permissions)) throw new Error("权限列表数据异常");
