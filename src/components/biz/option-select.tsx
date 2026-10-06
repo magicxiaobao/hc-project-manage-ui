@@ -12,12 +12,14 @@ export type SelectOption = {
 
 export function OptionSelect({
   label,
+  "aria-labelledby": labelledBy,
   value,
   options,
   onChange,
   isDisabled,
 }: {
   label: string;
+  "aria-labelledby"?: string;
   value: string;
   options: SelectOption[];
   onChange: (id: string) => void;
@@ -29,6 +31,7 @@ export function OptionSelect({
   return (
     <Autocomplete
       aria-label={label}
+      aria-labelledby={labelledBy}
       fullWidth
       placeholder="请选择"
       isDisabled={isDisabled}

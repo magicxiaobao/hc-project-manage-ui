@@ -8,9 +8,10 @@
  *
  * 未登录走演示需求树（RequirementsView）时不使用本组件。
  */
+import { useListTitleSearch } from "./use-list-title-search";
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button, Input, Spinner, TextField } from "@heroui/react";
+import { Button, FieldError, Input, Spinner, TextField } from "@heroui/react";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, StatusChip } from "@/components/biz";
 import { toUserMessage, useRequirementList, useRequirementOptions } from "@/lib/query";
 import type { RequirementOption, RequirementQueryRequest } from "@/lib/api/requirement-types";
@@ -24,13 +25,11 @@ function toSelectOptions(options: RequirementOption[] | undefined) {
   ];
 }
 
-export function RequirementListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
-  const [titleInput, setTitleInput] = useState("");
-  const [appliedTitle, setAppliedTitle] = useState("");
+export function RequirementListLive({ projectId, projectKey, keyword }: { projectId: number; projectKey: string; keyword?: string }) {
+  const { titleInput, setTitleInput, appliedTitle, page, setPage, titleError, applyTitle, resetTitle, queryProjectId } = useListTitleSearch("requirement", projectId, projectKey, keyword);
   const [requirementType, setRequirementType] = useState("");
   const [priority, setPriority] = useState("");
   const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
 
   const optionsQuery = useRequirementOptions();
   const options = optionsQuery.data;
@@ -45,7 +44,7 @@ export function RequirementListLive({ projectId, projectKey }: { projectId: numb
     return value;
   }, [projectId, appliedTitle, requirementType, priority, status]);
 
-  const listQuery = useRequirementList({ page, pageSize: PAGE_SIZE, bean, projectId });
+  const listQuery = useRequirementList({ page, pageSize: PAGE_SIZE, bean, projectId: queryProjectId });
 
   const typeLabelOf = useMemo(() => {
     const map = new Map((options?.types ?? []).map((option) => [option.value, option.label] as const));
@@ -53,13 +52,12 @@ export function RequirementListLive({ projectId, projectKey }: { projectId: numb
   }, [options]);
 
   const applyFilters = () => {
-    setAppliedTitle(titleInput);
+    if (!applyTitle()) return;
     setPage(1);
   };
 
   const resetFilters = () => {
-    setTitleInput("");
-    setAppliedTitle("");
+    resetTitle();
     setRequirementType("");
     setPriority("");
     setStatus("");
@@ -81,8 +79,9 @@ export function RequirementListLive({ projectId, projectKey }: { projectId: numb
         }}
       >
         <div className="min-w-48 flex-1">
-          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索">
+          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索" isInvalid={!!titleError} validationBehavior="aria">
             <Input placeholder="按标题搜索，回车确认" />
+            {titleError ? <div role="alert"><FieldError>{titleError}</FieldError></div> : null}
           </TextField>
         </div>
         <div className="w-40">
@@ -106,7 +105,7 @@ export function RequirementListLive({ projectId, projectKey }: { projectId: numb
         <p className="type-body text-danger">筛选选项加载失败：{toUserMessage(optionsQuery.error)}（筛选仍可按已选项使用）</p>
       ) : null}
 
-      {listQuery.isPending ? (
+      {listQuery.isPending && queryProjectId !== null ? (
         <div className="flex items-center gap-2 py-8 text-sm text-default-500">
           <Spinner size="sm" />
           正在加载需求…

@@ -10,9 +10,10 @@
  *
  * 未登录走演示看板（BoardView）时不使用本组件。
  */
+import { useListTitleSearch } from "./use-list-title-search";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button, Input, Spinner, TextField } from "@heroui/react";
+import { Button, FieldError, Input, Spinner, TextField } from "@heroui/react";
 import { shouldClampPage } from "@/lib/pagination";
 import { EmptyHint, OptionSelect, PageHeading, PriorityMark, SeverityChip, StatusChip } from "@/components/biz";
 import { severityLabel } from "@/components/biz/severity";
@@ -41,13 +42,11 @@ const PRIORITY_FILTER_OPTIONS = DEFECT_PRIORITIES.map((priority) => ({
   label: priorityLabel(priority),
 }));
 
-export function DefectListLive({ projectId, projectKey }: { projectId: number; projectKey: string }) {
-  const [titleInput, setTitleInput] = useState("");
-  const [appliedTitle, setAppliedTitle] = useState("");
+export function DefectListLive({ projectId, projectKey, keyword }: { projectId: number; projectKey: string; keyword?: string }) {
+  const { titleInput, setTitleInput, appliedTitle, page, setPage, titleError, applyTitle, resetTitle, queryProjectId } = useListTitleSearch("defect", projectId, projectKey, keyword);
   const [status, setStatus] = useState("");
   const [severity, setSeverity] = useState("");
   const [priority, setPriority] = useState("");
-  const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
   const statusOptionsQuery = useDefectStatusOptions();
@@ -62,16 +61,15 @@ export function DefectListLive({ projectId, projectKey }: { projectId: number; p
     return value;
   }, [projectId, appliedTitle, status, severity, priority]);
 
-  const listQuery = useDefectList({ page, pageSize: PAGE_SIZE, bean, projectId });
+  const listQuery = useDefectList({ page, pageSize: PAGE_SIZE, bean, projectId: queryProjectId });
 
   const applyFilters = () => {
-    setAppliedTitle(titleInput);
+    if (!applyTitle()) return;
     setPage(1);
   };
 
   const resetFilters = () => {
-    setTitleInput("");
-    setAppliedTitle("");
+    resetTitle();
     setStatus("");
     setSeverity("");
     setPriority("");
@@ -105,8 +103,9 @@ export function DefectListLive({ projectId, projectKey }: { projectId: number; p
         }}
       >
         <div className="min-w-48 flex-1">
-          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索">
+          <TextField value={titleInput} onChange={setTitleInput} aria-label="按标题搜索" isInvalid={!!titleError} validationBehavior="aria">
             <Input placeholder="按标题搜索，回车确认" />
+            {titleError ? <div role="alert"><FieldError>{titleError}</FieldError></div> : null}
           </TextField>
         </div>
         <div className="w-40">
@@ -148,7 +147,7 @@ export function DefectListLive({ projectId, projectKey }: { projectId: number; p
         <p className="type-body text-danger">状态选项加载失败：{toUserMessage(statusOptionsQuery.error)}（状态筛选暂不可用）</p>
       ) : null}
 
-      {listQuery.isPending ? (
+      {listQuery.isPending && queryProjectId !== null ? (
         <div className="flex items-center gap-2 py-8 text-sm text-default-500">
           <Spinner size="sm" />
           正在加载缺陷…
