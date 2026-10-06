@@ -17,6 +17,7 @@ export function OptionSelect({
   options,
   onChange,
   isDisabled,
+  isRequired,
 }: {
   label: string;
   "aria-labelledby"?: string;
@@ -24,6 +25,7 @@ export function OptionSelect({
   options: SelectOption[];
   onChange: (id: string) => void;
   isDisabled?: boolean;
+  isRequired?: boolean;
 }) {
   const { contains } = useFilter({ sensitivity: "base" });
   const canClear = options.some((option) => option.id === "");
@@ -35,6 +37,7 @@ export function OptionSelect({
       fullWidth
       placeholder="请选择"
       isDisabled={isDisabled}
+      isRequired={isRequired}
       selectedKey={selected || null}
       onSelectionChange={(key) => {
         if (key == null) {

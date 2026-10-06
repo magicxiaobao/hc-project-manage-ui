@@ -430,5 +430,8 @@ it("生成路由直接挂在 root，注册 fullPath/to/id；登录跳转仍是 p
   expect(tree.match(/'\/workbench': typeof WorkbenchRoute/g)).toHaveLength(3);
   expect(tree).toContain("WorkbenchRoute: WorkbenchRoute,");
   const login = readFileSync("src/routes/login.tsx", "utf8");
-  expect(login.match(/to: ["']\/projects["']/g)).toHaveLength(2);
+  // P5 r6 起登录后去向收敛到 goAfterLogin（守卫 redirect 优先，缺省仍回 /projects），
+  // 不再是两处 navigate({ to: '/projects' } 直写；断言保留“缺省回 projects”的行为意图。
+  expect(login).toMatch(/to: ["']\/projects["']/);
+  expect(login).toMatch(/goAfterLogin/);
 });

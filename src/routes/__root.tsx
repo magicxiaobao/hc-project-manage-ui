@@ -1,15 +1,23 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@heroui/react";
 import { AuthProvider } from "@/lib/auth/provider";
 import { useAuthStore, shouldHydrateOnStorageEvent } from "@/lib/api/auth-store";
-import { createQueryClient } from "@/lib/query/client";
-import { setQueryCacheClearer } from "@/lib/query/session";
+import type { QueryClient } from '@tanstack/react-query';
+import { guardAccess, isRegisteredTarget } from '@/lib/access/guard';
+import { bindAccessRuntime } from '@/lib/access/runtime';
+import { AccessLoadError } from '@/lib/access/service';
+import { AccessState } from '@/components/biz/access-state';
+import { AppErrorComponent } from '@/lib/error-component';
+import { useRouter } from '@tanstack/react-router';
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  ssr: false,
+  beforeLoad: ({ location, context, matches }) => guardAccess({ location, queryClient: context.queryClient, registeredPage: isRegisteredTarget(matches, location.pathname) }),
+  errorComponent: (props) => props.error instanceof AccessLoadError ? <AccessState /> : <AppErrorComponent {...props} />,
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -38,11 +46,12 @@ export const Route = createRootRoute({
  * 使 / /inbox /me /p/* 等路由直刷/深链也能拿到登录态，
  * 而不依赖 /login 或 /projects 的各自调用。
  *
- * QueryClient 用 useState 惰性创建：SSR 与纯 SPA 下都保证每实例一份，
+ * QueryClient 由 getRouter 每实例创建并通过 context 注入：
  * 不会跨请求共享缓存。
  */
 function RootComponent() {
-  const [queryClient] = useState(() => createQueryClient());
+  const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
   // Codex 本地评审 P1（4175724983 跟进）：跨 tab 换账号（A→B）时只清查询
   // 缓存是不够的——已挂载且仅订阅 isAuthenticated 的页面不会重渲染，其
   // QueryObserver 在 queryClient.clear() 后仍持有被移除的 query 实例，
@@ -54,11 +63,7 @@ function RootComponent() {
   const accountKey = useAuthStore((state) => state.user?.userId ?? "anonymous");
   useEffect(() => {
     useAuthStore.getState().hydrate();
-    // 登录用户变更时清空查询缓存：防止账号 B 读到账号 A 的缓存数据。
-    setQueryCacheClearer(() => {
-      void queryClient.cancelQueries();
-      queryClient.clear();
-    });
+    const cleanupAccess = bindAccessRuntime(router, queryClient);
     // Codex review 4175724983：hydrate 只在挂载时跑一次——另一 tab 把持久
     // 会话换成另一个账号（或登出）时，已挂载的 /p/* 路由感知不到：store 与
     // 查询缓存仍停留在旧账号，而 API 客户端已开始读新账号的 token，页面会
@@ -72,10 +77,10 @@ function RootComponent() {
     };
     window.addEventListener("storage", onStorage);
     return () => {
-      setQueryCacheClearer(null);
+      cleanupAccess();
       window.removeEventListener("storage", onStorage);
     };
-  }, [queryClient]);
+  }, [queryClient, router]);
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>

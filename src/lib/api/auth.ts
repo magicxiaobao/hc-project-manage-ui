@@ -75,5 +75,5 @@ export const authApi = {
   logout: (data: LogoutRequest) => api.post<void>('/auth/v1/logout', data),
 
   /** 获取当前用户信息 */
-  getCurrentUser: () => api.get<AuthenticatedUser>('/auth/v1/me'),
+  getCurrentUser: (init?: RequestInit) => api.get<AuthenticatedUser>('/auth/v1/me', init),
 };

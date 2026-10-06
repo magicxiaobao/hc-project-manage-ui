@@ -209,8 +209,85 @@ export {
   useTraceRelationCandidates,
   useTraceObjectTitle,
 } from './hooks/useTraceRelations';
+export {
+  buildUserQuery,
+  normalizeUserListParams,
+  useCreateUser,
+  useDeleteUser,
+  useInvalidUser,
+  useUpdateUser,
+  useUserDetail,
+  useUserList,
+  useValidUser,
+} from './hooks/useUsers';
+export type { UserEnabledFilter, UserListParams } from './hooks/useUsers';
+export { useAssignUserRoles, useRoleOptions, useUserRoles } from './hooks/useUserRoles';
+export {
+  buildRoleQuery,
+  filterRolesLocal,
+  normalizeRoleListParams,
+  useCreateRole,
+  useInvalidRole,
+  useRoleDetail,
+  useRoleList,
+  useRoleListAll,
+  useUpdateRole,
+  useValidRole,
+} from './hooks/useRoles';
+export type { RoleListParams } from './hooks/useRoles';
 
+export { usePermissionTree, useRolePermissions, useAssignRolePermissions } from './hooks/useRolePermissions';
 
+export {
+  fetchPermissionListAll,
+  usePermissionListAll,
+  usePermissionDetail,
+  useCreatePermission,
+  useUpdatePermission,
+  useValidPermission,
+  useInvalidPermission,
+  useDeletePermission,
+} from './hooks/usePermissions';
+
+export { useMenuTree, useMenuListAll, useMenuDetail, useMenuTreeByUser, useCreateMenu, useUpdateMenu, useValidMenu, useInvalidMenu } from './hooks/useMenus';
+
+export {
+  useDictionaryList,
+  useDictionaryDetail,
+  useValidDictionaries,
+  useDictionaryHashCode,
+  useCreateDictionary,
+  useUpdateDictionary,
+  useValidDictionary,
+  useInvalidDictionary,
+  useCheckDictionaryCode,
+  useValidateDictionaryHashCode,
+  useBatchValidateDictionaryHashCode,
+} from './hooks/useDictionaries';
+export {
+  useDictionaryItems,
+  useDictionaryItemDetail,
+  useCreateDictionaryItem,
+  useUpdateDictionaryItem,
+  useValidDictionaryItem,
+  useInvalidDictionaryItem,
+  useCheckDictionaryItemValue,
+} from './hooks/useDictionaryItems';
+
+export {
+  useSystemConfigList,
+  useSystemConfigDetail,
+  useSystemConfigByKey,
+  useCreateSystemConfig,
+  useUpdateSystemConfig,
+  useValidSystemConfig,
+  useInvalidSystemConfig,
+  useCheckConfigKey,
+  useValidateConfigValue,
+  systemConfigByKeyOptions,
+  systemConfigDetailOptions,
+} from './hooks/useSystemConfigs';
+export { configsByTypeOptions, useConfigsByType } from './hooks/useConfigsByType';
 export * from './hooks/useWorkLogs';
 export * from './hooks/useWorkLogAnalytics';
 

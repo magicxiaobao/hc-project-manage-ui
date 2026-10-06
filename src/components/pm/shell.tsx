@@ -1,3 +1,12 @@
+import { canAccess } from "@/lib/access/snapshot";
+import { useAccessSnapshot } from "@/lib/query/hooks/useAccessSnapshot";
+import { AccessState } from "@/components/biz/access-state";
+import {
+  PermissionNavigation,
+  projectNavigation,
+  systemNavigation,
+} from "@/components/biz/permission-navigation";
+import { MenuBreadcrumbs, breadcrumbTrail } from "@/components/biz/menu-breadcrumbs";
 import { GlobalSearchField, focusGlobalSearch } from "./global-search-field";
 import { GlobalSearchDraftProvider } from "./global-search-draft";
 import { NavigationFocus } from "@/components/pm/navigation-focus";
@@ -68,6 +77,26 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const unread = notices.filter((notice) => !notice.read).length;
   const [searchOpen, setSearchOpen] = useState(false);
   const goToItem = useGoToItem();
+  // 桌面与移动侧栏使用相同授权树；项目参数只取当前真实 URL 上下文。
+  const access = useAccessSnapshot();
+  const accessNodes = access.status === "ready"
+    ? liveProjectKey
+      ? projectNavigation(access.visibleNavigation, liveProjectKey)
+      : systemNavigation(access.visibleNavigation)
+    : [];
+  const accessNav = isAuthenticated ? (
+    <div className="flex shrink-0 flex-col gap-1" role="group" aria-label="授权菜单">
+      <h2 className="type-label px-3">授权菜单</h2>
+      {access.status === "ready" ? (
+        <PermissionNavigation nodes={accessNodes} pathname={pathname}
+          params={liveProjectKey ? { projectKey: liveProjectKey } : undefined}
+          onNavigate={() => setNavOpen(false)} />
+      ) : <AccessState />}
+    </div>
+  ) : null;
+  // 移动顶栏：当前菜单名称 + 面包屑（仅已认证且有授权链时）。
+  const trail = isAuthenticated ? breadcrumbTrail(access, pathname) : [];
+  const accessShielding = isAuthenticated && (access.status !== "ready" || !canAccess(access, pathname));
 
   useLayoutEffect(() => {
     // 后端模式不读写本地演示数据：跳过演示持久化绑定，避免本机演示数据
@@ -148,7 +177,8 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg text-fg">
+    <>
+    <div className="flex h-screen overflow-hidden bg-bg text-fg" inert={accessShielding}>
       <RouteProgress />
       <NavigationFocus ready={ready} />
       <AppRail
@@ -180,9 +210,10 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         projects={projects}
         itemOrigin={itemOrigin}
         liveProjectKey={liveProjectKey}
+        accessNav={accessNav}
         onClose={() => setNavOpen(false)}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col" inert={accessShielding}>
         {persistenceError ? (
           <section
             className="shrink-0 border-b border-danger bg-danger-soft px-4 py-3"
@@ -199,9 +230,16 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           >
             <Menu className="size-4" />
           </button>
-          <span className="min-w-0 truncate lg:hidden">
+<span className="min-w-0 truncate lg:hidden">
             {ready ? (
-              <span className="type-emphasis">{liveProjectKey ?? (project ? project.name : "恒川")}</span>
+              trail.length ? (
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className="type-emphasis block truncate">{trail[trail.length - 1].label}</span>
+                  <MenuBreadcrumbs snapshot={access} pathname={pathname} />
+                </span>
+              ) : (
+                <span className="type-emphasis">{liveProjectKey ?? (project ? project.name : "恒川")}</span>
+              )
             ) : (
               <Loading variant="inline" label="加载中" />
             )}
@@ -210,6 +248,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         </div>
         <main className="relative min-h-0 flex-1 overflow-hidden">
           <div className="h-full overflow-auto">
+            {isAuthenticated && <MenuBreadcrumbs snapshot={access} pathname={pathname} className="hidden px-4 py-2 lg:block" />}
             {ready ? children : <ContentSkeleton pathname={pathname} />}
           </div>
         </main>
@@ -241,5 +280,20 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       <CreateIssueDialog />
       <Toaster position="top-center" />
     </div>
+      {/* P5 p5-dynamic-route-permission §4.6：权限刷新/失败期间屏蔽受保护内容与
+          交互，仅展示加载/重试层；children 保持挂载，不丢表单实例与草稿。 */}
+      {accessShielding ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-bg"
+          role="alertdialog"
+          aria-label="权限状态"
+          aria-busy="true"
+        >
+          <div className="rounded-md border border-border bg-surface shadow-lg">
+            <AccessState />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

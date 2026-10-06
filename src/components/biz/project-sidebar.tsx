@@ -17,6 +17,7 @@ export function ProjectSidebar({
   itemOrigin,
   onClose,
   liveProjectKey,
+  accessNav,
 }: {
   open: boolean;
   pathname: string;
@@ -29,6 +30,11 @@ export function ProjectSidebar({
    * 演示项目查不到时用它渲染仅含真实后端模块的分支，而不是退回通用分支。
    */
   liveProjectKey?: string | null;
+  /**
+   * P5 p5-dynamic-route-permission：权限快照派生的授权菜单（桌面侧栏与
+   * 移动导航复用同一树），由 shell 注入；未登录/未就绪时为 null。
+   */
+  accessNav?: ReactNode;
 }) {
   const authenticated = useAuthStore(s => s.isAuthenticated);
   const liveProject = useProjectIdByKey(liveProjectKey ?? "");
@@ -53,7 +59,7 @@ export function ProjectSidebar({
   // 后端项目的 key 撞上演示 seed key 时也走真实后端分支，不渲染演示侧栏。
   const content = (
     <>
-        {liveProjectKey ? (
+        {accessNav != null ? <nav aria-label="权限导航" className="flex min-h-0 flex-1 flex-col overflow-y-auto">{accessNav}</nav> : liveProjectKey ? (
           <>
             <div className="type-section px-1">{liveProjectKey}</div>
             <div className="type-caption px-1">真实后端项目</div>
@@ -140,14 +146,13 @@ export function ProjectSidebar({
             </nav>
           </>
         )}
-        <div className="type-caption mt-auto px-1 pt-4">{liveProjectKey ? "真实后端数据" : project ? project.summary : "把事项拖到允许的状态列。"}</div>
-    </>
+        <div className="type-caption mt-auto px-1 pt-4">{accessNav != null ? "当前账号授权菜单" : liveProjectKey ? "真实后端项目" : project ? project.summary : "把事项拖到允许的状态列。"}</div>    </>
   );
   return (
     <>
       <aside className="hidden w-[230px] shrink-0 flex-col border-r border-border bg-surface px-4 pt-6 pb-4 lg:flex">
         {/* 4175510487：live 分支优先时不渲染演示项目的名称/切换器（避免 key 碰撞时顶部显示演示项目名） */}
-        {!liveProjectKey && project ? (
+        {accessNav == null && !liveProjectKey && project ? (
           <ProjectName project={project} projects={projects} current={current} onClose={onClose} />
         ) : null}
         {content}
@@ -156,7 +161,7 @@ export function ProjectSidebar({
         <AppModal open title="项目导航" label="项目导航" onClose={onClose} size="sm" dialogClassName="project-nav-dialog" bodyClassName="min-h-0 overflow-auto">
           <div className="flex min-h-0 flex-col">
             {/* 4175510487：live 分支优先时不渲染演示项目的名称/切换器（避免 key 碰撞时顶部显示演示项目名） */}
-            {!liveProjectKey && project ? (
+            {accessNav == null && !liveProjectKey && project ? (
               <ProjectName project={project} projects={projects} current={current} onClose={onClose} />
             ) : null}
             {content}

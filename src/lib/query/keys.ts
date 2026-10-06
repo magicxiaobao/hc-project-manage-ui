@@ -8,12 +8,12 @@ import { normalizeWorkLogAnalytics, type WorkLogDimension } from '../worklog-ana
  * query key 约定（P1 起所有数据获取统一使用）：
  * - 根命名空间 'hc'：避免与第三方库或其它 QueryClient 的缓存冲突
  * - 结构：['hc', <domain>, <kind>, ...params]，
- *   domain = project | requirement | task；kind = list | detail | enums | …
+ *   domain = project | requirement | task | system；kind = list | detail | enums | …
  * - 失效粒度：精确 key 失效单条；['hc', <domain>] 失效该域全部
  * - 参数只放可 JSON 序列化的原始值对象；同一语义的查询必须传同一形状的参数，
  *   否则缓存会被拆成多份
  */
-function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone' | 'taskDependency' | 'traceRelation' | 'dashboard' | 'dashboardWidget' | 'workLog') {
+function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'testCase' | 'testSuite' | 'testRun' | 'version' | 'releaseEnvironment' | 'release' | 'board' | 'sprint' | 'gantt' | 'milestone' | 'taskDependency' | 'traceRelation' | 'system' | 'dashboard' | 'dashboardWidget' | 'workLog') {
   const all = ['hc', domain] as const;
   return {
     all,
@@ -106,4 +106,10 @@ export const queryKeys = {
   gantt: domainKeys('gantt'),
   /** 里程碑域：list/{projectId} 查询 */
   milestone: domainKeys('milestone'),
+  // system.list kinds: dictionaryList(page,pageSize,bean), dictionaryDetail(dictionaryId),
+  // dictionaryItems(dictId), dictionaryItemDetail(itemId,dictId), validDictionaries,
+  // dictionaryHashCode(code). All dictionary writes invalidate system.all.
+  // 配置 kind: systemConfigList(page,pageSize,bean), systemConfigDetail(configId),
+  // systemConfigByKey(configKey), configsByType(wire configType)。全部配置写入失效 system.all。
+  system: domainKeys('system'),
 };
