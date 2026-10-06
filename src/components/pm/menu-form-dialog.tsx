@@ -153,10 +153,17 @@ export function MenuFormDialog({
       setSubmitError("菜单信息已有更新：保留你修改的字段，其余同步最新，请复核后重新提交");
       return;
     }
-    const failures = validateMenuFormInput(current.current, {
-      ready: parentsReady,
-      ids: new Set(options.map((option) => Number(option.id))),
-    });
+    const failures = validateMenuFormInput(
+      current.current,
+      {
+        ready: parentsReady,
+        ids: new Set(options.map((option) => Number(option.id))),
+      },
+      {
+        menuId,
+        childCount: menuId === null ? 0 : records.filter((record) => record.parentId === menuId).length,
+      },
+    );
     setErrors(Object.fromEntries(failures.map((failure) => [failure.field, failure.message])));
     if (failures.length) return;
     setSubmitError("");

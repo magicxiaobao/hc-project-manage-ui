@@ -13,6 +13,32 @@ import type { MenuResponse } from "../api/system-types";
 import { SubmitSessionGuard } from "../user-form";
 const parents = { ready: true, ids: new Set([0, 1]) };
 describe("菜单表单", () => {
+  it("有子节点的菜单改为按钮时返回 type 错误", () => {
+    expect(
+      validateMenuFormInput(
+        { ...emptyMenuFormInput(), name: "菜单", type: 3 },
+        parents,
+        { menuId: 1, childCount: 2 },
+      ),
+    ).toEqual([{ field: "type", message: "该节点下还有子菜单，请先迁移子菜单再改为按钮类型" }]);
+  });
+  it.each([
+    { menuId: 1, childCount: 0 },
+    { menuId: null, childCount: 0 },
+  ])("无子节点编辑或新建按钮不报错：%j", (editing) => {
+    expect(
+      validateMenuFormInput({ ...emptyMenuFormInput(), name: "按钮", type: 3 }, parents, editing),
+    ).toEqual([]);
+  });
+  it("有子节点的菜单保持菜单类型不报错", () => {
+    expect(
+      validateMenuFormInput(
+        { ...emptyMenuFormInput(), name: "菜单", type: 2 },
+        parents,
+        { menuId: 1, childCount: 2 },
+      ),
+    ).toEqual([]);
+  });
   it("默认数值类型；全部错误一次返回，不把空 key 转 0", () => {
     expect(emptyMenuFormInput()).toMatchObject({ type: 2, openType: 1, parentId: 0 });
     expect(parseMenuSelection("")).toBeNull();

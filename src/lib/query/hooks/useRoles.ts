@@ -92,14 +92,25 @@ export function useRoleListAll() {
     queryFn: async () => {
       const all: RoleResponse[] = [];
       let page = 1;
+      let actualSize: number | null = null;
       for (;;) {
         const pageResult = await systemApi.role.findByPage({
           page,
           pageSize: ROLE_LIST_ALL_PAGE_SIZE,
           bean: {},
         });
+        if (
+          !Number.isSafeInteger(pageResult.pageSize) ||
+          pageResult.pageSize <= 0 ||
+          !Array.isArray(pageResult.list) ||
+          pageResult.list.length > pageResult.pageSize
+        )
+          throw new Error('角色分页响应异常，请重新加载');
+        if (actualSize !== null && actualSize !== pageResult.pageSize)
+          throw new Error('角色分页大小发生变化，请重新加载');
+        actualSize = pageResult.pageSize;
         all.push(...pageResult.list);
-        if (pageResult.list.length < ROLE_LIST_ALL_PAGE_SIZE) break;
+        if (pageResult.list.length < actualSize) break;
         page += 1;
       }
       return all;

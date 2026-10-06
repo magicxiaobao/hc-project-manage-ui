@@ -66,11 +66,14 @@ export interface MenuFormFieldError {
 export function validateMenuFormInput(
   form: MenuFormInput,
   parents: { ready: boolean; ids: ReadonlySet<number> },
+  editing?: { menuId: number | null; childCount: number },
 ): MenuFormFieldError[] {
   const errors: MenuFormFieldError[] = [];
   if (!form.name.trim()) errors.push({ field: "name", message: "请输入菜单名称" });
   if (![1, 2, 3].includes(form.type as number))
     errors.push({ field: "type", message: "请选择支持的菜单类型" });
+  if (editing && editing.menuId !== null && form.type === 3 && editing.childCount > 0)
+    errors.push({ field: "type", message: "该节点下还有子菜单，请先迁移子菜单再改为按钮类型" });
   if (form.openType !== null && ![1, 2, 3].includes(form.openType))
     errors.push({ field: "openType", message: "请选择支持的打开方式" });
   if (!parents.ready)

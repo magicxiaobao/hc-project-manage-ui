@@ -91,6 +91,8 @@ export function validateGraph(value: unknown): WorkflowError[] {
       for (const key of ["x", "y"])
         if (typeof node.position[key] !== "number" || !Number.isFinite(node.position[key]))
           error(`${p}.position.${key}`, "必须是有限数值");
+        else if (Math.abs(node.position[key]) > 1e6)
+          error(`${p}.position.${key}`, "坐标超出可用范围（±1000000），请检查导入数据");
   });
   edges.forEach((edge, index) => {
     const p = `graph.edges[${index}]`;

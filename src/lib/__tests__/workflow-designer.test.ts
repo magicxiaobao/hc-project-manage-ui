@@ -22,6 +22,19 @@ const nodes = (): WorkflowGraph =>
     emptyGraph(),
   );
 describe("immutable graph model", () => {
+  it.each([1e308, -1e308, 1000001, -1000001])("rejects out-of-range coordinates %s", (coordinate) => {
+    const g = nodes();
+    g.nodes[0].position = { x: coordinate, y: coordinate };
+    expect(validateGraph(g)).toEqual([
+      { field: "graph.nodes[0].position.x", message: "坐标超出可用范围（±1000000），请检查导入数据" },
+      { field: "graph.nodes[0].position.y", message: "坐标超出可用范围（±1000000），请检查导入数据" },
+    ]);
+  });
+  it("accepts coordinates at both usable range boundaries", () => {
+    const g = nodes();
+    g.nodes[0].position = { x: 1e6, y: -1e6 };
+    expect(validateGraph(g)).toEqual([]);
+  });
   it("stable IDs, cascade deletion, reverse edges and cycles", () => {
     const original = nodes(),
       before = structuredClone(original);

@@ -14,16 +14,18 @@ export function fitView(graph: WorkflowGraph, width: number, height: number): Vi
     minY = Math.min(...graph.nodes.map((n) => n.position.y));
   const maxX = Math.max(...graph.nodes.map((n) => n.position.x + NODE_WIDTH)),
     maxY = Math.max(...graph.nodes.map((n) => n.position.y + NODE_HEIGHT));
-  const zoom = Math.min(
+  const fittedZoom = Math.min(
     1,
-    Math.max(1, width - 80) / Math.max(NODE_WIDTH, maxX - minX),
-    Math.max(1, height - 80) / Math.max(NODE_HEIGHT, maxY - minY),
+    Math.max(1, width - 80) / Math.min(1e9, Math.max(NODE_WIDTH, maxX - minX)),
+    Math.max(1, height - 80) / Math.min(1e9, Math.max(NODE_HEIGHT, maxY - minY)),
   );
-  return {
+  const zoom = Number.isFinite(fittedZoom) && fittedZoom > 0 ? fittedZoom : 1;
+  const view = {
     zoom,
     x: width / 2 - (minX / 2 + maxX / 2) * zoom,
     y: height / 2 - (minY / 2 + maxY / 2) * zoom,
   };
+  return Number.isFinite(view.x) && Number.isFinite(view.y) ? view : initialView();
 }
 export function edgeGeometry(graph: WorkflowGraph, source: string, target: string) {
   const a = graph.nodes.find((n) => n.id === source),

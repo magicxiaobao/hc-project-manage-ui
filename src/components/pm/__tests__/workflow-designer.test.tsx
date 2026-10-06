@@ -64,6 +64,27 @@ it("state panel has explicit empty state and selectable list; fit supports far n
   expect(fitView(emptyGraph(), 800, 540)).toEqual(initialView());
 });
 
+it("fit preserves the normal small graph view", () => {
+  expect(fitView(fixture(), 800, 540)).toEqual({ x: 200, y: 128, zoom: 1 });
+});
+it.each([
+  [-1e308, 1e308],
+  [1e308, 1e308],
+  [-1e308, -1e308],
+])("fit returns finite coordinates and positive zoom for extreme positions %j", (a, b) => {
+  const graph = fixture();
+  graph.nodes[0].position = { x: a, y: a };
+  graph.nodes[1].position = { x: b, y: b };
+  const view = fitView(graph, 800, 540);
+  expect(Number.isFinite(view.zoom)).toBe(true);
+  expect(view.zoom).toBeGreaterThan(0);
+  expect(Number.isFinite(view.x)).toBe(true);
+  expect(Number.isFinite(view.y)).toBe(true);
+});
+it("fit falls back to the initial view if translation is non-finite", () => {
+  expect(fitView(fixture(), Infinity, 540)).toEqual(initialView());
+});
+
 import { WorkflowPropertyPanel } from "../workflow-designer/workflow-property-panel";
 import { makeDraft, applyDraft, validateDraft } from "@/lib/workflow-designer";
 it("property form has empty prompt, RequiredMark and all associated FieldErrors", () => {
