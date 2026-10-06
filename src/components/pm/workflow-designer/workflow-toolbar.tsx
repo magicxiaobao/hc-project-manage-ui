@@ -58,7 +58,7 @@ export function WorkflowToolbar({
       <Button isDisabled={disabled || view.zoom >= 2} onPress={() => onZoom(0.1)}>
         放大
       </Button>
-      <Button isDisabled={disabled || view.zoom === 0.25} onPress={() => onZoom(-0.1)}>
+      <Button isDisabled={disabled || view.zoom <= 0.25} onPress={() => onZoom(-0.1)}>
         缩小
       </Button>
       <span aria-label="缩放比例">{Math.round(view.zoom * 100)}%</span>

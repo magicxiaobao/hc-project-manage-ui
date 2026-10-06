@@ -176,7 +176,7 @@ export function ProfilePage() {
 
   const handleBack = () => {
     guard(() => {
-      void navigate({ to: "/projects" });
+      void navigate({ to: "/" });
     });
   };
 

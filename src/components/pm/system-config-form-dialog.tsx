@@ -76,6 +76,7 @@ export function SystemConfigFormDialog({
 
   const pendingServer = useRef<SystemConfigResponse | null>(null);
   const loadedRow = useRef<SystemConfigResponse | undefined>(undefined);
+  const enabledTouchedRef = useRef(false);
   const [saved, setSaved] = useState<{
     id: number;
     payload: SystemConfigCreatePayload | SystemConfigUpdatePayload;
@@ -105,6 +106,7 @@ export function SystemConfigFormDialog({
 
     seenVersion.current = null;
     loadedRow.current = undefined;
+    enabledTouchedRef.current = false;
     pendingServer.current = null;
     setSaved(null);
     setReadError("");
@@ -220,6 +222,10 @@ export function SystemConfigFormDialog({
   };
   const submit = async () => {
     if (!allowed || !ready || saved || busyRef.current || (!isCreate && detail.isError)) return;
+    if (!isCreate && loadedRow.current?.enabled === null && !enabledTouchedRef.current) {
+      setSubmitError("原启用状态未知，请明确确认启用开关。");
+      return;
+    }
     const failures = validateSystemConfigForm(current.current);
     setErrors(failures);
     if (Object.keys(failures).length) return;
@@ -444,7 +450,10 @@ export function SystemConfigFormDialog({
             <Switch
               aria-label="启用配置"
               isSelected={form.enabled}
-              onChange={(enabled) => set({ enabled })}
+              onChange={(enabled) => {
+                enabledTouchedRef.current = true;
+                set({ enabled });
+              }}
               isDisabled={busy || !!saved}
             >
               启用配置

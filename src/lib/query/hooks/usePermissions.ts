@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { systemApi } from "../../api/system";
 import type { PermissionCreatePayload, PermissionUpdatePayload } from "../../api/system-types";
 import { hasSystemAdmin, useAuthStore } from "../../api/auth-store";
+import { requestAccessRefresh } from "../../access/service";
 import { PERMISSION_PAGE_SIZE, readAllPermissionPages } from "../../permission-form";
 import { isPermissionId } from "../../role-permissions";
 import { queryKeys } from "../keys";
@@ -56,27 +57,39 @@ export function useUpdatePermission() {
   const invalidate = useInvalidateSystemDomain();
   return useMutation({
     mutationFn: (data: PermissionUpdatePayload) => systemApi.permission.updatePermission(data),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      requestAccessRefresh('authorization-change');
+    },
   });
 }
 export function useValidPermission() {
   const invalidate = useInvalidateSystemDomain();
   return useMutation({
     mutationFn: (id: number) => systemApi.permission.validPermission(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      requestAccessRefresh('authorization-change');
+    },
   });
 }
 export function useInvalidPermission() {
   const invalidate = useInvalidateSystemDomain();
   return useMutation({
     mutationFn: (id: number) => systemApi.permission.invalidPermission(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      requestAccessRefresh('authorization-change');
+    },
   });
 }
 export function useDeletePermission() {
   const invalidate = useInvalidateSystemDomain();
   return useMutation({
     mutationFn: (id: number) => systemApi.permission.deletePermission(id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      requestAccessRefresh('authorization-change');
+    },
   });
 }
