@@ -310,7 +310,7 @@ function NotificationCenter() {
         open={confirmOpen}
         title="确认全部已读"
         onClose={() => setConfirmOpen(false)}
-        isCloseDisabled={busy}
+        isDismissDisabled={busy}
         size="md"
       >
         <p>{MARK_ALL_CONFIRMATION}</p>

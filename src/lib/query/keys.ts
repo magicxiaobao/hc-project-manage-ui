@@ -1,3 +1,5 @@
+import { normalizeRelationQuery } from '../trace-relations';
+import type { AlmObjectKey, AlmRelationType } from '../api/trace-types';
 import type { NotificationQueryRequest } from '../api/notification-types';
 import type { WorkLogUserStatisticsParams, WorkLogAnalyticsRequest } from '../api/worklog-types';
 import { normalizeWorkLogAnalytics, type WorkLogDimension } from '../worklog-analytics-data';
@@ -52,6 +54,21 @@ function domainKeys(domain: 'project' | 'requirement' | 'task' | 'defect' | 'tes
 }
 
 export const queryKeys = {
+  traceRelation: {
+    ...domainKeys('traceRelation'),
+    batch: (projectId: number | null, objects: readonly AlmObjectKey[], relationTypes: readonly AlmRelationType[] = []) =>
+      ['hc', 'traceRelation', 'batch', projectId, normalizeRelationQuery(objects, relationTypes)] as const,
+  },
+  taskDependency: {
+    ...domainKeys("taskDependency"),
+    statistics: (projectId: number | null) =>
+      ["hc", "taskDependency", "statistics", projectId] as const,
+    conflicts: (projectId: number | null) =>
+      ["hc", "taskDependency", "conflicts", projectId] as const,
+    predecessors: (taskId: number | null) =>
+      ["hc", "taskDependency", "predecessors", taskId] as const,
+    successors: (taskId: number | null) => ["hc", "taskDependency", "successors", taskId] as const,
+  },
   notification: {
     all: ['hc', 'notification'] as const,
     list: (params: { userId: number | null; page: number; pageSize: number; bean: NotificationQueryRequest }) => ['hc', 'notification', 'list', params] as const,

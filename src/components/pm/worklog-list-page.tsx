@@ -426,7 +426,7 @@ export function WorkLogListPage({ projectKey }: { projectKey?: string }) {
         onClose={() => {
           if (!busy.current) setTarget(null);
         }}
-        isCloseDisabled={writing}
+        isDismissDisabled={writing}
       >
         <p>{target?.record?.workDescription ?? "—"}</p>
         <p>将记录置为已取消，任务实际工时可能更新。</p>

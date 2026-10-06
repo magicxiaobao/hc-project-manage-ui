@@ -160,7 +160,7 @@ export const GuardedWorkLogDialog = forwardRef<
     <>
       {blocker}
       {dialog}
-      <AppModal open={open} title={title} onClose={() => leave(onClose)} isCloseDisabled={pending}>
+      <AppModal open={open} title={title} onClose={() => leave(onClose)} isDismissDisabled={pending}>
         <form
           ref={body}
           noValidate

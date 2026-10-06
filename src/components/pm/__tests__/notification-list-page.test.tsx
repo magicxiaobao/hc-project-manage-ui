@@ -47,27 +47,27 @@ vi.mock("@/components/biz/app-modal", () => ({
     title,
     label,
     onClose,
-    isCloseDisabled,
+    isDismissDisabled,
     children,
   }: {
     open: boolean;
     title: string;
     label?: string;
     onClose: () => void;
-    isCloseDisabled?: boolean;
+    isDismissDisabled?: boolean;
     children: ReactNode;
   }) => {
     useEffect(() => {
       const handler = (event: KeyboardEvent) => {
-        if (open && !isCloseDisabled && event.key === "Escape") onClose();
+        if (open && !isDismissDisabled && event.key === "Escape") onClose();
       };
       document.addEventListener("keydown", handler);
       return () => document.removeEventListener("keydown", handler);
-    }, [open, isCloseDisabled, onClose]);
+    }, [open, isDismissDisabled, onClose]);
     return open ? (
       <div role="dialog" aria-label={label ?? title}>
         <h2>{title}</h2>
-        <button disabled={isCloseDisabled} onClick={onClose}>
+        <button disabled={isDismissDisabled} onClick={onClose}>
           关闭弹窗
         </button>
         {children}
