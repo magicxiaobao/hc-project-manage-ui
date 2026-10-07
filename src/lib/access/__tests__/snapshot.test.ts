@@ -218,7 +218,7 @@ describe("deriveSnapshot 菜单语义", () => {
   });
 
   it.each([
-    "backlog", "defects", "dependencies", "gantt", "releases", "sprints", "tests",
+    "backlog", "defects", "dependencies", "gantt", "releases", "sprints", "tests", "worklogs",
     "boards", "versions", "testcases", "testsuites", "release-environments", "traceability",
   ])(
     "已接入真实后端的 %s 模块依菜单授权放行",
@@ -230,7 +230,7 @@ describe("deriveSnapshot 菜单语义", () => {
     },
   );
 
-  it.each(["assignment", "dashboard", "settings", "stats", "worklogs", "items/DEMO-1"])(
+  it.each(["assignment", "dashboard", "settings", "stats", "items/DEMO-1"])(
     "演示页面 %s 即使有菜单授权仍不可用",
     (name) => {
       const path = `/p/HC/${name}`;
