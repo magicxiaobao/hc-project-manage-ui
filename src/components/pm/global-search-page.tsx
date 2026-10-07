@@ -26,6 +26,11 @@ export function GlobalSearchPage({ search }: { search: GlobalSearchParams }) {
       <p className="type-body">
         按标题搜索任务、缺陷、需求、测试用例。{result.keyword ? `关键词：${result.keyword}` : ""}
       </p>
+      {result.truncated ? (
+        <p className="type-body rounded-sm border border-warning bg-warning/10 p-2" role="status">
+          项目过多，仅搜索前 {result.projects.length} 个项目。如需完整结果，请在"搜索范围"中选择具体项目。
+        </p>
+      ) : null}
       {!result.isAuthenticated ? (
         <p>
           请先

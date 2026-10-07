@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { authApi, isCanonicalUserId } from "../api/auth";
 import { getSessionGeneration, useAuthStore } from "../api/auth-store";
-import { api, HttpResponseError } from "../api/client";
+import { api, ApiBusinessError, HttpResponseError } from "../api/client";
 import { systemApi } from "../api/system";
 import type { MenuResponse } from "../api/system-types";
 import { queryKeys } from "../query/keys";
@@ -19,7 +19,8 @@ let round = 0;
 let lastReady: AccessSnapshot | null = null;
 
 const isForbidden = (error: unknown): boolean =>
-  error instanceof HttpResponseError && error.httpStatus === 403;
+  (error instanceof HttpResponseError || error instanceof ApiBusinessError) &&
+  error.httpStatus === 403;
 
 export class AccessLoadError extends Error {
   constructor() {

@@ -85,6 +85,15 @@ const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET
 export const authConfigured =
   !authDisabled && Boolean(grokClientId && grokClientSecret);
 
+if (!authDisabled && grokClientId && !grokClientSecret) {
+  // SECURITY: 预览 OAuth 密钥已从源码移除，必须经 GROK_AUTH_CLIENT_SECRET 注入。
+  // 未注入时联邦登录被禁用，沙箱预览需部署时配置该环境变量。
+  console.warn(
+    "[auth] GROK_AUTH_CLIENT_SECRET 未注入，联邦登录已禁用。" +
+    "沙箱预览需在部署环境中设置该变量以恢复真实登录。"
+  );
+}
+
 // This app's own Better Auth origin. When deployed the deployer injects the
 // public URL. In the sandbox live preview there's no fixed URL (each preview gets
 // a dynamic `*.grok-sandbox.com` host), so we hand Better Auth a dynamic baseURL:
