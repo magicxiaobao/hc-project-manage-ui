@@ -154,13 +154,14 @@ export const routeManifest: readonly PagePolicy[] = [
       "releases",
       "sprints",
       "tests",
+      "worklogs",
     ] as const
   ).map((name): PagePolicy => ({
     route: `/p/$projectKey/${name}`,
     title: name,
     policy: "menu",
   })),
-  ...(["assignment", "dashboard", "settings", "stats", "worklogs"] as const).map((name): PagePolicy => ({
+  ...(["assignment", "dashboard", "settings", "stats"] as const).map((name): PagePolicy => ({
     route: `/p/$projectKey/${name}`,
     title: name,
     policy: "menu",
