@@ -137,7 +137,7 @@ it("多个项目共享最多 4 个在途；按项目 key 派发并只查第一�
     vi.mocked(api.findByPage).mock.calls.forEach(([params]) => expect(params.page).toBe(1)),
   );
 });
-it("尾页第 101 个项目仍参与搜索，项目枚举不随关键词刷新", async () => {
+it("全局搜索项目数受上限约束（20），超限截断并标记 truncated", async () => {
   vi.mocked(projectApi.findByPage).mockImplementation(async (params) => ({
     list:
       params.page === 1 ? Array.from({ length: 100 }, (_, i) => project(i + 1)) : [project(101)],
@@ -149,14 +149,11 @@ it("尾页第 101 个项目仍参与搜索，项目枚举不随关键词刷新",
     ...setup(),
     initialProps: { keyword: "A" },
   });
-  await waitFor(() => expect(taskApi.findByPage).toHaveBeenCalledTimes(101));
-  expect(taskApi.findByPage).toHaveBeenCalledWith({
-    page: 1,
-    pageSize: 10,
-    bean: { projectId: 101, title: "A" },
-  });
+  await waitFor(() => expect(taskApi.findByPage).toHaveBeenCalledTimes(20));
+  expect(h.result.current.truncated).toBe(true);
+  expect(h.result.current.projects).toHaveLength(20);
   h.rerender({ keyword: "B" });
-  await waitFor(() => expect(taskApi.findByPage).toHaveBeenCalledTimes(202));
+  await waitFor(() => expect(taskApi.findByPage).toHaveBeenCalledTimes(40));
   expect(projectApi.findByPage).toHaveBeenCalledTimes(2);
 });
 it.each(["", "   ", "x".repeat(201), "中\u0000文"])("无效关键词 %s 禁用四域", async (keyword) => {

@@ -27,6 +27,8 @@ import {
 } from "../../search/keyword";
 
 export const SEARCH_PREVIEW_SIZE = 10;
+/** 全局搜索（未指定项目）时最多扇出的项目数，防止 4×N 请求爆炸。 */
+export const MAX_GLOBAL_SEARCH_PROJECTS = 20;
 export type SearchProject = Pick<ProjectResponse, "id" | "projectKey" | "projectName">;
 export type SearchRecord = TaskResponse | DefectResponse | RequirementResponse | TestCaseResponse;
 const cancelled = () => new CancelledError({ revert: true, silent: true });
@@ -149,11 +151,14 @@ export function useGlobalSearch(keywordValue: unknown, projectKey?: string) {
   const keyword = normalizeSearchKeyword(keywordValue);
   const error = searchKeywordError(keywordValue);
   const scope = useQuery({ ...visibleSearchProjectsOptions(), enabled: isAuthenticated });
-  const projects = scope.isSuccess
+  const allProjects = scope.isSuccess
     ? (scope.data ?? []).filter(
         (project) => projectKey === undefined || project.projectKey === projectKey,
       )
     : [];
+  // 未指定项目时做全局搜索：限制项目数以避免 4×N 请求扇出。
+  const truncated = projectKey === undefined && allProjects.length > MAX_GLOBAL_SEARCH_PROJECTS;
+  const projects = truncated ? allProjects.slice(0, MAX_GLOBAL_SEARCH_PROJECTS) : allProjects;
   const unavailable = scope.isSuccess && projectKey !== undefined && !projects.length;
   const enabled =
     isAuthenticated &&
@@ -243,5 +248,5 @@ export function useGlobalSearch(keywordValue: unknown, projectKey?: string) {
       ];
     }),
   ) as Record<SearchDomain, SearchDomainResult>;
-  return { keyword, error, isAuthenticated, scope, projects, unavailable, enabled, domains };
+  return { keyword, error, isAuthenticated, scope, projects, unavailable, enabled, domains, truncated };
 }

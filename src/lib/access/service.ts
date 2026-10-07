@@ -1,8 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { authApi, isCanonicalUserId } from "../api/auth";
 import { getSessionGeneration, useAuthStore } from "../api/auth-store";
-import { api } from "../api/client";
+import { api, HttpResponseError } from "../api/client";
 import { systemApi } from "../api/system";
+import type { MenuResponse } from "../api/system-types";
 import { queryKeys } from "../query/keys";
 import { deriveSnapshot, validateUser, type AccessSnapshot } from "./snapshot";
 import { getAccessSnapshot, publishAccess, suspendAccess, subscribeAccess } from "./store";
@@ -16,6 +17,10 @@ let inflight: {
 } | null = null;
 let round = 0;
 let lastReady: AccessSnapshot | null = null;
+
+const isForbidden = (error: unknown): boolean =>
+  error instanceof HttpResponseError && error.httpStatus === 403;
+
 export class AccessLoadError extends Error {
   constructor() {
     super("权限信息加载失败，请重试");
@@ -90,7 +95,14 @@ export async function refreshAccess({
           if (!stillCurrent() || signal.aborted) throw new AccessLoadError();
           if (user.userId !== userId) throw new Error("当前用户 ID 不匹配");
           useAuthStore.getState().acceptVerifiedUser(user, generation);
-          const menus = await systemApi.menu.getMenuTreeByUser(Number(user.userId), { signal });
+          // getMenuTreeByUser 需要 system:admin 权限，普通用户会 403。
+          // 降级为空菜单：menu 策略页面按无授权拒绝，但 authenticated 页面不受影响。
+          let menus: MenuResponse[] = [];
+          try {
+            menus = await systemApi.menu.getMenuTreeByUser(Number(user.userId), { signal });
+          } catch (error) {
+            if (!isForbidden(error)) throw error;
+          }
           if (!stillCurrent() || signal.aborted) throw new AccessLoadError();
           return deriveSnapshot(user, menus);
         },
